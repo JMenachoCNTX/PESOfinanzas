@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NUMMEROS · Nos mudamos</title>
+<link rel="icon" href="https://nummeros.peso.contaxbolivia.com/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Akshar:wght@400;600;700&family=Questrial&display=swap" rel="stylesheet">
+<style>
+:root{
+  --verde-950:#051F20; --verde-900:#0B2B26; --verde-800:#163832; --verde-700:#235347; --verde-300:#8EB69B; --verde-100:#DAF1DE;
+  --fondo:#F4FAF5; --superficie:#FFFFFF; --borde:#DAF1DE; --texto:#163832; --texto-suave:#557363;
+  --display:Akshar,"Arial Narrow",sans-serif; --cuerpo:"Century Gothic",Questrial,"Avenir Next",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{background:var(--fondo);color:var(--texto);font-family:var(--cuerpo);font-size:16px;line-height:1.5;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;position:relative;overflow-x:hidden}
+.patron{position:fixed;inset:0;opacity:.55;pointer-events:none}
+.patron svg{width:100%;height:100%;display:block}
+.tarjeta{position:relative;background:var(--superficie);border:1px solid var(--borde);border-radius:16px;
+  max-width:460px;width:100%;padding:40px 32px 32px;text-align:center;box-shadow:0 1px 2px rgba(5,31,32,.08),0 24px 60px -30px rgba(5,31,32,.35)}
+.logo{width:min(260px,80%);height:auto;display:block;margin:0 auto 28px}
+.kicker{font:600 13px var(--display);letter-spacing:.14em;text-transform:uppercase;color:var(--verde-700)}
+h1{font:700 40px/1.05 var(--display);margin:8px 0 12px;color:var(--texto)}
+p{color:var(--texto-suave)}
+.link{display:block;margin:22px 0 18px;padding:12px 14px;background:#EEF7F0;border:1px solid var(--borde);border-radius:10px;
+  font:600 clamp(14px,4.4vw,17px) var(--display);color:var(--verde-800);overflow-wrap:anywhere;text-decoration:none}
+.boton{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--verde-700);color:#fff;border:0;
+  border-radius:10px;padding:14px 18px;font:600 18px var(--display);text-decoration:none;cursor:pointer}
+.boton:hover{background:var(--verde-800)}
+.boton:focus-visible{outline:2px solid var(--verde-700);outline-offset:3px}
+.nota{font-size:14px;margin-top:16px}
+.firma{margin-top:28px;font-size:13px;color:var(--texto-suave)}
+.firma b{font:600 13px var(--display);letter-spacing:.06em;color:var(--texto)}
+</style>
+</head>
+<body>
+<div class="patron" aria-hidden="true">
+  <svg xmlns="http://www.w3.org/2000/svg"><defs><pattern id="pn" width="120" height="120" patternUnits="userSpaceOnUse"><g transform="translate(36 30) scale(.0824)" fill="#DAF1DE"><path d="M0 427 L0 728 L136 728 L136 634 Z M410 0 L410 85 L546 292 L546 0 Z M0 0 L148 0 L410 458.5 L410 341 L546 548 L546 728 L401.71 728 L136 263 L136 379 L0 172 Z"/></g></pattern></defs><rect width="100%" height="100%" fill="url(#pn)"/></svg>
+</div>
+<main class="tarjeta">
+  <img class="logo" src="https://nummeros.peso.contaxbolivia.com/marca/logos/nummeros-logotipo-horizontal-principal.svg" alt="NUMMEROS">
+  <div class="kicker">Aviso importante</div>
+  <h1>Nos mudamos</h1>
+  <p>El sistema de finanzas de PE$O ahora vive en un nuevo enlace. Este enlace ya no se usa.</p>
+  <a class="link" href="https://nummeros.peso.contaxbolivia.com/" target="_top" rel="noopener">nummeros.peso.contaxbolivia.com</a>
+  <a class="boton" href="https://nummeros.peso.contaxbolivia.com/" target="_top" rel="noopener">Ir al nuevo sistema <span aria-hidden="true">→</span></a>
+  <p class="nota">Guárdalo en tus favoritos. Tu clave de acceso es la misma.</p>
+  <div class="firma"><b>NUMMEROS</b> by CONTAX · Sistemas a la medida de tu empresa.</div>
+</main>
+<script>
+/* Intenta llevar a la persona al nuevo enlace. Si el navegador lo bloquea, queda el botón. */
+(function(){
+  var URL_NUEVA="https://nummeros.peso.contaxbolivia.com/";
+  if (location.hostname === "nummeros.peso.contaxbolivia.com") return; // vista previa en el sitio nuevo: no redirigir
+  setTimeout(function(){ try{ window.top.location.href = URL_NUEVA; }catch(e){} }, 2500);
+})();
+</script>
+</body>
+</html>

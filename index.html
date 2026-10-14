@@ -1475,7 +1475,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V180";
+const APP_VERSION = "V181";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1774,6 +1774,7 @@ function pnlRows(allYears){
   // usd = monto en USD;  bob = monto en BOB al TC del DÍA del pago (histórico). imp = moneda activa.
   const add=(cuenta,grupo,subg,cp,ca,usd,bob,m,g,src)=>{ cuenta=S(cuenta);grupo=S(grupo);subg=S(subg);cp=S(cp);ca=S(ca);
     if(!cuenta||!grupo||!subg||!cp||!ca) return; // requiere los 5 niveles asignados
+    if(!STATE.clasifHoja && esTraspasoNiv(cuenta,grupo,subg,cp,ca)) return; // V181: Traspasos Internos nunca son ingreso ni gasto
     const _usd=+usd||0, _bob=(bob==null?_usd*(RATE||0):(+bob||0));
     out.push({cuenta,grupo,subg,cp,ca, usd:_usd, bob:_bob, imp:(CUR==="BOB"?_bob:_usd), m,g,src,income:normHdr(cuenta).includes("ingreso")}); };
   const _cH=STATE.clasifHoja===true;   // V178: true = clasificación antigua (columnas de las hojas), solo para comparar
@@ -2944,17 +2945,16 @@ function renderResumen(){
   const resultado = incomeTot - expenseTot;
   // Costos = subconjunto clasificado de Egresos que coincide con Manteca/Bridge/Tesabiz.
   // Se muestran aparte (entre Ingresos y Egresos) y se restan de "Egresos" para NO duplicar.
-  const _cosKwR=(typeof COSTOS_KEYWORDS!=="undefined"?COSTOS_KEYWORDS:["Manteca","Bridge","Tesabiz"]).map(k=>k.toLowerCase());
-  const _cosHayR=r=>(String(r.con||"")+" "+String(r.ben||"")+" "+String(r.tipo||"")+" "+String(r.cc||"")+" "+String(r.cp||"")+" "+String(r.kcuenta||"")+" "+String(r.grupoc||"")).toLowerCase();
-  const _isClasifR=r=>{const S=v=>String(v==null?"":v).trim();return !!(S(r.kcuenta)&&S(r.grupoc)&&S(r.ksubgrupo)&&S(r.cp)&&S(r.ca||r.cc));};
-  const costosTot=(STATE.egresos||[]).filter(e=>STATE.year==="__all"||e.g===STATE.year).filter(_isClasifR).filter(r=>_cosKwR.some(k=>_cosHayR(r).includes(k))).reduce((s,r)=>s+(CUR==="BOB"?(r.impBOB!=null?+r.impBOB:(+r.imp||0)*(RATE||0)):(+r.imp||0)),0);
-  const egSinCostos=egClasif-costosTot;
+  // V181: Costos = gastos cuyo Grupo/Sub Grupo del Plan de Cuentas es de costos (de cualquier fuente).
+  const _cosOf=src=>pnl.filter(r=>!r.income&&r.src===src&&esCostoNiv(r.grupo,r.subg)).reduce((a,r)=>a+r.imp,0);
+  const costosTot=pnl.filter(r=>!r.income&&esCostoNiv(r.grupo,r.subg)).reduce((a,r)=>a+r.imp,0);
+  const egSinCostos=egClasif-_cosOf("Egresos");
   const pnlStrip = `<div class="caja">
     <div class="c"><div class="l">Ingresos (clasif.)</div><div class="v" style="color:var(--emerald)">${pMoney(incomeTot)}</div></div>
-    <div class="c" style="background:rgba(180,35,24,.05)"><div class="l">Costos (Manteca/Bridge/Tesabiz)</div><div class="v neg">${pMoney(costosTot)}</div></div>
+    <div class="c" style="background:rgba(180,35,24,.05)"><div class="l">Costos (según Plan de Cuentas)</div><div class="v neg">${pMoney(costosTot)}</div></div>
     <div class="c"><div class="l">Egresos (sin costos)</div><div class="v neg">${pMoney(egSinCostos)}</div></div>
-    <div class="c"><div class="l">Gastos BitGo</div><div class="v neg">${pMoney(bgClasif)}</div></div>
-    <div class="c"><div class="l">Gastos Mercury</div><div class="v neg">${pMoney(mcClasif)}</div></div>
+    <div class="c"><div class="l">Gastos BitGo (sin costos)</div><div class="v neg">${pMoney(bgClasif-_cosOf("BitGo"))}</div></div>
+    <div class="c"><div class="l">Gastos Mercury (sin costos)</div><div class="v neg">${pMoney(mcClasif-_cosOf("Mercury"))}</div></div>
     <div class="c hi"><div class="l">Gastos totales</div><div class="v neg">${pMoney(expenseTot)}</div></div>
     <div class="c hi"><div class="l">Utilidad bruta</div><div class="v" style="${resultado<0?'':'color:var(--emerald)'}">${pMoney(resultado)}</div></div>
   </div>`;
@@ -3003,10 +3003,9 @@ function renderResumen(){
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
       </button>
     </div>`;
-  const _cosKw=(typeof COSTOS_KEYWORDS!=="undefined"?COSTOS_KEYWORDS:["Manteca","Bridge","Tesabiz"]);
-  const _cosHay=r=>(String(r.con||"")+" "+String(r.ben||"")+" "+String(r.tipo||"")+" "+String(r.cc||"")+" "+String(r.cp||"")+" "+String(r.kcuenta||"")+" "+String(r.grupoc||"")).toLowerCase();
-  const _cosBase=rows.filter(r=>_cosKw.some(k=>_cosHay(r).includes(k.toLowerCase())));
-  const _cosBy={}; _cosKw.forEach(k=>_cosBy[k]=0); _cosBase.forEach(r=>{const h=_cosHay(r);_cosKw.forEach(k=>{if(h.includes(k.toLowerCase()))_cosBy[k]+=(+r.imp||0);});});
+  const _cosA=r=>ancEgreso(r);
+  const _cosBase=rows.filter(r=>{ const a=_cosA(r); return esCostoNiv(a.grupoc,a.ksubgrupo); });
+  const _cosBy={}; _cosBase.forEach(r=>{ const k=_cosA(r).cp||"(sin cuenta principal)"; _cosBy[k]=(_cosBy[k]||0)+(+r.imp||0); });
   const _cosBars=Object.entries(_cosBy).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]); const _cosTot=_cosBase.reduce((s,r)=>s+(+r.imp||0),0);
   let content="";
   if(resTab==="resumen"){
@@ -3838,9 +3837,9 @@ function renderEgresos(){
       {label:"Beneficiario",sortKey:"ben",render:r=>r.ben?esc(r.ben):'<span class="zero">–</span>'},
       {label:"Concepto",sortKey:"con",render:r=>esc(r.con||"–")},
       {label:"Empresa (paga)",render:r=>{const e=EMP_LABEL[r._emp]; return e?`<span class="tag">${esc(e)}</span>`:'<span class="zero">–</span>';}},
-      {label:"Empresa (resp.)",render:r=>{const g=reglaCosto(r.ben); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
-      {label:"Tipo",render:r=>{const g=reglaCosto(r.ben); return dimAuto(g&&g.tipo||"");}},
-      {label:"Centro de Costo",render:r=>{const g=reglaCosto(r.ben); return dimAuto(g&&g.centro||"");}},
+      {label:"Empresa (resp.)",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
+      {label:"Tipo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.tipo||"");}},
+      {label:"Centro de Costo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.centro||"");}},
       {label:"Mes",sortKey:"fecha",render:r=>`<span class="mini">${esc(mesES(r.m))} ${r.g||""}</span>`},
       {label:"País",sortKey:"pais",render:r=>r.pais?`<span class="tag">${esc(r.pais)}</span>`:'<span class="zero">–</span>'},
       {label:"Estado",sortKey:"e",render:r=>stBadge(r.e)},
@@ -4392,7 +4391,11 @@ function renderDynSheet(secKey, data, title, intro, extraTop){
   if(STATE._dynFocus===sk){ const el=$("#"+sk); if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);} STATE._dynFocus=null; }
 }
 /* Palabras clave para la pestaña Costos (se extraen de Egresos, sin registrar aparte) */
-const COSTOS_KEYWORDS = ["Manteca","Bridge","Tesabiz"];
+const COSTOS_KEYWORDS = ["Manteca","Bridge","Tesabiz"];   // (ya no se usa para decidir qué es costo: V181)
+/* V181: un pago es COSTO si en el Plan de Cuentas su Grupo o Sub Grupo es de costos (ej.: COSTOS OPERATIVOS ▸ COSTO DE SERVICIOS DIGITALES).
+   El "proveedor" del costo es su Cuenta Principal (ej.: BRIDGE, WALLETS, TARJETAS). */
+function esCostoNiv(grupo,subg){ return /costo/i.test(String(grupo||"")+" "+String(subg||"")); }
+function esTraspasoNiv(){ return /traspasos?\s*intern/i.test([].slice.call(arguments).join(" ")); }
 
 /* Suma de gastos (salidas) de BitGo del año activo, en USD */
 function bitgoDataPnl(){
@@ -4643,15 +4646,15 @@ function renderCostos(){
     </div>`;
 
   // ---- Costos Pagados (extraídos de Egresos por palabra clave) ----
-  const kws=COSTOS_KEYWORDS.map(k=>k.toLowerCase());
-  const hay=r=>(String(r.con||"")+" "+String(r.ben||"")+" "+String(r.tipo||"")+" "+String(r.pagadopor||"")+" "+String(r.cc||"")+" "+String(r.cp||"")+" "+String(r.coment||"")).toLowerCase();
-  const matchKw=r=>{ const h=hay(r); return kws.find(k=>h.includes(k)); };
-  const pbase=(STATE.egresos||[]).filter(r=> STATE.year==="__all"||r.g===STATE.year).filter(r=>!!matchKw(r));
+  // V181: todos los pagos de Egresos ▸ General (Egresos, Mercury, BitGo) cuya cuenta es de COSTOS en el Plan de Cuentas
+  const pbase=egresosUnificados().filter(r=>esCostoNiv(r.grupoc,r.ksubgrupo)&&!esTraspasoNiv(r.grupoc,r.ksubgrupo,r.cp,r.ca))
+    .map(r=>({origen:r.origen,fecha:r.fecha,con:r.con,ben:(r.origen==="Egresos"?r.keytext:""),cp:r.cp,cc:r.ca,ca:r.ca,casrc:r.casrc,m:r.m,g:r.g,moneda:r.moneda,tipo:r.tipo,
+      impOrig:r.usd, impUSD:r.usd, impBOB:r.bob, imp:(CUR==="BOB"?(r.bob!=null?r.bob:0):r.usd)}));
   const q=String(STATE.cosSearch||"").trim().toLowerCase();
   const prows=q? pbase.filter(r=>(String(r.con||"")+" "+(r.ben||"")+" "+(r.cc||"")+" "+(r.tipo||"")).toLowerCase().includes(q)) : pbase;
   const pUSD=prows.reduce((s,e)=>s+(+e.imp||0),0), pBOB=prows.reduce((s,e)=>s+(+e.impBOB||0),0);
-  const byKw={}; COSTOS_KEYWORDS.forEach(k=>byKw[k]=0);
-  pbase.forEach(r=>{ const h=hay(r); COSTOS_KEYWORDS.forEach(k=>{ if(h.includes(k.toLowerCase())) byKw[k]+=(+r.imp||0); }); });
+  const byKw={};
+  pbase.forEach(r=>{ const k=r.cp||"(sin cuenta principal)"; byKw[k]=(byKw[k]||0)+(+r.imp||0); });
   const kwBars=Object.entries(byKw).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]);
   const pMonthTot=Array(12).fill(0); prows.forEach(r=>{const mi=monthIdx(r.m); if(mi>=0)pMonthTot[mi]+=(+r.imp||0);});
 
@@ -4691,12 +4694,13 @@ function renderCostos(){
     const PS=STATE.cosPagSort||{key:"impUSD",dir:"desc"};
     const sorted=[...prows].sort(mkCmp(PS.key,PS.dir,["impOrig","impUSD","impBOB"],["fecha"]));
     const cols=[
-      {label:"Concepto",sortKey:"con",render:r=>`${esc(r.con||"–")}${r.ben?`<span class="sub2">${esc(r.ben)}</span>`:""}`},
-      {label:"Cuenta Analítica",render:r=>{const x=resolveEgreso(r); return x.ca?`<span class="ca-cell ${x.src==='manual'?'ca-man':(x.src==='auto'?'ca-auto':'ca-sheet')}" style="pointer-events:none;cursor:default;max-width:180px">${esc(x.ca)}</span>`:'<span class="zero">–</span>';}},
-      {label:"Empresa (resp.)",render:r=>{const g=reglaCosto(r.ben); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
-      {label:"Tipo",render:r=>{const g=reglaCosto(r.ben); return dimAuto(g&&g.tipo||"");}},
-      {label:"Centro de Costo",render:r=>{const g=reglaCosto(r.ben); return dimAuto(g&&g.centro||"");}},
-      {label:"Cuenta",sortKey:"cc",render:r=>esc(r.cc||"–")},
+      {label:"Origen",sortKey:"origen",render:r=>`<span class="tag">${esc(r.origen)}</span>`},
+      {label:"Concepto",sortKey:"con",render:r=>`${esc(r.con||"–")}${r.ben&&r.ben!==r.con?`<span class="sub2">${esc(r.ben)}</span>`:""}`},
+      {label:"Proveedor (Cuenta Principal)",sortKey:"cp",render:r=>r.cp?`<b>${esc(r.cp)}</b>`:'<span class="zero">–</span>'},
+      {label:"Cuenta Analítica",render:r=>{const x={ca:r.ca,src:r.casrc}; return x.ca?`<span class="ca-cell ${x.src==='manual'?'ca-man':(x.src==='auto'?'ca-auto':'ca-sheet')}" style="pointer-events:none;cursor:default;max-width:180px">${esc(x.ca)}</span>`:'<span class="zero">–</span>';}},
+      {label:"Empresa (resp.)",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
+      {label:"Tipo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.tipo||"");}},
+      {label:"Centro de Costo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.centro||"");}},
       {label:"Mes",sortKey:"fecha",render:r=>`<span class="mini">${esc(mesES(r.m))} ${r.g||""}</span>`},
       {label:"Tipo de Pago",sortKey:"tipo",render:r=>r.tipo?`<span class="tag">${esc(r.tipo)}</span>`:'<span class="zero">–</span>'},
       {label:"Moneda",sortKey:"moneda",render:r=>`<span class="tag">${esc(r.moneda||"USD")}</span>`},
@@ -4704,9 +4708,9 @@ function renderCostos(){
       {label:"USD",right:1,cls:"num",sortKey:"impUSD",render:r=>r.impUSD!=null?fmt(r.impUSD,2):'<span class="zero">–</span>'},
       {label:"BOB",right:1,cls:"num",sortKey:"impBOB",render:r=>r.impBOB!=null?("Bs "+f2(r.impBOB)):'<span class="zero">–</span>'},
     ];
-    const totRow=["Total ("+prows.length+")","","","","","","","","","",fmt(pUSD,2),"Bs "+f2(pBOB)];
+    const totRow=["Total ("+prows.length+")","","","","","","","","","","",fmt(pUSD,2),"Bs "+f2(pBOB)];
     app.innerHTML=`
-      <p class="section-intro">Costos de <b>tarjetas y comisiones</b> extraídos automáticamente de <b>Egresos</b> (todo lo que contenga: ${COSTOS_KEYWORDS.map(k=>"<b>"+esc(k)+"</b>").join(", ")}). Es un subconjunto de Egresos (no se duplica).</p>
+      <p class="section-intro">Todos los pagos de <b>Egresos ▸ General</b> (Egresos, Mercury y BitGo) cuya Cuenta Analítica está bajo <b>Costos</b> en tu <b>Plan de Cuentas</b>. El proveedor es la <b>Cuenta Principal</b> (ej.: BRIDGE). Si agregas un costo nuevo al Plan, aparece aquí solo.</p>
       ${seg}
       <div class="grid kpis">
         ${kpi("Costos (USD)",money(pUSD),prows.length+" movimientos","#B42318","◆")}

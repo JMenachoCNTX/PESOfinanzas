@@ -1475,7 +1475,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V183";
+const APP_VERSION = "V185";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -5786,7 +5786,10 @@ function renderSociosCapital(){
      <button data-t="devoluciones" class="${t==='devoluciones'?'on':''}">Devoluciones</button>
      <button data-t="rendiciones" class="${t==='rendiciones'?'on':''}">Rendiciones</button>
    </div>`;
-  const app=$("#app"); if(app) app.insertAdjacentHTML("afterbegin", seg);
+  const hk={inversiones:"inv",prestamos:"pre",devoluciones:"devoluciones"}[t];
+  const hb=(hk&&nmFbActivo()&&NMFB.esAdmin())?`<div style="display:flex;justify-content:flex-end;margin:-6px 0 12px"><button class="btn" id="histEd">✎ Registrar / editar ${HIST_TIT[hk]}</button></div>`:"";
+  const app=$("#app"); if(app) app.insertAdjacentHTML("afterbegin", seg+hb);
+  const he=$("#histEd"); if(he) he.addEventListener("click",()=>histEditor(hk));
   document.querySelectorAll("#socioTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.socioTab=b.dataset.t;render();}));
 }
 function renderCierre(){
@@ -8093,6 +8096,17 @@ const NMFB={
   // V177: ajustes que antes vivían en el navegador (Archivos, RRHH, Google Calendar) → Firebase config/{nombre}
   async cfgGet(n){ const d=await this.db.doc("config/"+n).get(); return d.exists?d.data():null; },
   async cfgSet(n,o){ await this.db.doc("config/"+n).set(Object.assign({},o,{actualizado:new Date().toISOString(),por:(this.sesion&&this.sesion.email)||""})); },
+  // V185: datos históricos grandes (Mercury, Inversiones, Préstamos, Devoluciones) en partes: config/h_<nombre> + config/h_<nombre>_<i>
+  async histGet(n){ const meta=await this.cfgGet("h_"+n); if(!meta||!meta.partes) return null;
+    const ps=await Promise.all(Array.from({length:meta.partes},(_,i)=>this.cfgGet("h_"+n+"_"+i)));
+    let rows=[]; ps.forEach(p=>{ if(p&&Array.isArray(p.filas)) rows=rows.concat(p.filas); }); return rows; },
+  async histSet(n,rows){ const partes=[]; let cur=[], tam=0;
+    (rows||[]).forEach(r=>{ const t=JSON.stringify(r).length+8; if(tam+t>600000 && cur.length){ partes.push(cur); cur=[]; tam=0; } cur.push(r); tam+=t; });
+    if(cur.length||!partes.length) partes.push(cur);
+    const old=await this.cfgGet("h_"+n);
+    for(let i=0;i<partes.length;i++) await this.cfgSet("h_"+n+"_"+i,{filas:partes[i]});
+    if(old&&old.partes>partes.length){ for(let i=partes.length;i<old.partes;i++){ try{ await this.db.doc("config/h_"+n+"_"+i).delete(); }catch(_){} } }
+    await this.cfgSet("h_"+n,{partes:partes.length,n:(rows||[]).length}); },
   async tareaGuardar(t){ const id=String(t.id||("T"+Date.now())).replace(/\//g,"-");
     const o={id:id,tarea:String(t.tarea||""),estado:String(t.estado||"Pendiente"),prioridad:String(t.prioridad||"Media"),vence:String(t.vence||"").slice(0,10),notas:String(t.notas||""),creado:String(t.creado||_isoHoy()),actualizado:new Date().toISOString(),por:this.sesion.email};
     await this.db.doc("tareas/"+id).set(o); return o; },
@@ -8110,6 +8124,54 @@ async function nmFbAplicarDatos(res){
   try{ const d=await NMFB.cargarDatos(res||{}); STATE.tareas=d.tareas; STATE.asigManual=d.asigManual; STATE._amSrc=null; STATE._amIdx=null; STATE.fbErr=null; }
   catch(e){ console.error(e); STATE.fbErr="No se pudieron leer las tareas desde Firebase: "+(e&&e.message||e); }
   try{ await nmFbCargarAjustes(); }catch(e){ console.error("ajustes Firebase",e); }
+}
+/* V185: Mercury (ya no se actualiza), Inversiones, Préstamos y Devoluciones viven en Firebase.
+   La primera vez se copian desde Google Sheets; desde entonces el sistema ignora esas hojas. */
+const NM_HIST=["mercury","inv","pre","devoluciones"];
+STATE.histFB={};
+async function nmFbHistoricos(res){
+  if(!nmFbActivo()||!res) return;
+  for(const n of NM_HIST){
+    try{ const rows=await NMFB.histGet(n);
+      if(rows){ res[n]=rows; STATE.histFB[n]=true; }
+      else if(NMFB.esAdmin() && Array.isArray(res[n]) && res[n].length){ await NMFB.histSet(n,res[n]); STATE.histFB[n]=true; }
+    }catch(e){ console.error("histórico "+n,e); }
+  }
+  STATE.histRaw={inv:res.inv||[],pre:res.pre||[],devoluciones:res.devoluciones||[]};
+}
+/* Editor simple para Inversiones / Préstamos / Devoluciones (agregar, editar, borrar) */
+const HIST_CAMPOS={
+  inv:[["fechadeinversion","Fecha","date"],["concepto","Concepto"],["inversionista","Inversionista"],["importe","Importe","num"],["moneda","Moneda"],["empresa","Empresa"],["comentarios","Comentarios"]],
+  pre:[["fechadeprestamo","Fecha","date"],["concepto","Concepto"],["nombre","Nombre"],["importe","Importe","num"],["moneda","Moneda"],["empresa","Empresa"],["comprobante","Comprobante"],["comentarios","Comentarios"]],
+  devoluciones:[["fecha","Fecha","date"],["concepto","Concepto"],["devoluciona","Devolución a"],["importe","Importe","num"],["moneda","Moneda"],["empresa","Empresa"],["comprobante","Comprobante"],["comentarios","Comentarios"]]
+};
+const HIST_TIT={inv:"Inversiones",pre:"Préstamos",devoluciones:"Devoluciones"};
+function histEditor(n){
+  if(!nmFbActivo()||!NMFB.esAdmin()){ alert("Solo un administrador puede editar estos datos."); return; }
+  const C=HIST_CAMPOS[n]; let rows=((STATE.histRaw&&STATE.histRaw[n])||[]).map(r=>Object.assign({},r)); let ed=-1;
+  const ov=document.createElement("div"); ov.className="overlay show"; ov.style.zIndex="400";
+  const fval=(r,k)=>String(r[k]==null?"":r[k]).slice(0,k.indexOf("fecha")===0||k==="fecha"?10:200);
+  const draw=()=>{ const F=ed>=0?rows[ed]:{};
+    ov.innerHTML=`<div class="modal" style="max-width:980px;width:96vw"><h2>${HIST_TIT[n]}: registrar y editar</h2>
+      <div class="us-form" style="grid-template-columns:repeat(4,1fr)">${C.map(([k,l,t])=>`<div><label>${l}</label><input class="he-in" data-k="${k}" ${t==="date"?'type="date"':""} ${t==="num"?'inputmode="decimal"':""} value="${esc(fval(F,k))}"></div>`).join("")}</div>
+      <div class="modal-actions" style="justify-content:flex-start">${ed>=0?'<button class="btn" id="heNew">Cancelar edición</button>':""}<button class="btn primary" id="heSave">${ed>=0?"Guardar cambios":"Agregar"}</button><span class="mini" id="heMsg"></span></div>
+      <div class="tbl-scroll" style="max-height:46vh"><table><thead><tr>${C.map(c=>`<th style="text-align:left">${c[1]}</th>`).join("")}<th></th></tr></thead><tbody>
+      ${rows.map((r,i)=>`<tr>${C.map(([k,,t])=>`<td style="text-align:${t==="num"?"right":"left"}">${esc(fval(r,k))}</td>`).join("")}<td><span class="ta-acts"><button class="btn ghost he-ed" data-i="${i}">✎</button><button class="btn ghost he-del" data-i="${i}">✕</button></span></td></tr>`).join("")}</tbody></table></div>
+      <div class="modal-actions"><button class="btn" id="heClose">Cerrar</button></div></div>`;
+    ov.querySelector("#heClose").onclick=()=>ov.remove();
+    const nb=ov.querySelector("#heNew"); if(nb) nb.onclick=()=>{ ed=-1; draw(); };
+    ov.querySelectorAll(".he-ed").forEach(b=>b.onclick=()=>{ ed=+b.dataset.i; draw(); });
+    ov.querySelectorAll(".he-del").forEach(b=>b.onclick=()=>{ if(!confirm("¿Borrar esta fila?")) return; rows.splice(+b.dataset.i,1); ed=-1; guardar(); });
+    ov.querySelector("#heSave").onclick=()=>{ const o=ed>=0?rows[ed]:{}; ov.querySelectorAll(".he-in").forEach(i=>{ const k=i.dataset.k; const t=(C.find(c=>c[0]===k)||[])[2]; o[k]=t==="num"?(parseFloat(String(i.value).replace(",","."))||0):i.value; });
+      if(!String(o.concepto||"").trim()&&!o.importe){ ov.querySelector("#heMsg").textContent="Escribe al menos el concepto o el importe."; return; }
+      if(ed<0) rows.push(o); ed=-1; guardar(); };
+  };
+  const guardar=async()=>{ const m=ov.querySelector("#heMsg"); if(m) m.textContent="Guardando…";
+    try{ await NMFB.histSet(n,rows); STATE.histRaw[n]=rows; STATE.histFB[n]=true;
+      if(n==="inv") STATE.inv=mapInv(rows); else if(n==="pre") STATE.pre=mapPre(rows); else STATE.dev=mapDev(rows);
+      draw(); const mm=ov.querySelector("#heMsg"); if(mm) mm.textContent="Guardado ✓"; render(); }
+    catch(e){ const mm=ov.querySelector("#heMsg"); if(mm) mm.textContent="No se pudo guardar: "+((e&&e.message)||e); } };
+  draw(); document.body.appendChild(ov);
 }
 /* V177: Archivos, datos extra de RRHH, datos de la empresa (RRHH) y calendarios de Google se guardan en Firebase.
    La primera vez se copian solos desde este navegador / la hoja "Archivos". */
@@ -8307,6 +8369,7 @@ function conectar(pin){
     .withSuccessHandler(async function(res){
       if(!res||res.error){ fail((NMFB.on?"Servidor de datos (Apps Script): ":"")+(res&&res.error?res.error:"No se pudo conectar.")); return; }
       try{ localStorage.setItem("peso_pin",pin); }catch(_){}
+      await nmFbHistoricos(res);
       aplicarDatos(res);
       await nmFbAplicarDatos(res); nmMostrarUsuariosNav();
       btn.textContent="Entrar"; btn.disabled=false;
@@ -8340,7 +8403,7 @@ function actualizarDatos(){
   const start=Date.now();
   const done=(cb)=>{ const wait=Math.max(0,1400-(Date.now()-start)); setTimeout(()=>{ b.innerHTML=t; nmCargando(false); if(cb) cb(); }, wait); };
   google.script.run
-    .withSuccessHandler(async function(res){ if(res&&!res.error){ aplicarDatos(res); await nmFbAplicarDatos(res); } done(function(){ if(res&&!res.error){ buildYears(); buildEmpresas(); _nmOdoFirma=""; render(); } else { showLogin(); } }); })
+    .withSuccessHandler(async function(res){ if(res&&!res.error){ await nmFbHistoricos(res); aplicarDatos(res); await nmFbAplicarDatos(res); } done(function(){ if(res&&!res.error){ buildYears(); buildEmpresas(); _nmOdoFirma=""; render(); } else { showLogin(); } }); })
     .withFailureHandler(function(){ done(); })
     .getData(pin);
 }

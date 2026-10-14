@@ -1467,7 +1467,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V177";
+const APP_VERSION = "V178";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1768,13 +1768,16 @@ function pnlRows(allYears){
     if(!cuenta||!grupo||!subg||!cp||!ca) return; // requiere los 5 niveles asignados
     const _usd=+usd||0, _bob=(bob==null?_usd*(RATE||0):(+bob||0));
     out.push({cuenta,grupo,subg,cp,ca, usd:_usd, bob:_bob, imp:(CUR==="BOB"?_bob:_usd), m,g,src,income:normHdr(cuenta).includes("ingreso")}); };
-  (STATE.egresos||[]).forEach(e=>{ _expandEgreso(e).forEach(s=>{ if(!yOk(s.g)) return; if(!empPassRow(s)) return; add(s.kcuenta, s.grupoc, s.ksubgrupo, s.cp, s.ca||s.cc, (+s.imp||0), (s.impBOB!=null?s.impBOB:bobOf(+s.imp||0,s.fecha)), s.m, s.g, "Egresos"); }); });
+  const _cH=STATE.clasifHoja===true;   // V178: true = clasificación antigua (columnas de las hojas), solo para comparar
+  try{ ensureHuellas(); ensureHuellasMerc(); ensureHuellasBitgo(); }catch(_){}
+  const _aE=s=>{ if(_cH) return {kcuenta:s.kcuenta,grupoc:s.grupoc,ksubgrupo:s.ksubgrupo,cp:s.cp,ca:s.ca||s.cc}; const a=ancEgreso(s); return a; };
+  (STATE.egresos||[]).forEach(e=>{ _expandEgreso(e).forEach(s=>{ if(!yOk(s.g)) return; if(!empPassRow(s)) return; const A=_aE(s); add(A.kcuenta, A.grupoc, A.ksubgrupo, A.cp, A.ca, (+s.imp||0), (s.impBOB!=null?s.impBOB:bobOf(+s.imp||0,s.fecha)), s.m, s.g, "Egresos"); }); });
   const find=(cols,...n)=>{ for(const x of n){ const c=cols.find(k=>normHdr(k)===x); if(c)return c; } for(const x of n){ const c=cols.find(k=>normHdr(k).includes(x)); if(c)return c; } return null; };
   const bg=STATE.bitgo||{cols:[],rows:[]}, bc=bg.cols||[];
   const bAmt=find(bc,"amount","monto","importe"), bDate=find(bc,"mmddyyyy","fecha","date","datetime"),
         bCu=find(bc,"cuenta"), bGr=find(bc,"grupo"), bSg=find(bc,"subgrupo"), bCP=find(bc,"cuentaprincipal"), bCA=find(bc,"cuentaanalitica"),
         bCon=find(bc,"concepto","descripcion","memo","detalle","txtype","tipo","type"),
-        bCont=find(bc,"contabilizado");
+        bCont=find(bc,"contabilizado"), bCon2=find(bc,"comments","comentarios","concepto","descripcion","memo","txtype","type");
   // BitGo: si existe la columna "Contabilizado?", EGRESO sólo cuando dice "SI"
   // (traspasos internos/fondeo y demás quedan FUERA del Estado de Resultados).
   // Si esa columna aún no existe, se mantiene el criterio anterior por signo (salida<0).
@@ -1782,7 +1785,8 @@ function pnlRows(allYears){
     const esEgreso = bCont ? (tok==="si") : (v<0);
     if(!esEgreso) return; const usd=Math.abs(v); if(!usd) return;
     const d=bDate?new Date(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const m=(d&&!isNaN(d))?MONTHS[d.getMonth()]:null; const iso=bDate?gdUS(r[bDate]).iso:null;
-    const cu=bCu&&r[bCu], gr=bGr&&r[bGr], sg=bSg&&r[bSg], cp=bCP&&r[bCP], ca=bCA&&r[bCA];
+    let cu=bCu&&r[bCu], gr=bGr&&r[bGr], sg=bSg&&r[bSg], cp=bCP&&r[bCP], ca=bCA&&r[bCA];
+    if(!_cH){ const a=ancGeneric(resolveGeneric("BitGo", r._hu, (bCon2&&r[bCon2]), ca), {kcuenta:cu,grupoc:gr,ksubgrupo:sg,cp:cp}); cu=a.kcuenta; gr=a.grupoc; sg=a.ksubgrupo; cp=a.cp; ca=a.ca; }
     if(S(cu)&&S(gr)&&S(sg)&&S(cp)&&S(ca)){ add(cu,gr,sg,cp,ca, usd, bobOf(usd,iso), m, g, "BitGo"); }
     else { const con=(bCon&&S(r[bCon]))||"(sin concepto)"; add("Bancos","BitGo","Sin clasificar", con, "(movimiento)", usd, bobOf(usd,iso), m, g, "BitGo"); }
   });
@@ -1794,7 +1798,8 @@ function pnlRows(allYears){
     const tok=r.ctok||contabTok(r.contab);
     if(mHasContab){
       if(tok==="si"){
-        if(S(r.kcuenta)&&S(r.grupoc)&&S(r.ksubgrupo)&&S(r.cp)&&S(r.ca)){ add(r.kcuenta, r.grupoc, r.ksubgrupo, r.cp, r.ca, usd, bobOf(usd,r.fecha), m, r.g, "Mercury"); }
+        const A=_cH?{kcuenta:r.kcuenta,grupoc:r.grupoc,ksubgrupo:r.ksubgrupo,cp:r.cp,ca:r.ca}:ancGeneric(resolveGeneric("Mercury", r._hu, r.desc, (r.ca||r.canalitica)),{kcuenta:r.kcuenta,grupoc:r.grupoc,ksubgrupo:r.ksubgrupo,cp:r.cp});
+        if(S(A.kcuenta)&&S(A.grupoc)&&S(A.ksubgrupo)&&S(A.cp)&&S(A.ca)){ add(A.kcuenta, A.grupoc, A.ksubgrupo, A.cp, A.ca, usd, bobOf(usd,r.fecha), m, r.g, "Mercury"); }
         else { const con=(r.desc&&S(r.desc))||(r.bankdesc&&S(r.bankdesc))||"(sin concepto)"; add("Bancos","Mercury","Sin clasificar", con, "(movimiento)", usd, bobOf(usd,r.fecha), m, r.g, "Mercury"); }
       } else if(tok==="cashback"){
         add("Ingresos","Otros Ingresos","CashBack","Mercury","CashBack", usd, bobOf(usd,r.fecha), m, r.g, "Mercury");
@@ -1802,7 +1807,8 @@ function pnlRows(allYears){
       // traspaso / nocorresponde / no / vacío → nada en el Estado de Resultados
     } else {
       const v=+r.monto||0; if(!(v<0)) return;
-      if(S(r.kcuenta)&&S(r.grupoc)&&S(r.ksubgrupo)&&S(r.cp)&&S(r.ca)){ add(r.kcuenta, r.grupoc, r.ksubgrupo, r.cp, r.ca, usd, bobOf(usd,r.fecha), m, r.g, "Mercury"); }
+      const A=_cH?{kcuenta:r.kcuenta,grupoc:r.grupoc,ksubgrupo:r.ksubgrupo,cp:r.cp,ca:r.ca}:ancGeneric(resolveGeneric("Mercury", r._hu, r.desc, (r.ca||r.canalitica)),{kcuenta:r.kcuenta,grupoc:r.grupoc,ksubgrupo:r.ksubgrupo,cp:r.cp});
+      if(S(A.kcuenta)&&S(A.grupoc)&&S(A.ksubgrupo)&&S(A.cp)&&S(A.ca)){ add(A.kcuenta, A.grupoc, A.ksubgrupo, A.cp, A.ca, usd, bobOf(usd,r.fecha), m, r.g, "Mercury"); }
       else { const con=(r.desc&&S(r.desc))||(r.bankdesc&&S(r.bankdesc))||"(sin concepto)"; add("Bancos","Mercury","Sin clasificar", con, "(movimiento)", usd, bobOf(usd,r.fecha), m, r.g, "Mercury"); }
     }
   });
@@ -2911,6 +2917,10 @@ function renderResumen(){
         <button data-b="devengado" class="${(STATE.resBase||'devengado')==='devengado'?'on':''}">Devengado</button>
         <button data-b="caja" class="${STATE.resBase==='caja'?'on':''}">Caja</button>
       </div>
+      <div class="seg" id="resClasif" title="Sistema = la clasificación de Egresos ▸ General (Asignación automática + tus correcciones + Plan de Cuentas). Hojas = como se calculaba antes de la V178 (columnas escritas en cada hoja). Úsalo solo para comparar.">
+        <button data-c="sis" class="${STATE.clasifHoja?'':'on'}">Clasificación del sistema</button>
+        <button data-c="hoja" class="${STATE.clasifHoja?'on':''}">Como antes (hojas)</button>
+      </div>
       </div>
       <button class="btn btn-icon icon-only" id="resPdf" title="Descargar PDF de lo que ves" aria-label="PDF">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
@@ -2987,6 +2997,7 @@ function renderResumen(){
   }
   document.querySelectorAll("#resTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.resTab=b.dataset.rt;render();}));
   document.querySelectorAll("#resBase button").forEach(b=>b.addEventListener("click",()=>{STATE.resBase=b.dataset.b;render();}));
+  document.querySelectorAll("#resClasif button").forEach(b=>b.addEventListener("click",()=>{STATE.clasifHoja=(b.dataset.c==="hoja");render();}));
   const cb=$("#cmpBasis"); if(cb) cb.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{STATE.cmpBasis=b.dataset.c;render();}));
 }
 
@@ -3355,13 +3366,30 @@ function asigManIndex(){
   STATE._amSrc=src; STATE._amIdx=m; return m;
 }
 function manCa(fuente,huella){ return asigManIndex()[String(fuente)+"\u0000"+String(huella)]||""; }
-// Índice Cuenta Analítica -> jerarquía {kcuenta,grupoc,ksubgrupo,cp,cc,codc}
+// Índice Cuenta Analítica -> jerarquía {kcuenta,grupoc,ksubgrupo,cp,cc,codc,plan}
+// V178: el PLAN DE CUENTAS manda. Los 4 niveles de arriba salen del Código del plan (515 ▸ 515008 ▸ 515008001).
+// Solo si una Cuenta Analítica NO está en el plan se usa lo que esté escrito en las hojas (y se marca plan:false).
+function planJerarquiaIndex(){
+  const P=STATE.plan||[];
+  if(STATE._pjSrc===P && STATE._pjIdx) return STATE._pjIdx;
+  const byCat={cuenta:[],grupo:[],subgrupo:[],cuentaprincipal:[],cuentaanalitica:[]};
+  P.forEach(r=>{ const c=_pnorm(r.categoria); if(byCat[c]!==undefined && String(r.estado||"Activa").toLowerCase()!=="inactiva") byCat[c].push(r); });
+  const anc=(cod,arr)=>{ let best=null; arr.forEach(a=>{ const ac=String(a.codigo||""); if(!ac||ac.length>=cod.length) return; if(cod.indexOf(ac)===0){ if(!best||ac.length>String(best.codigo).length) best=a; } }); return best; };
+  const idx={};
+  byCat.cuentaanalitica.forEach(a=>{ const cod=String(a.codigo||""); const k=_normTxt(a.nombre); if(!cod||!k) return;
+    const cp=anc(cod,byCat.cuentaprincipal),sg=anc(cod,byCat.subgrupo),gr=anc(cod,byCat.grupo),cu=anc(cod,byCat.cuenta);
+    const h={kcuenta:cu?cu.nombre:"",grupoc:gr?gr.nombre:"",ksubgrupo:sg?sg.nombre:"",cp:cp?cp.nombre:"",cc:"",codc:cod,tipo:a.tipo||"",plan:true};
+    (idx[k]=idx[k]||[]).push(h); });
+  STATE._pjSrc=P; STATE._pjIdx=idx; return idx;
+}
 function caJerarquiaIndex(){
   const sig=[STATE.egresos,STATE.bitgo,STATE.mercury,STATE.plan];
   if(STATE._cjSrc && STATE._cjIdx && STATE._cjSrc[0]===sig[0] && STATE._cjSrc[1]===sig[1] && STATE._cjSrc[2]===sig[2] && STATE._cjSrc[3]===sig[3]) return STATE._cjIdx;
   const idx={};
+  const PJ=planJerarquiaIndex(); Object.keys(PJ).forEach(k=>{ idx[k]=PJ[k][0]; });
   const score=v=>(v&&v.kcuenta?1:0)+(v&&v.grupoc?1:0)+(v&&v.ksubgrupo?1:0)+(v&&v.cp?1:0)+(v&&v.cc?1:0);
-  const put=(ca,o)=>{ const k=_normTxt(ca); if(!k) return; const cand={kcuenta:o.kcuenta||"",grupoc:o.grupoc||"",ksubgrupo:o.ksubgrupo||"",cp:o.cp||"",cc:o.cc||o.cuentacontable||"",codc:o.codc||""}; const cur=idx[k]; if(!cur || score(cand)>score(cur)) idx[k]=cand; };
+  const put=(ca,o)=>{ const k=_normTxt(ca); if(!k) return; if(PJ[k]) return; // ya está en el plan: manda el plan
+    const cand={kcuenta:o.kcuenta||"",grupoc:o.grupoc||"",ksubgrupo:o.ksubgrupo||"",cp:o.cp||"",cc:o.cc||o.cuentacontable||"",codc:o.codc||"",plan:false}; const cur=idx[k]; if(!cur || score(cand)>score(cur)) idx[k]=cand; };
   (STATE.egresos||[]).forEach(e=>{ if(e.ca) put(e.ca,{kcuenta:e.kcuenta,grupoc:e.grupoc,ksubgrupo:e.ksubgrupo,cp:e.cp,cc:e.cc,codc:e.codc}); });
   const bg=STATE.bitgo||{cols:[],rows:[]};
   if(bg.rows && bg.rows.length){
@@ -3371,18 +3399,14 @@ function caJerarquiaIndex(){
     if(bCA) bg.rows.forEach(r=>{ const ca=r[bCA]; if(ca) put(ca,{kcuenta:bCu&&r[bCu],grupoc:bGr&&r[bGr],ksubgrupo:bSg&&r[bSg],cp:bCP&&r[bCP],cc:bCC&&r[bCC],codc:bCod&&r[bCod]}); });
   }
   (STATE.mercury||[]).forEach(r=>{ if(r.ca) put(r.ca,{kcuenta:r.kcuenta,grupoc:r.grupoc,ksubgrupo:r.ksubgrupo,cp:r.cp,cc:r.cc}); });
-  // PlanCuentas por anidamiento de Código (best-effort: sólo si el Código anida por prefijo)
-  try{
-    const P=STATE.plan||[];
-    const byCat={cuenta:[],grupo:[],subgrupo:[],cuentaprincipal:[],cuentaanalitica:[]};
-    P.forEach(r=>{ const c=_pnorm(r.categoria); if(byCat[c]!==undefined) byCat[c].push(r); });
-    const anc=(cod,arr)=>{ let best=null; arr.forEach(a=>{ const ac=String(a.codigo||""); if(!ac||ac.length>=cod.length) return; if(cod.indexOf(ac)===0){ if(!best||ac.length>String(best.codigo).length) best=a; } }); return best; };
-    byCat.cuentaanalitica.forEach(a=>{ const cod=String(a.codigo||""); const k=_normTxt(a.nombre); if(!cod||!k||idx[k]) return;
-      const cp=anc(cod,byCat.cuentaprincipal),sg=anc(cod,byCat.subgrupo),gr=anc(cod,byCat.grupo),cu=anc(cod,byCat.cuenta);
-      if(cp||sg||gr||cu) idx[k]={kcuenta:cu?cu.nombre:"",grupoc:gr?gr.nombre:"",ksubgrupo:sg?sg.nombre:"",cp:cp?cp.nombre:"",cc:"",codc:cod}; });
-  }catch(_){}
   STATE._cjSrc=sig; STATE._cjIdx=idx; return idx;
 }
+// Jerarquía de una Cuenta Analítica. Si el mismo nombre está en dos lugares del plan
+// (ej.: "Costos por Comisión Banco" en TRANSFERENCIAS y en CTA. AHORROS) se elige la que coincide con la Cuenta Principal de la fila.
+function caJer(ca, cpHint){ const k=_normTxt(ca); if(!k) return null;
+  const alts=planJerarquiaIndex()[k];
+  if(alts && alts.length>1 && cpHint){ const h=_normTxt(cpHint); const m=alts.find(a=>_normTxt(a.cp)===h); if(m) return m; }
+  return caJerarquiaIndex()[k]||null; }
 // Lista maestra de Cuentas Analíticas para el desplegable
 function caMasterList(){
   const set=new Set();
@@ -3401,8 +3425,9 @@ function resolveGeneric(fuente, huella, keyText, sheetCa){
   if(sheetCa && String(sheetCa).trim()) return {ca:String(sheetCa).trim(), src:"sheet"};
   return {ca:"", src:"none"};
 }
-function ancGeneric(res, fb){ fb=fb||{}; const j=caJerarquiaIndex()[_normTxt(res.ca)]||{};
-  return { ca:res.ca, src:res.src, kcuenta:j.kcuenta||fb.kcuenta||"", grupoc:j.grupoc||fb.grupoc||"", ksubgrupo:j.ksubgrupo||fb.ksubgrupo||"", cp:j.cp||fb.cp||"" }; }
+function ancGeneric(res, fb){ fb=fb||{}; const j=caJer(res.ca, fb.cp)||{};
+  if(j.plan) return { ca:res.ca, src:res.src, kcuenta:j.kcuenta, grupoc:j.grupoc, ksubgrupo:j.ksubgrupo, cp:j.cp, plan:true };
+  return { ca:res.ca, src:res.src, kcuenta:j.kcuenta||fb.kcuenta||"", grupoc:j.grupoc||fb.grupoc||"", ksubgrupo:j.ksubgrupo||fb.ksubgrupo||"", cp:j.cp||fb.cp||"", plan:false }; }
 // Celda interactiva genérica (fuente + huella)
 function caCellHTMLg(fuente, huella, res){
   const cls=res.src==="manual"?"ca-man":(res.src==="auto"?"ca-auto":(res.src==="sheet"?"ca-sheet":"ca-none"));
@@ -3440,7 +3465,8 @@ function resolveEgreso(e){
   return resolveGeneric("Egresos", e._hu, e.ben, e.ca);
 }
 // Jerarquía resuelta de un egreso (según su CA resuelta; cae al valor propio si no se conoce)
-function ancEgreso(e){ const res=resolveEgreso(e); const j=caJerarquiaIndex()[_normTxt(res.ca)]||{};
+function ancEgreso(e){ const res=resolveEgreso(e); const j=caJer(res.ca, e.cp)||{};
+  if(j.plan) return { ca:res.ca, src:res.src, kcuenta:j.kcuenta, grupoc:j.grupoc, ksubgrupo:j.ksubgrupo, cp:j.cp, plan:true };
   return { ca:res.ca, src:res.src, kcuenta:j.kcuenta||e.kcuenta||"", grupoc:j.grupoc||e.grupoc||"", ksubgrupo:j.ksubgrupo||e.ksubgrupo||"", cp:j.cp||e.cp||"" }; }
 // Celda interactiva de Cuenta Analítica (Egresos)
 function caCellHTML(e){ return caCellHTMLg("Egresos", e._hu, resolveEgreso(e)); }

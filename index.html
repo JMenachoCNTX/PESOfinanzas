@@ -1069,6 +1069,17 @@ body.fs-abierto{overflow:hidden}
 .rh-emp summary{cursor:pointer;font:600 14px var(--display);color:var(--muted)}
 .rh-prev iframe{display:block;width:100%;height:min(80vh,920px);border:1px solid var(--border);border-radius:10px;background:#fff}
 tr.rh-sel td{background:var(--brand-soft)}
+
+/* ===== V168: animación de "Actualizando datos" con los clásicos ===== */
+.refresh-overlay .ro-inner{gap:18px}
+.ro-foto{width:min(290px,68vw);aspect-ratio:4/5;border-radius:18px;box-shadow:0 24px 60px -28px rgba(5,31,32,.55);animation:ro-foto 1.6s ease-in-out infinite alternate}
+.ro-foto img{object-position:60% 30%}
+html.tema-oscuro .ro-claro, html:not(.tema-oscuro) .ro-oscuro{display:none}
+html.tema-oscuro .ro-foto{box-shadow:0 24px 60px -24px rgba(0,0,0,.8)}
+.refresh-overlay .ro-logo{width:min(230px,56vw)}
+.refresh-overlay .ro-txt{margin-top:-6px}
+@keyframes ro-foto{from{transform:translateY(0) scale(1)}to{transform:translateY(-6px) scale(1.012)}}
+@media(prefers-reduced-motion:reduce){.ro-foto{animation:none}}
 /* ===================== MODO OSCURO ===================== */
 html.tema-oscuro{color-scheme:dark;
   --fondo-marca:#051F20; --field:#163832; --error:#F97066; --aviso:#FDB022;
@@ -1098,7 +1109,7 @@ html.tema-oscuro .cmp-tbl tr.tr-total td,html.tema-oscuro .tr-total td,html.tema
 html.tema-oscuro tr.row-inactivo td{background:rgba(249,112,102,.08)}
 html.tema-oscuro .login-left::before{background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cg transform='translate(36 30) scale(.0824)' fill='%230B2B26'%3E%3Cpath d='M0 427 L0 728 L136 728 L136 634 Z M410 0 L410 85 L546 292 L546 0 Z M0 0 L148 0 L410 458.5 L410 341 L546 548 L546 728 L401.71 728 L136 263 L136 379 L0 172 Z'/%3E%3C/g%3E%3C/svg%3E")}
 html.tema-oscuro .login-card.glass{background:var(--surface);border-color:var(--border);box-shadow:0 24px 60px -30px rgba(0,0,0,.7)}
-html.tema-oscuro .refresh-overlay{background-color:rgba(5,31,32,.96)!important;background-image:none!important}
+html.tema-oscuro .refresh-overlay{background-color:rgba(5,31,32,.985)!important;background-image:none!important}
 html.tema-oscuro .ini-para img,html.tema-oscuro .inicio-peso-logo,html.tema-oscuro .client-badge .cb-logo,html.tema-oscuro .emp-logo{filter:invert(1) hue-rotate(180deg)}
 html.tema-oscuro .gcal-wrap{background:#fff}
 html.tema-oscuro .tip{box-shadow:0 12px 30px -10px rgba(0,0,0,.7)}
@@ -1307,6 +1318,8 @@ html.mudado body>*{display:none!important}
 
 <div class="refresh-overlay" id="refreshOverlay">
   <div class="ro-inner">
+    <figure class="nm-foto ro-foto ro-claro"><img src="marca/clasicos/euclides-laptop.jpg" alt="Euclides trabajando en la laptop"><span class="nm-chip"><b>Euclides</b>Matemático griego · c. 300 a. C.</span></figure>
+    <figure class="nm-foto ro-foto ro-oscuro"><img src="marca/clasicos/arquimedes-pensando.jpg" alt="Arquímedes pensando frente a la pantalla"><span class="nm-chip"><b>Arquímedes</b>Matemático griego · c. 287 a. C.</span></figure>
     <img class="ro-logo" id="roLogo" alt="NUMMEROS">
     <div class="ro-txt">Actualizando datos<span class="ll-dots"></span></div>
   </div>
@@ -1381,7 +1394,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V167";
+const APP_VERSION = "V168";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";

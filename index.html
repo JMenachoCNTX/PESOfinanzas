@@ -1467,7 +1467,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V178";
+const APP_VERSION = "V179";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -7081,6 +7081,93 @@ const PLAN_TIPOS=["Activo","Pasivo","Patrimonio","Ingreso","Egreso"];
 const PLAN_CATS=["Cuenta","Grupo","Sub Grupo","Cuenta Principal","Cuenta Analítica"];
 const PLAN_ORIG=["SIN","PESO"];
 function renderPlan(){
+  const v=STATE.planVista||"plan";
+  if(v==="asig") renderAsignacionReglas(); else renderPlanCuentas();
+  const app=$("#app"); if(!app) return;
+  const n=(STATE.asignacion||[]).length;
+  app.insertAdjacentHTML("afterbegin",`<div class="seg" id="planVista" style="margin-bottom:16px"><button data-v="plan" class="${v==="plan"?"on":""}">Plan de Cuentas</button><button data-v="asig" class="${v==="asig"?"on":""}">Asignación automática (${n})</button></div>`);
+  document.querySelectorAll("#planVista button").forEach(b=>b.addEventListener("click",()=>{ STATE.planVista=b.dataset.v; render(); }));
+  if(v==="plan") planFormMontar();
+}
+/* V179: agregar o editar una cuenta del Plan (si el Código ya existe, se actualiza) */
+function planFormMontar(){
+  const seg=$("#planVista"); if(!seg) return;
+  const F=STATE.planForm||{codigo:"",tipo:"Egreso",categoria:"Cuenta Analítica",nombre:"",origen:"PESO",estado:"Activa"};
+  const tipos=[...new Set(["Ingreso","Egreso"].concat((STATE.plan||[]).map(r=>r.tipo).filter(Boolean)))];
+  const opt=(arr,v)=>arr.map(x=>`<option${x===v?" selected":""}>${esc(x)}</option>`).join("");
+  seg.insertAdjacentHTML("afterend",`<div class="card"><div class="head"><h3>Agregar o editar una cuenta</h3><span class="mini">si el código ya existe, se actualiza · ${STATE.planFB?"se guarda en el sistema":"se guarda en Google Sheets"}</span></div>
+    <div class="us-form" style="grid-template-columns:.8fr .7fr 1fr 1.6fr .6fr .7fr auto">
+      <div><label>Código</label><input id="pfCod" value="${esc(F.codigo)}" placeholder="515008009" autocomplete="off"></div>
+      <div><label>Tipo</label><div class="select-wrap"><select id="pfTipo">${opt(tipos,F.tipo)}</select></div></div>
+      <div><label>Categoría</label><div class="select-wrap"><select id="pfCat">${opt(PLAN_CATS,F.categoria)}</select></div></div>
+      <div><label>Nombre</label><input id="pfNom" value="${esc(F.nombre)}" autocomplete="off"></div>
+      <div><label>Origen</label><input id="pfOri" value="${esc(F.origen)}" autocomplete="off"></div>
+      <div><label>Estado</label><div class="select-wrap"><select id="pfEst">${opt(["Activa","Inactiva"],F.estado)}</select></div></div>
+      <div class="us-btn"><button class="btn primary" id="pfSave">Guardar</button></div>
+    </div><div class="msg" id="pcMsg"></div></div>`);
+  const cod=$("#pfCod");
+  cod.addEventListener("change",()=>{ const ex=(STATE.plan||[]).find(r=>String(r.codigo)===cod.value.trim()); if(ex){ $("#pfTipo").value=ex.tipo; $("#pfCat").value=ex.categoria; $("#pfNom").value=ex.nombre; $("#pfOri").value=ex.origen; $("#pfEst").value=ex.estado||"Activa"; } });
+  $("#pfSave").addEventListener("click",()=>{ const m=$("#pcMsg");
+    const o={codigo:cod.value.trim(),tipo:$("#pfTipo").value,categoria:$("#pfCat").value,nombre:$("#pfNom").value.trim(),origen:$("#pfOri").value.trim()||"PESO",estado:$("#pfEst").value};
+    if(!o.codigo||!o.nombre){ m.className="msg err"; m.textContent="Escribe el código y el nombre."; return; }
+    const i=(STATE.plan||[]).findIndex(r=>String(r.codigo)===o.codigo);
+    if(i>=0) STATE.plan[i]=o; else STATE.plan.push(o);
+    STATE.plan=STATE.plan.slice(); STATE.planForm=null;
+    const p=guardarPlanCuentas(); if(p&&p.then) p.then(()=>{ render(); const mm=$("#pcMsg"); if(mm){ mm.className="msg ok"; mm.textContent=(i>=0?"Cuenta actualizada ✓ ":"Cuenta agregada ✓ ")+o.codigo+" "+o.nombre; } }); });
+}
+/* V179: reglas de Asignación automática (texto → Cuenta Analítica), editables desde el sistema y guardadas en Firebase */
+function asigGuardarReglas(msg){
+  STATE._abSrc=null; STATE._abIdx=null; STATE._cjSrc=null;
+  if(!nmFbActivo()){ if(msg){ msg.className="msg err"; msg.textContent="Para guardar reglas debes entrar con tu correo y clave (Firebase)."; } return Promise.resolve(); }
+  return NMFB.cfgSet("asignacion",{reglas:STATE.asignacion}).then(()=>{ STATE.asigFB=true; if(msg){ msg.className="msg ok"; msg.textContent="Guardado ✓"; } })
+    .catch(e=>{ if(msg){ msg.className="msg err"; msg.textContent=(e&&e.message)||"No se pudo guardar."; } });
+}
+function asigConteos(){
+  const c={}; const put=t=>{ const k=_normTxt(t); if(k) c[k]=(c[k]||0)+1; };
+  (STATE.egresos||[]).forEach(e=>put(e.ben));
+  (STATE.mercury||[]).forEach(r=>put(r.desc));
+  const bg=STATE.bitgo||{cols:[],rows:[]}; const bc=bg.cols||[];
+  const cc=bc.find(k=>/^(comments|comentarios)$/i.test(String(k).trim()))||bc.find(k=>/comment/i.test(k));
+  if(cc) (bg.rows||[]).forEach(r=>put(r[cc]));
+  return c;
+}
+function renderAsignacionReglas(){
+  const app=$("#app"); if(!app) return;
+  const R=STATE.asignacion||[]; const q=_normTxt(STATE.asigQ||"");
+  const PJ=planJerarquiaIndex(); const cnt=asigConteos();
+  const lista=R.map((r,i)=>Object.assign({i},r)).filter(r=>!q||_normTxt(r.texto+" "+r.ca).indexOf(q)>=0)
+    .sort((a,b)=>String(a.texto).localeCompare(String(b.texto)));
+  const sinPlan=R.filter(r=>r.ca && !PJ[_normTxt(r.ca)]).length;
+  const cas=caMasterList();
+  const filas=lista.slice(0,600).map(r=>{ const enPlan=!!PJ[_normTxt(r.ca)]; const n=cnt[_normTxt(r.texto)]||0;
+    return `<tr><td style="text-align:left">${esc(r.texto)}</td><td style="text-align:left">${esc(r.ca||"—")} ${r.ca&&!enPlan?'<span class="st inactivo" title="Esta Cuenta Analítica no está en el Plan de Cuentas">no está en el Plan</span>':""}</td>
+      <td>${n?n:'<span class="zero">0</span>'}</td><td><span class="ta-acts"><button class="btn ghost as-ed" data-i="${r.i}">✎</button><button class="btn ghost as-del" data-i="${r.i}">✕</button></span></td></tr>`; }).join("");
+  const ed=STATE.asigEd!=null?R[STATE.asigEd]:null;
+  app.innerHTML=`
+    <div class="card"><div class="head"><h3>${ed?"Editar regla":"Nueva regla"}</h3>${ed?'<button class="btn ghost" id="asCancel">Cancelar</button>':""}</div>
+      <p class="section-intro">Cuando el <b>Beneficiario</b> (Egresos), la <b>Description</b> (Mercury) o el <b>COMMENTS</b> (BitGo) es igual al texto, el sistema le pone esta <b>Cuenta Analítica</b>. El resto de niveles sale solo del Plan de Cuentas.</p>
+      <div class="us-form" style="grid-template-columns:1.3fr 1.3fr auto">
+        <div><label for="asTxt">Texto (beneficiario / descripción)</label><input id="asTxt" value="${esc(ed?ed.texto:"")}" placeholder="Ej.: BRIDGE BUILDING INC" autocomplete="off"></div>
+        <div><label for="asCa">Cuenta Analítica</label><input id="asCa" list="asCas" value="${esc(ed?ed.ca:"")}" placeholder="Elige o escribe" autocomplete="off"><datalist id="asCas">${cas.map(c=>`<option value="${esc(c)}"></option>`).join("")}</datalist></div>
+        <div class="us-btn"><button class="btn primary" id="asSave">${ed?"Guardar":"Agregar regla"}</button></div>
+      </div><div class="msg" id="asMsg"></div></div>
+    <div class="card"><div class="head"><h3>Reglas de asignación</h3><span class="mini">${R.length} reglas${sinPlan?` · <b style="color:var(--error)">${sinPlan} con cuenta que no está en el Plan</b>`:""} · ${STATE.asigFB?"guardadas en el sistema":"leídas de Google Sheets"}</span></div>
+      <div class="us-cl" style="max-width:420px;margin-bottom:12px"><input id="asQ" value="${esc(STATE.asigQ||"")}" placeholder="Buscar texto o cuenta…"></div>
+      <div class="tbl-scroll"><table><thead><tr><th style="text-align:left">Texto</th><th style="text-align:left">Cuenta Analítica</th><th title="Movimientos que coinciden">Movs.</th><th></th></tr></thead><tbody>${filas||`<tr><td colspan="4">${emptyState("No hay reglas.")}</td></tr>`}</tbody></table></div></div>`;
+  const msg=$("#asMsg");
+  $("#asQ").addEventListener("input",ev=>{ STATE.asigQ=ev.target.value; clearTimeout(STATE._asT); STATE._asT=setTimeout(()=>{ render(); const el=$("#asQ"); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length);} },250); });
+  const cc=$("#asCancel"); if(cc) cc.addEventListener("click",()=>{ STATE.asigEd=null; render(); });
+  $("#asSave").addEventListener("click",()=>{ const t=$("#asTxt").value.trim(), c=$("#asCa").value.trim();
+    if(!t||!c){ msg.className="msg err"; msg.textContent="Escribe el texto y la cuenta analítica."; return; }
+    const dup=R.findIndex((r,i)=>_normTxt(r.texto)===_normTxt(t) && i!==STATE.asigEd);
+    if(dup>=0){ msg.className="msg err"; msg.textContent="Ya existe una regla para ese texto (cuenta: "+R[dup].ca+"). Edítala en la lista."; return; }
+    const arr=R.slice(); if(ed) arr[STATE.asigEd]={texto:t,ca:c}; else arr.push({texto:t,ca:c});
+    STATE.asignacion=arr; STATE.asigEd=null; asigGuardarReglas(null).then(()=>render()); });
+  document.querySelectorAll(".as-ed").forEach(b=>b.addEventListener("click",()=>{ STATE.asigEd=+b.dataset.i; render(); try{ window.scrollTo({top:0,behavior:"smooth"}); }catch(_){} }));
+  document.querySelectorAll(".as-del").forEach(b=>b.addEventListener("click",()=>{ const r=R[+b.dataset.i]; if(!r||!confirm("¿Borrar la regla «"+r.texto+"» → "+r.ca+"?")) return;
+    STATE.asignacion=R.filter((_,i)=>i!==+b.dataset.i); STATE.asigEd=null; asigGuardarReglas(null).then(()=>render()); }));
+}
+function renderPlanCuentas(){
   const P=STATE.plan;
   const q=STATE.planSearch.trim().toLowerCase();
   let view=P.filter(r=>{
@@ -7145,10 +7232,14 @@ function renderPlan(){
 function guardarPlanCuentas(){
   const m=$("#pcMsg");
   let pin=""; try{pin=localStorage.getItem("peso_pin")||"";}catch(_){}
+  if(nmFbActivo()){ const btn=$("#pcSave")||{}; const mm=m||{}; btn.textContent="Guardando…"; btn.disabled=true;
+    STATE._pjSrc=null; STATE._cjSrc=null;
+    return NMFB.cfgSet("planCuentas",{filas:STATE.plan}).then(()=>{ btn.textContent="Guardar cambios"; btn.disabled=false; STATE.planFB=true; mm.className="msg ok"; mm.textContent="Plan guardado en el sistema ✓  ("+STATE.plan.length+" cuentas)"; })
+      .catch(e=>{ btn.textContent="Guardar cambios"; btn.disabled=false; mm.className="msg err"; mm.textContent=(e&&e.message)||"No se pudo guardar."; }); }
   if(!pin){ showLogin(); return; }
   if(!(window.google&&google.script&&google.script.run)){ m.className="msg err"; m.textContent="Debe abrirse desde el enlace de Apps Script para guardar."; return; }
   const filas=STATE.plan.map(r=>[r.codigo,r.tipo,r.categoria,r.nombre,r.origen,r.estado]);
-  const btn=$("#pcSave"); btn.textContent="Guardando…"; btn.disabled=true; m.className="msg"; m.textContent="";
+  const btn=$("#pcSave")||{}; btn.textContent="Guardando…"; btn.disabled=true; m.className="msg"; m.textContent="";
   google.script.run
     .withSuccessHandler(function(res){ btn.textContent="Guardar cambios"; btn.disabled=false;
       if(!res||res.error){ m.className="msg err"; m.textContent=(res&&res.error)||"No se pudo guardar."; return; }
@@ -7805,7 +7896,12 @@ function _lsJSON(k,def){ try{ const v=JSON.parse(localStorage.getItem(k)||"null"
 async function nmFbCargarAjustes(){
   if(!nmFbActivo()) return;
   const adm=NMFB.esAdmin();
-  const [a,rx,re,gc]=await Promise.all(["archivos","rhExtra","rhEmpresa","gcal"].map(n=>NMFB.cfgGet(n).catch(()=>null)));
+  const [a,rx,re,gc,pc,asg]=await Promise.all(["archivos","rhExtra","rhEmpresa","gcal","planCuentas","asignacion"].map(n=>NMFB.cfgGet(n).catch(()=>null)));
+  // V179: Plan de Cuentas y Asignación automática viven en Firebase (la primera vez se copian desde Sheets)
+  if(pc && Array.isArray(pc.filas) && pc.filas.length){ STATE.plan=pc.filas.map(r=>({codigo:String(r.codigo||""),tipo:r.tipo||"",categoria:r.categoria||"",nombre:r.nombre||"",origen:r.origen||"",estado:r.estado||"Activa"})); STATE.planFB=true; }
+  else if(adm && (STATE.plan||[]).length){ try{ await NMFB.cfgSet("planCuentas",{filas:STATE.plan}); STATE.planFB=true; }catch(_){} }
+  if(asg && Array.isArray(asg.reglas)){ STATE.asignacion=asg.reglas.map(r=>({texto:String(r.texto||""),ca:String(r.ca||"")})); STATE.asigFB=true; }
+  else if(adm && (STATE.asignacion||[]).length){ try{ await NMFB.cfgSet("asignacion",{reglas:STATE.asignacion}); STATE.asigFB=true; }catch(_){} }
   // Archivos
   if(a && Array.isArray(a.lista)){ NM_AJ.archivos=a.lista; STATE.archivos=a.lista.map(_archNorm).filter(x=>x.nombre&&x.enlace); }
   else { const base=(Array.isArray(STATE.archivos)&&STATE.archivos.length)?STATE.archivos:_archLocal().map(_archNorm);

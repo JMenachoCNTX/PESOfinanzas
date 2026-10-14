@@ -1,41 +1,60 @@
 rules_version = '2';
-// Reglas de seguridad de NUMMEROS · PE$O (Firestore)
-// - Cada usuario entra con su correo + clave de acceso (creados en la pestaña Usuarios).
-// - La "clave" es el ID del documento en /claves: quien no la conoce no puede leerla (no se pueden listar).
-// - Solo los administradores pueden ver, crear o cambiar usuarios y claves.
+// Reglas de seguridad de NUMMEROS · PE$O (Firestore) — V172
+// - Cada usuario es un documento /usuarios/{correo} con su clave de acceso como dato.
+// - La clave puede ser la que el administrador quiera (incluso la misma para varios usuarios).
+// - Nadie puede leer una clave sin haber entrado: para entrar se crea /sesiones/{uid} con correo + clave,
+//   y las reglas solo lo permiten si la clave coincide con la del usuario y está activo.
+// - Solo los administradores pueden ver, crear o cambiar usuarios. Cada usuario puede cambiar SOLO su propia clave.
 service cloud.firestore {
   match /databases/{db}/documents {
 
     function sesionRef() { return /databases/$(db)/documents/sesiones/$(request.auth.uid); }
+    function usuarioRef(e) { return /databases/$(db)/documents/usuarios/$(e); }
     function claveRef(c) { return /databases/$(db)/documents/claves/$(c); }
     function tieneSesion() { return request.auth != null && exists(sesionRef()); }
-    function claveDeSesion() { return get(sesionRef()).data.clave; }
+    function miCorreo() { return get(sesionRef()).data.email; }
     function claveOk() {
       return tieneSesion()
-        && exists(claveRef(claveDeSesion()))
-        && get(claveRef(claveDeSesion())).data.activo == true
-        && get(claveRef(claveDeSesion())).data.email == get(sesionRef()).data.email;
+        && exists(usuarioRef(miCorreo()))
+        && get(usuarioRef(miCorreo())).data.activo == true
+        && get(usuarioRef(miCorreo())).data.clave == get(sesionRef()).data.clave;
     }
-    function esAdmin() { return claveOk() && get(claveRef(claveDeSesion())).data.rol == "admin"; }
+    function esAdmin() { return claveOk() && get(usuarioRef(miCorreo())).data.rol == "admin"; }
     function inicialHecha() { return exists(/databases/$(db)/documents/config/inicial); }
 
-    // Usuarios y claves de acceso
-    match /claves/{clave} {
-      allow get: if request.auth != null;
-      allow list, update, delete: if esAdmin();
-      // el primer administrador se crea una sola vez, junto con config/inicial
+    // Usuarios (correo = ID del documento)
+    match /usuarios/{email} {
+      allow get: if esAdmin() || (claveOk() && miCorreo() == email);
+      allow list, delete: if esAdmin();
+      allow update: if esAdmin()
+        || (claveOk() && miCorreo() == email
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clave', 'actualizado', 'por']));
       allow create: if esAdmin()
+        // el primer administrador se crea una sola vez, junto con config/inicial
         || (request.auth != null && !inicialHecha()
             && existsAfter(/databases/$(db)/documents/config/inicial)
-            && request.resource.data.rol == "admin");
+            && request.resource.data.rol == "admin")
+        // paso automático de una cuenta antigua (/claves) al nuevo formato
+        || (request.auth != null
+            && exists(claveRef(request.resource.data.clave))
+            && get(claveRef(request.resource.data.clave)).data.email == email
+            && get(claveRef(request.resource.data.clave)).data.activo == true
+            && get(claveRef(request.resource.data.clave)).data.rol == request.resource.data.rol
+            && request.resource.data.activo == true);
+    }
+
+    // Formato antiguo (antes de V172): solo para pasar las cuentas al nuevo formato
+    match /claves/{clave} {
+      allow get: if request.auth != null;
+      allow list, delete: if esAdmin();
     }
 
     // Sesión de cada navegador (usuario anónimo de Firebase + correo + clave)
     match /sesiones/{uid} {
       allow create, update: if request.auth != null && request.auth.uid == uid
-        && exists(claveRef(request.resource.data.clave))
-        && get(claveRef(request.resource.data.clave)).data.activo == true
-        && get(claveRef(request.resource.data.clave)).data.email == request.resource.data.email;
+        && existsAfter(usuarioRef(request.resource.data.email))
+        && getAfter(usuarioRef(request.resource.data.email)).data.activo == true
+        && getAfter(usuarioRef(request.resource.data.email)).data.clave == request.resource.data.clave;
       allow get, delete: if request.auth != null && request.auth.uid == uid;
     }
 

@@ -1207,6 +1207,9 @@ html.mudado body>*{display:none!important}
       <button class="btn btn-icon icon-only" id="btnConnect" title="Actualizar datos" aria-label="Actualizar">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
       </button>
+      <button class="btn btn-icon icon-only" id="btnMiClave" title="Cambiar mi clave" aria-label="Cambiar mi clave" style="display:none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M16 7l3 3M14 9l2 2"/></svg>
+      </button>
       <button class="btn btn-icon icon-only" id="btnLogout" title="Cerrar sesión" aria-label="Salir">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M4.5 12H15"/></svg>
       </button>
@@ -1249,7 +1252,7 @@ html.mudado body>*{display:none!important}
         </div>
         <div id="fbFields" hidden>
           <div class="field"><label for="fbEmail">Correo</label><input id="fbEmail" type="email" placeholder="tu correo" autocomplete="username" style="text-align:left;letter-spacing:0"></div>
-          <div class="field"><label for="fbClave">Clave de acceso</label><input id="fbClave" type="password" placeholder="PESO-XXXX-XXXX" autocomplete="current-password"></div>
+          <div class="field"><label for="fbClave">Clave de acceso</label><input id="fbClave" type="password" placeholder="tu clave" autocomplete="current-password"></div>
         </div>
         <div class="login-err" id="loginErr"></div>
         <button class="btn primary" id="loginBtn" style="width:100%;justify-content:center;padding:12px">Entrar</button>
@@ -1422,7 +1425,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V171";
+const APP_VERSION = "V172";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -7579,40 +7582,79 @@ const NMFB={
     if(!this.auth.currentUser) await this.auth.signInAnonymously(); return this.auth.currentUser; },
   async inicialHecha(){ await this.anon(); const d=await this.db.doc("config/inicial").get(); return d.exists; },
   _norm(e){ return String(e||"").trim().toLowerCase(); },
+  /* V172: cada usuario es usuarios/{correo} con su clave como dato (la clave puede ser cualquiera y repetirse) */
+  _claveOk(c){ return String(c||"").length>=4 && String(c||"").length<=100; },
+  async _entrar(u,email,clave){
+    const ses={email:email,clave:clave,desde:new Date().toISOString(),navegador:navigator.userAgent.slice(0,120)};
+    try{ await this.db.doc("sesiones/"+u.uid).set(ses); return; }
+    catch(e){ if(!/permission/i.test(((e&&e.code)||"")+" "+((e&&e.message)||""))) throw e; }
+    // cuentas creadas antes de V172 (claves/{clave}): se pasan solas al nuevo formato
+    let c=null; try{ if(/^[^\/]{1,1400}$/.test(clave)) c=await this.db.doc("claves/"+clave).get(); }catch(_){ c=null; }
+    if(c && c.exists && this._norm(c.data().email)===email && c.data().activo===true){
+      const d=c.data(), b=this.db.batch();
+      b.set(this.db.doc("usuarios/"+email),{email:email,clave:clave,nombre:d.nombre||email,rol:d.rol==="admin"?"admin":"usuario",activo:true,creado:d.creado||new Date().toISOString(),por:d.por||email});
+      b.set(this.db.doc("sesiones/"+u.uid),ses); await b.commit(); return; }
+    throw new Error("Correo o clave incorrectos (o tu acceso está desactivado).");
+  },
+  async _cargarSesion(email,clave){
+    const d=await this.db.doc("usuarios/"+email).get(); const x=d.data()||{};
+    const ap=await this.db.doc("config/apps").get();
+    this.sesion={email:email,clave:clave,rol:x.rol||"usuario",nombre:x.nombre||email};
+    try{ localStorage.setItem("nm_fb_email",email); }catch(_){}
+    if(this.esAdmin()) this._migrarClaves().catch(()=>{});
+    return (ap.exists&&ap.data().pin)||"";
+  },
   async login(email,clave){
     email=this._norm(email); clave=String(clave||"").trim();
     if(!email||!clave) throw new Error("Escribe tu correo y tu clave de acceso.");
-    if(!/^[A-Za-z0-9._-]{6,60}$/.test(clave)) throw new Error("Correo o clave incorrectos.");
     const u=await this.anon();
-    const c=await this.db.doc("claves/"+clave).get();
-    if(!c.exists || this._norm(c.data().email)!==email) throw new Error("Correo o clave incorrectos.");
-    if(c.data().activo!==true) throw new Error("Tu acceso está desactivado. Habla con el administrador.");
-    await this.db.doc("sesiones/"+u.uid).set({email:email,clave:clave,desde:new Date().toISOString(),navegador:navigator.userAgent.slice(0,120)});
-    const ap=await this.db.doc("config/apps").get();
-    this.sesion={email:email,clave:clave,rol:c.data().rol||"usuario",nombre:c.data().nombre||email};
-    try{ localStorage.setItem("nm_fb_email",email); }catch(_){}
-    return (ap.exists&&ap.data().pin)||"";
+    await this._entrar(u,email,clave);
+    return this._cargarSesion(email,clave);
   },
   async restaurar(){ const u=await this.anon(); const s=await this.db.doc("sesiones/"+u.uid).get(); if(!s.exists) return null;
-    try{ return await this.login(s.data().email,s.data().clave); }catch(e){ try{ await this.db.doc("sesiones/"+u.uid).delete(); }catch(_){} return null; } },
+    const e=this._norm(s.data().email), c=String(s.data().clave||"");
+    try{ return await this._cargarSesion(e,c); }catch(_){ try{ await this.db.doc("sesiones/"+u.uid).delete(); }catch(__){} this.sesion=null; return null; } },
   async logout(){ try{ const u=this.auth&&this.auth.currentUser; if(u) await this.db.doc("sesiones/"+u.uid).delete(); }catch(_){} this.sesion=null; },
-  async setupInicial(email,nombre,pin){
-    const u=await this.anon(); const clave=nmClaveNueva(); email=this._norm(email);
+  async setupInicial(email,nombre,pin,clave){
+    const u=await this.anon(); email=this._norm(email); clave=String(clave||"").trim()||nmClaveNueva();
     const b=this.db.batch(); const ahora=new Date().toISOString();
     b.set(this.db.doc("config/inicial"),{email:email,fecha:ahora});
-    b.set(this.db.doc("claves/"+clave),{email:email,nombre:nombre||email,rol:"admin",activo:true,creado:ahora,por:email});
+    b.set(this.db.doc("usuarios/"+email),{email:email,clave:clave,nombre:nombre||email,rol:"admin",activo:true,creado:ahora,por:email});
     b.set(this.db.doc("config/apps"),{pin:pin,actualizado:ahora});
     await b.commit(); await this.login(email,clave); return clave; },
   esAdmin(){ return !!(this.sesion&&this.sesion.rol==="admin"); },
   // ---- usuarios ----
-  async usuarios(){ const q=await this.db.collection("claves").get(); return q.docs.map(d=>Object.assign({clave:d.id},d.data())).sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre))); },
-  async usuarioGuardar(o,claveAnterior){ const ahora=new Date().toISOString();
-    const data={email:this._norm(o.email),nombre:String(o.nombre||"").trim()||this._norm(o.email),rol:o.rol==="admin"?"admin":"usuario",activo:o.activo!==false,actualizado:ahora,por:this.sesion.email};
-    if(claveAnterior && claveAnterior!==o.clave){ const b=this.db.batch(); const prev=await this.db.doc("claves/"+claveAnterior).get();
-      b.set(this.db.doc("claves/"+o.clave),Object.assign({creado:(prev.exists&&prev.data().creado)||ahora},data)); b.delete(this.db.doc("claves/"+claveAnterior)); await b.commit(); }
-    else { if(!claveAnterior){ data.creado=ahora; const ex=await this.db.doc("claves/"+o.clave).get(); if(ex.exists) throw new Error("Esa clave ya está en uso. Genera otra."); }
-      await this.db.doc("claves/"+o.clave).set(data,{merge:true}); } },
-  async usuarioBorrar(clave){ await this.db.doc("claves/"+clave).delete(); },
+  async _migrarClaves(){ const q=await this.db.collection("claves").get(); if(!q.docs.length) return 0;
+    const us=await this.db.collection("usuarios").get(); const ya=new Set(us.docs.map(d=>d.id));
+    const b=this.db.batch();
+    q.docs.forEach(d=>{ const x=d.data(), e=this._norm(x.email); if(e && !ya.has(e)){ ya.add(e);
+        b.set(this.db.doc("usuarios/"+e),{email:e,clave:d.id,nombre:x.nombre||e,rol:x.rol==="admin"?"admin":"usuario",activo:x.activo!==false,creado:x.creado||new Date().toISOString(),por:x.por||this.sesion.email}); }
+      b.delete(this.db.doc("claves/"+d.id)); });
+    await b.commit(); return q.docs.length; },
+  async usuarios(){ try{ await this._migrarClaves(); }catch(_){}
+    const q=await this.db.collection("usuarios").get(); return q.docs.map(d=>Object.assign({},d.data(),{email:d.id})).sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre))); },
+  async usuarioGuardar(o,emailAnterior){ const ahora=new Date().toISOString(); const em=this._norm(o.email);
+    const data={email:em,clave:String(o.clave||"").trim(),nombre:String(o.nombre||"").trim()||em,rol:o.rol==="admin"?"admin":"usuario",activo:o.activo!==false,actualizado:ahora,por:this.sesion.email};
+    const yo=this.sesion.email, u=this.auth.currentUser;
+    const b=this.db.batch();
+    if(emailAnterior && emailAnterior!==em){ const prev=await this.db.doc("usuarios/"+emailAnterior).get();
+      const ex=await this.db.doc("usuarios/"+em).get(); if(ex.exists) throw new Error("Ese correo ya tiene acceso.");
+      data.creado=(prev.exists&&prev.data().creado)||ahora; b.set(this.db.doc("usuarios/"+em),data); b.delete(this.db.doc("usuarios/"+emailAnterior)); }
+    else { if(!emailAnterior){ const ex=await this.db.doc("usuarios/"+em).get(); if(ex.exists) throw new Error("Ese correo ya tiene acceso. Edítalo en la lista."); data.creado=ahora; }
+      b.set(this.db.doc("usuarios/"+em),data,{merge:true}); }
+    // si me edito a mí mismo, actualizo mi sesión en el mismo paso para no quedar fuera
+    if((emailAnterior||em)===yo && u){ b.set(this.db.doc("sesiones/"+u.uid),{email:em,clave:data.clave,desde:new Date().toISOString(),navegador:navigator.userAgent.slice(0,120)}); }
+    await b.commit();
+    if((emailAnterior||em)===yo){ this.sesion.email=em; this.sesion.clave=data.clave; this.sesion.nombre=data.nombre; try{ localStorage.setItem("nm_fb_email",em); }catch(_){} } },
+  async usuarioBorrar(email){ await this.db.doc("usuarios/"+email).delete(); },
+  async cambiarMiClave(actual,nueva){ actual=String(actual||"").trim(); nueva=String(nueva||"").trim();
+    if(!this.sesion) throw new Error("Primero inicia sesión.");
+    if(actual!==this.sesion.clave) throw new Error("Tu clave actual no es correcta.");
+    if(!this._claveOk(nueva)) throw new Error("La nueva clave debe tener al menos 4 caracteres.");
+    const u=this.auth.currentUser, ahora=new Date().toISOString(), b=this.db.batch();
+    b.set(this.db.doc("usuarios/"+this.sesion.email),{clave:nueva,actualizado:ahora,por:this.sesion.email},{merge:true});
+    b.set(this.db.doc("sesiones/"+u.uid),{email:this.sesion.email,clave:nueva,desde:ahora,navegador:navigator.userAgent.slice(0,120)});
+    await b.commit(); this.sesion.clave=nueva; },
   async appsPin(){ const d=await this.db.doc("config/apps").get(); return d.exists?(d.data().pin||""):""; },
   async appsPinSet(pin){ await this.db.doc("config/apps").set({pin:pin,actualizado:new Date().toISOString()},{merge:true}); },
   // ---- datos ----
@@ -7685,17 +7727,19 @@ function nmSetupInicialUI(){
     <div class="field"><label>Tu nombre</label><input id="siNom" autocomplete="name"></div>
     <div class="field"><label>Tu correo</label><input id="siEmail" type="email" autocomplete="email"></div>
     <div class="field"><label>Clave del sistema que usabas hasta ahora</label><input id="siPin" type="password" autocomplete="off"></div>
+    <div class="field"><label>Tu nueva clave de acceso (la que tú quieras, mínimo 4 caracteres)</label><input id="siClave" autocomplete="off" placeholder="Ej.: peso2026"></div>
     <div class="msg" id="siMsg"></div>
     <div class="modal-actions"><button class="btn" id="siCancel">Cancelar</button><button class="btn primary" id="siOk">Crear administrador</button></div></div>`;
   document.body.appendChild(ov);
   const m=ov.querySelector("#siMsg");
   ov.querySelector("#siCancel").onclick=()=>ov.remove();
-  ov.querySelector("#siOk").onclick=()=>{ const nom=ov.querySelector("#siNom").value.trim(), em=ov.querySelector("#siEmail").value.trim(), pin=ov.querySelector("#siPin").value.trim();
+  ov.querySelector("#siOk").onclick=()=>{ const nom=ov.querySelector("#siNom").value.trim(), em=ov.querySelector("#siEmail").value.trim(), pin=ov.querySelector("#siPin").value.trim(), cla=ov.querySelector("#siClave").value.trim();
+    if(cla && !NMFB._claveOk(cla)){ m.className="msg err"; m.textContent="Tu nueva clave debe tener al menos 4 caracteres."; return; }
     if(!em||!pin){ m.className="msg err"; m.textContent="Escribe tu correo y la clave del sistema."; return; }
     const b=ov.querySelector("#siOk"); b.disabled=true; b.textContent="Verificando…"; m.className="msg"; m.textContent="";
     google.script.run.withSuccessHandler(async function(res){
       if(!res||res.error){ b.disabled=false; b.textContent="Crear administrador"; m.className="msg err"; m.textContent="La clave del sistema no es correcta."; return; }
-      try{ const clave=await NMFB.setupInicial(em,nom,pin);
+      try{ const clave=await NMFB.setupInicial(em,nom,pin,cla);
         ov.querySelector(".modal").innerHTML=`<h2>¡Listo!</h2><p class="lead">Tu cuenta de administrador está creada. Esta es <b>tu clave de acceso</b> (también podrás verla en la pestaña Usuarios):</p>
           <div class="nm-clave-big">${esc(clave)}</div><div class="modal-actions"><button class="btn" id="siCopy">Copiar</button><button class="btn primary" id="siGo">Entrar al sistema</button></div>`;
         ov.querySelector("#siCopy").onclick=()=>{ try{ navigator.clipboard.writeText(clave); }catch(_){} };
@@ -7704,7 +7748,30 @@ function nmSetupInicialUI(){
     }).withFailureHandler(function(){ b.disabled=false; b.textContent="Crear administrador"; m.className="msg err"; m.textContent="Error de conexión con el servidor."; }).getData(pin);
   };
 }
-function nmMostrarUsuariosNav(){ const b=document.querySelector('#sidenav button[data-s="usuarios"]'); if(b) b.style.display=NMFB.esAdmin()?"":"none"; }
+function nmMostrarUsuariosNav(){ const b=document.querySelector('#sidenav button[data-s="usuarios"]'); if(b) b.style.display=NMFB.esAdmin()?"":"none";
+  const k=$("#btnMiClave"); if(k) k.style.display=nmFbActivo()?"":"none"; }
+/* ---------- Cambiar mi clave (cualquier usuario) ---------- */
+function nmCambiarMiClaveUI(){
+  if(!nmFbActivo()) return;
+  const ov=document.createElement("div"); ov.className="overlay show"; ov.style.zIndex="400";
+  ov.innerHTML=`<div class="modal"><h2>Cambiar mi clave</h2>
+    <p class="lead">Elige la clave que quieras para entrar con <b>${esc(NMFB.sesion.email)}</b>. Puede ser fácil de recordar (mínimo 4 caracteres).</p>
+    <div class="field"><label>Clave actual</label><input id="mcAct" type="password" autocomplete="current-password"></div>
+    <div class="field"><label>Nueva clave</label><input id="mcNew" type="text" autocomplete="new-password"></div>
+    <div class="field"><label>Repite la nueva clave</label><input id="mcNew2" type="text" autocomplete="new-password"></div>
+    <div class="msg" id="mcMsg"></div>
+    <div class="modal-actions"><button class="btn" id="mcCancel">Cancelar</button><button class="btn primary" id="mcOk">Guardar mi nueva clave</button></div></div>`;
+  document.body.appendChild(ov);
+  const m=ov.querySelector("#mcMsg"); ov.querySelector("#mcAct").focus();
+  ov.querySelector("#mcCancel").onclick=()=>ov.remove();
+  ov.querySelector("#mcOk").onclick=async()=>{ const a=ov.querySelector("#mcAct").value, n=ov.querySelector("#mcNew").value.trim(), n2=ov.querySelector("#mcNew2").value.trim();
+    if(n!==n2){ m.className="msg err"; m.textContent="Las dos claves nuevas no coinciden."; return; }
+    const b=ov.querySelector("#mcOk"); b.disabled=true; b.textContent="Guardando…";
+    try{ await NMFB.cambiarMiClave(a,n); STATE.usuarios=null;
+      ov.querySelector(".modal").innerHTML=`<h2>¡Listo!</h2><p class="lead">Tu nueva clave quedó guardada. La próxima vez entra con:</p><div class="nm-clave-big">${esc(n)}</div><div class="modal-actions"><button class="btn primary" id="mcFin">Entendido</button></div>`;
+      ov.querySelector("#mcFin").onclick=()=>{ ov.remove(); if(STATE.section==="usuarios") render(); };
+    }catch(e){ b.disabled=false; b.textContent="Guardar mi nueva clave"; m.className="msg err"; m.textContent=(e&&e.message)||"No se pudo cambiar."; } };
+}
 
 /* ---------- Pestaña USUARIOS (solo administradores) ---------- */
 async function nmUsuariosCargar(){ STATE.usLoading=true; try{ STATE.usuarios=await NMFB.usuarios(); STATE.usPin=await NMFB.appsPin(); STATE.usErr=null; }catch(e){ STATE.usErr=(e&&e.message)||String(e); } STATE.usLoading=false; if(STATE.section==="usuarios") render(); }
@@ -7714,34 +7781,34 @@ function renderUsuarios(){
   if(!NMFB.esAdmin()){ app.innerHTML=`<div class="card">${emptyState("Solo los administradores pueden ver esta pestaña.")}</div>`; return; }
   if(!STATE.usuarios && !STATE.usLoading){ nmUsuariosCargar(); }
   if(!STATE.usuarios){ app.innerHTML=`<div class="card"><div class="loading"><div class="spin"></div>Cargando usuarios…</div></div>`; return; }
-  const L=STATE.usuarios, ed=STATE.usEdit?L.find(u=>u.clave===STATE.usEdit):null;
-  const F=STATE.usForm||(ed?{nombre:ed.nombre,email:ed.email,rol:ed.rol,clave:ed.clave}:{nombre:"",email:"",rol:"usuario",clave:nmClaveNueva()});
+  const L=STATE.usuarios, ed=STATE.usEdit?L.find(u=>u.email===STATE.usEdit):null;
+  const F=STATE.usForm||(ed?{nombre:ed.nombre,email:ed.email,rol:ed.rol,clave:ed.clave}:{nombre:"",email:"",rol:"usuario",clave:""});
   STATE.usForm=F;
   const correosRRHH=[...new Set((STATE.rrhh||[]).map(r=>String(r.correo||"").trim().toLowerCase()).filter(e=>/@/.test(e)))].filter(e=>!L.some(u=>u.email===e));
   const ver=STATE.usVer||{};
-  const filas=L.map(u=>{ const yo=u.clave===NMFB.sesion.clave; return `<tr${u.activo?"":' class="row-inactivo"'}>
+  const filas=L.map(u=>{ const yo=u.email===NMFB.sesion.email; return `<tr${u.activo?"":' class="row-inactivo"'}>
       <td style="text-align:left">${esc(u.nombre||"")}${yo?' <span class="tag">tú</span>':""}<span class="sub2">${esc(u.email)}</span></td>
       <td>${u.rol==="admin"?'<span class="st bob">Administrador</span>':'<span class="st usd">Usuario</span>'}</td>
       <td>${u.activo?'<span class="st activo">Activo</span>':'<span class="st inactivo">Desactivado</span>'}</td>
-      <td><span class="us-clave">${ver[u.clave]?esc(u.clave):"••••-••••"}</span></td>
+      <td><span class="us-clave">${ver[u.email]?esc(u.clave||""):"••••••"}</span></td>
       <td><span class="ta-acts">
-        <button class="btn ghost us-ver" data-c="${esc(u.clave)}" title="${ver[u.clave]?"Ocultar":"Ver"} clave">${ver[u.clave]?"Ocultar":"Ver"}</button>
-        <button class="btn ghost us-copy" data-c="${esc(u.clave)}" title="Copiar mensaje con el acceso">Copiar acceso</button>
-        <button class="btn ghost us-edit" data-c="${esc(u.clave)}" title="Editar">✎</button>
-        ${yo?"":`<button class="btn ghost us-act" data-c="${esc(u.clave)}">${u.activo?"Desactivar":"Activar"}</button><button class="btn ghost us-del" data-c="${esc(u.clave)}" title="Borrar">✕</button>`}
+        <button class="btn ghost us-ver" data-e="${esc(u.email)}" title="${ver[u.email]?"Ocultar":"Ver"} clave">${ver[u.email]?"Ocultar":"Ver"}</button>
+        <button class="btn ghost us-copy" data-e="${esc(u.email)}" title="Copiar mensaje con el acceso">Copiar acceso</button>
+        <button class="btn ghost us-edit" data-e="${esc(u.email)}" title="Editar (nombre, correo, permiso o clave)">✎</button>
+        ${yo?"":`<button class="btn ghost us-act" data-e="${esc(u.email)}">${u.activo?"Desactivar":"Activar"}</button><button class="btn ghost us-del" data-e="${esc(u.email)}" title="Borrar">✕</button>`}
       </span></td></tr>`; }).join("");
   app.innerHTML=`
     ${STATE.usErr?`<div class="msg err" style="display:block">${esc(STATE.usErr)}</div>`:""}
-    <div class="card"><div class="head"><h3>${ed?"Editar usuario":"Nuevo usuario"}</h3>${ed?'<button class="btn ghost" id="usCancel">Cancelar</button>':""}</div>
+    <div class="card"><div class="head"><h3>${ed?"Editar usuario":"Nuevo usuario"}</h3><span class="ta-acts">${ed?'<button class="btn ghost" id="usCancel">Cancelar</button>':""}<button class="btn" id="usMiClave">Cambiar mi clave</button></span></div>
       <div class="us-form">
         <div><label for="usNom">Nombre</label><input id="usNom" value="${esc(F.nombre||"")}" placeholder="Ej.: Ana Rojas" autocomplete="off"></div>
         <div><label for="usEmail">Correo</label><input id="usEmail" type="email" list="usCorreos" value="${esc(F.email||"")}" placeholder="correo@peso-latam.com" autocomplete="off"><datalist id="usCorreos">${correosRRHH.map(e=>`<option value="${esc(e)}"></option>`).join("")}</datalist></div>
         <div><label for="usRol">Permiso</label><div class="select-wrap"><select id="usRol"><option value="usuario"${F.rol!=="admin"?" selected":""}>Usuario</option><option value="admin"${F.rol==="admin"?" selected":""}>Administrador</option></select></div></div>
-        <div><label for="usClave">Clave de acceso</label><div class="us-cl"><input id="usClave" value="${esc(F.clave||"")}" autocomplete="off"><button class="btn" id="usGen" title="Generar otra clave">↻</button></div></div>
+        <div><label for="usClave">Clave de acceso</label><div class="us-cl"><input id="usClave" value="${esc(F.clave||"")}" placeholder="La que tú quieras" autocomplete="off"><button class="btn" id="usGen" title="Sugerir una clave al azar">↻</button></div></div>
         <div class="us-btn"><button class="btn primary" id="usSave">${ed?"Guardar cambios":"Crear usuario"}</button></div>
       </div>
       <div class="msg" id="usMsg"></div>
-      <p class="gcal-note">La clave puede tener letras, números, puntos y guiones (mínimo 8). Si cambias la clave de alguien, su sesión se cierra y debe entrar con la nueva.${correosRRHH.length?" En «Correo» puedes elegir los correos corporativos de RRHH.":""}</p>
+      <p class="gcal-note">Escribe la clave que quieras (mínimo 4 caracteres). Puede ser la misma para varios usuarios. El botón ↻ sugiere una clave al azar si la prefieres. Si cambias la clave de alguien, debe entrar con la nueva.${correosRRHH.length?" En «Correo» puedes elegir los correos corporativos de RRHH.":""}</p>
     </div>
     <div class="card"><div class="head"><h3>Usuarios con acceso</h3><span class="mini">${L.filter(u=>u.activo).length} activos de ${L.length}</span></div>
       <div class="tbl-scroll"><table><thead><tr><th style="text-align:left">Usuario</th><th>Permiso</th><th>Estado</th><th>Clave</th><th></th></tr></thead><tbody>${filas}</tbody></table></div></div>
@@ -7752,26 +7819,26 @@ function renderUsuarios(){
   const rd=()=>{ STATE.usForm={nombre:$("#usNom").value,email:$("#usEmail").value,rol:$("#usRol").value,clave:$("#usClave").value}; };
   ["#usNom","#usEmail","#usClave"].forEach(s=>$(s).addEventListener("input",rd)); $("#usRol").addEventListener("change",rd);
   $("#usGen").addEventListener("click",()=>{ rd(); STATE.usForm.clave=nmClaveNueva(); render(); });
+  $("#usMiClave").addEventListener("click",nmCambiarMiClaveUI);
   const cc=$("#usCancel"); if(cc) cc.addEventListener("click",()=>{ STATE.usEdit=null; STATE.usForm=null; render(); });
   $("#usSave").addEventListener("click",async()=>{ rd(); const f=STATE.usForm; const em=String(f.email||"").trim().toLowerCase(), cl=String(f.clave||"").trim();
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ msg.className="msg err"; msg.textContent="Escribe un correo válido."; return; }
-    if(!/^[A-Za-z0-9._-]{8,60}$/.test(cl)){ msg.className="msg err"; msg.textContent="La clave debe tener al menos 8 caracteres (letras, números, puntos o guiones)."; return; }
+    if(!/^[^\s@\/]+@[^\s@\/]+\.[^\s@\/]+$/.test(em)){ msg.className="msg err"; msg.textContent="Escribe un correo válido."; return; }
+    if(!NMFB._claveOk(cl)){ msg.className="msg err"; msg.textContent="Escribe una clave de al menos 4 caracteres."; return; }
     if(!ed && L.some(u=>u.email===em)){ msg.className="msg err"; msg.textContent="Ese correo ya tiene acceso. Edítalo en la lista."; return; }
-    if(ed && ed.clave===NMFB.sesion.clave && f.rol!=="admin"){ msg.className="msg err"; msg.textContent="No puedes quitarte el permiso de administrador a ti mismo."; return; }
+    if(ed && ed.email===NMFB.sesion.email && f.rol!=="admin"){ msg.className="msg err"; msg.textContent="No puedes quitarte el permiso de administrador a ti mismo."; return; }
     const b=$("#usSave"); b.disabled=true; b.textContent="Guardando…";
-    try{ await NMFB.usuarioGuardar({nombre:f.nombre,email:em,rol:f.rol,clave:cl,activo:ed?ed.activo:true}, ed?ed.clave:null);
-      if(ed && ed.clave===NMFB.sesion.clave && ed.clave!==cl){ await NMFB.login(em,cl); }
-      STATE.usEdit=null; STATE.usForm=null; STATE.usVer=Object.assign({},STATE.usVer,{[cl]:true}); STATE.usuarios=null; nmUsuariosCargar();
+    try{ await NMFB.usuarioGuardar({nombre:f.nombre,email:em,rol:f.rol,clave:cl,activo:ed?ed.activo:true}, ed?ed.email:null);
+      STATE.usEdit=null; STATE.usForm=null; STATE.usVer=Object.assign({},STATE.usVer,{[em]:true}); STATE.usuarios=null; nmUsuariosCargar();
     }catch(e){ b.disabled=false; b.textContent=ed?"Guardar cambios":"Crear usuario"; msg.className="msg err"; msg.textContent=(e&&e.message)||"No se pudo guardar."; } });
-  document.querySelectorAll(".us-ver").forEach(b=>b.addEventListener("click",()=>{ const v=Object.assign({},STATE.usVer); v[b.dataset.c]=!v[b.dataset.c]; STATE.usVer=v; render(); }));
-  document.querySelectorAll(".us-copy").forEach(b=>b.addEventListener("click",async()=>{ const u=L.find(x=>x.clave===b.dataset.c); if(!u) return;
-    const t="Hola "+(u.nombre||"")+", este es tu acceso al sistema de finanzas de PE$O:\n\nEnlace: https://nummeros.peso.contaxbolivia.com/\nCorreo: "+u.email+"\nClave de acceso: "+u.clave+"\n\nNo compartas tu clave.";
+  document.querySelectorAll(".us-ver").forEach(b=>b.addEventListener("click",()=>{ const v=Object.assign({},STATE.usVer); v[b.dataset.e]=!v[b.dataset.e]; STATE.usVer=v; render(); }));
+  document.querySelectorAll(".us-copy").forEach(b=>b.addEventListener("click",async()=>{ const u=L.find(x=>x.email===b.dataset.e); if(!u) return;
+    const t="Hola "+(u.nombre||"")+", este es tu acceso al sistema de finanzas de PE$O:\n\nEnlace: https://nummeros.peso.contaxbolivia.com/\nCorreo: "+u.email+"\nClave de acceso: "+u.clave+"\n\nPuedes cambiar tu clave dentro del sistema con el botón de la llave (arriba a la derecha).";
     try{ await navigator.clipboard.writeText(t); b.textContent="✓ Copiado"; }catch(_){ prompt("Copia este mensaje:",t); } setTimeout(()=>{ b.textContent="Copiar acceso"; },1800); }));
-  document.querySelectorAll(".us-edit").forEach(b=>b.addEventListener("click",()=>{ STATE.usEdit=b.dataset.c; STATE.usForm=null; render(); try{ window.scrollTo({top:0,behavior:"smooth"}); }catch(_){} }));
-  document.querySelectorAll(".us-act").forEach(b=>b.addEventListener("click",async()=>{ const u=L.find(x=>x.clave===b.dataset.c); if(!u) return;
-    try{ await NMFB.usuarioGuardar(Object.assign({},u,{activo:!u.activo}),u.clave); STATE.usuarios=null; nmUsuariosCargar(); }catch(e){ alert((e&&e.message)||"No se pudo cambiar."); } }));
-  document.querySelectorAll(".us-del").forEach(b=>b.addEventListener("click",async()=>{ const u=L.find(x=>x.clave===b.dataset.c); if(!u||!confirm("¿Quitar el acceso de "+(u.nombre||u.email)+"? Ya no podrá entrar al sistema.")) return;
-    try{ await NMFB.usuarioBorrar(u.clave); STATE.usuarios=null; nmUsuariosCargar(); }catch(e){ alert((e&&e.message)||"No se pudo borrar."); } }));
+  document.querySelectorAll(".us-edit").forEach(b=>b.addEventListener("click",()=>{ STATE.usEdit=b.dataset.e; STATE.usForm=null; render(); try{ window.scrollTo({top:0,behavior:"smooth"}); }catch(_){} }));
+  document.querySelectorAll(".us-act").forEach(b=>b.addEventListener("click",async()=>{ const u=L.find(x=>x.email===b.dataset.e); if(!u) return;
+    try{ await NMFB.usuarioGuardar(Object.assign({},u,{activo:!u.activo}),u.email); STATE.usuarios=null; nmUsuariosCargar(); }catch(e){ alert((e&&e.message)||"No se pudo cambiar."); } }));
+  document.querySelectorAll(".us-del").forEach(b=>b.addEventListener("click",async()=>{ const u=L.find(x=>x.email===b.dataset.e); if(!u||!confirm("¿Quitar el acceso de "+(u.nombre||u.email)+"? Ya no podrá entrar al sistema.")) return;
+    try{ await NMFB.usuarioBorrar(u.email); STATE.usuarios=null; nmUsuariosCargar(); }catch(e){ alert((e&&e.message)||"No se pudo borrar."); } }));
   $("#usPinVer").addEventListener("click",()=>{ const i=$("#usPin"); i.type=i.type==="password"?"text":"password"; });
   $("#usPinSave").addEventListener("click",()=>{ const v=$("#usPin").value.trim(); if(!v) return; const b=$("#usPinSave"); b.disabled=true; b.textContent="Verificando…";
     const fin=(t)=>{ b.textContent=t; setTimeout(()=>{ b.textContent="Guardar"; b.disabled=false; },1600); };
@@ -8013,6 +8080,7 @@ $("#btnConnect").addEventListener("click",actualizarDatos);
 { const gb=$("#gFiltBtn"); if(gb) gb.addEventListener("click",e=>{ e.stopPropagation(); const gp=$("#gFilters"); if(gp){ gp.hidden=!gp.hidden; gb.classList.toggle("on",!gp.hidden); } });
   document.addEventListener("mousedown",e=>{ const gp=$("#gFilters"),gb2=$("#gFiltBtn"); if(gp&&!gp.hidden){ if(gp.contains(e.target)||(gb2&&gb2.contains(e.target)))return; gp.hidden=true; if(gb2)gb2.classList.remove("on"); } },true); }
 $("#btnLogout").addEventListener("click",cerrarSesion);
+$("#btnMiClave").addEventListener("click",nmCambiarMiClaveUI);
 $("#loginBtn").addEventListener("click",()=>{ if(NMFB.on) nmEntrarFB(); else conectar($("#pin").value); });
 $("#pin").addEventListener("keydown",e=>{ if(e.key==="Enter") conectar($("#pin").value); });
 ["#fbEmail","#fbClave"].forEach(sel=>{ const el=$(sel); if(el) el.addEventListener("keydown",e=>{ if(e.key==="Enter") nmEntrarFB(); }); });

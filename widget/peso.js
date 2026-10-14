@@ -20,8 +20,10 @@ function leer() { try { return Keychain.contains(KC) ? JSON.parse(Keychain.get(K
 async function http(url, method, body, token) {
   const r = new Request(url);
   r.method = method || "GET";
-  r.headers = { "Content-Type": "application/json" };
-  if (token) r.headers["Authorization"] = "Bearer " + token;
+  // OJO: en Scriptable los headers se deben asignar de una sola vez (modificar r.headers después no tiene efecto)
+  const h = { "Content-Type": "application/json" };
+  if (token) h["Authorization"] = "Bearer " + token;
+  r.headers = h;
   if (body) r.body = JSON.stringify(body);
   let json = null;
   try { json = await r.loadJSON(); } catch (e) { json = null; }

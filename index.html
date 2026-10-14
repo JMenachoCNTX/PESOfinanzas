@@ -1411,7 +1411,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V169";
+const APP_VERSION = "V170";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -7545,7 +7545,14 @@ function mapPlan(raw){ return raw.map(r=>{ const o=pick(r,M_PLAN);
    FIREBASE (V169): usuarios con correo + clave, Tareas y Asignación Manual
    Mientras FIREBASE_CONFIG esté vacío, el sistema funciona como antes (clave única).
    ============================================================ */
-const FIREBASE_CONFIG = null;   // ← se completa con el bloque firebaseConfig del proyecto "nummeros-peso"
+const FIREBASE_CONFIG = {   // proyecto Firebase "nummeros-peso"
+  apiKey: "AIzaSyDbEjGWrguALpSgMAVh5BroRaAK0FOin6k",
+  authDomain: "nummeros-peso.firebaseapp.com",
+  projectId: "nummeros-peso",
+  storageBucket: "nummeros-peso.firebasestorage.app",
+  messagingSenderId: "351915146079",
+  appId: "1:351915146079:web:72c62ccba5e7d1473ed4ea"
+};
 const NMFB={
   on: !!(FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey),
   db:null, auth:null, sesion:null, _ini:null,

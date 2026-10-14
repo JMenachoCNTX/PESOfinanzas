@@ -80,7 +80,11 @@
     banco: '<path d="M14 38l36-20 36 20z"/><path d="M24 44v32M42 44v32M58 44v32M76 44v32M14 84h72"/>',
     ingreso: '<path d="M50 14v52M30 46l20 20 20-20M20 86h60"/>',
     cambio: '<path d="M18 36h58l-14-14M82 64H24l14 14"/>',
-    ia: '<path d="M50 14l9 27 27 9-27 9-9 27-9-27-27-9 27-9z"/>'
+    ia: '<path d="M50 14l9 27 27 9-27 9-9 27-9-27-27-9 27-9z"/>',
+    archivo: '<path d="M14 32a8 8 0 0 1 8-8h18l8 10h30a8 8 0 0 1 8 8v34a8 8 0 0 1-8 8H22a8 8 0 0 1-8-8z"/>',
+    enlace: '<path d="M42 58l16-16"/><path d="M36 46l-8 8a14 14 0 0 0 20 20l8-8M64 54l8-8a14 14 0 0 0-20-20l-8 8"/>',
+    hoja: '<rect x="20" y="16" width="60" height="68" rx="9"/><path d="M20 38h60M20 60h60M44 16v68"/>',
+    documento: '<path d="M28 14h30l16 16v56H28z"/><path d="M58 14v16h16M38 50h26M38 64h26"/>'
   };
   /* Ícono circular en relieve. mode: "light" (sobre fondo claro) o "dark". */
   function icono(name, mode, label) {

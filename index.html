@@ -1475,7 +1475,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V187";
+const APP_VERSION = "V188";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2363,7 +2363,7 @@ function render(){
   RATE = tcRateLatest();
   if(CUR==="BOB" && !RATE) CUR="USD";
   const map={usuarios:renderUsuarios,archivos:renderArchivos,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
-    socios:renderSociosCapital,inversiones:renderInversiones,prestamos:renderPrestamos,devoluciones:renderDevoluciones,rendiciones:renderRendiciones,ingresos:renderIngresosTab,costos:renderCostos,bancos:renderBancos,mercury:renderMercury,bitgo:renderBitgo,plan:renderPlan,tc:renderTC,ia:renderIA,cierre:renderCierre,calendario:renderCalendario,tareas:renderTareas};
+    socios:renderSociosCapital,inversiones:renderInversiones,prestamos:renderPrestamos,devoluciones:renderDevoluciones,rendiciones:renderRendiciones,ingresos:renderIngresosTab,costos:renderCostos,bancos:renderBancos,mercury:renderMercury,bitgo:renderBitgo,plan:renderPlan,tc:()=>{ renderTC(); tcAvisoDudosos(); },ia:renderIA,cierre:renderCierre,calendario:renderCalendario,tareas:renderTareas};
   try{ (map[STATE.section]||renderResumen)(); }
   catch(err){
     console.error("Error al dibujar la sección",STATE.section,err);
@@ -7145,6 +7145,8 @@ function renderBitgo(){
 
 /* ---------- TIPOS DE CAMBIO ---------- */
 function f2(n){ return (n||n===0)? Number(n).toLocaleString("es-BO",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"; }
+function tcAvisoDudosos(){ const L=mapTC._dud||[]; const app=$("#app"); if(!L.length||!app) return;
+  app.insertAdjacentHTML("afterbegin",`<div class="msg err" style="display:block;margin-bottom:14px"><b>${L.length} cotización(es) con un valor imposible</b> (más de Bs 100 por dólar, seguramente falta la coma decimal). No se usan en los cálculos ni en el gráfico: ${L.slice(0,6).map(esc).join(" · ")}${L.length>6?" …":""}</div>`); }
 function renderTC(){
   const H=[...STATE.tc].sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
   const last=H[H.length-1]||null;
@@ -7962,7 +7964,7 @@ function convertirMonedas(){
   });
 }
 const M_TC={fecha:"fecha",venta:"venta",compra:"compra",promedio:"promedio",fuente:"fuente",actualizado:"actualizado"};
-function mapTC(raw){ return raw.map(r=>{
+function mapTC(raw){ mapTC._dud=[]; return raw.map(r=>{
   const g=(...ks)=>{ for(const k of ks){ if(r[k]!=null && String(r[k]).trim()!=="") return r[k]; } return ""; };
   const o={};
   o.fecha = g("fecha","fechatc","dia","date","day");
@@ -7972,10 +7974,12 @@ function mapTC(raw){ return raw.map(r=>{
   o.fuente = g("fuente","source");
   o.actualizado = g("actualizado","hora","timestamp");
   const d=gd(o.fecha); o.fecha=d.iso||o.fecha;
+  // V188: un TC mayor a Bs 100 por dólar es un error de tipeo (ej.: 2227 en vez de 22,27): no se usa
+  ["venta","compra","promedio"].forEach(k=>{ if(o[k]>100){ (o._dud=o._dud||[]).push(k+" "+o[k]); o[k]=null; } });
   if(!o.venta && o.promedio) o.venta=o.promedio;
   if(!o.venta && o.compra) o.venta=o.compra;
   return o;
-}).filter(o=>o.fecha && (o.venta||o.compra||o.promedio)); }
+}).filter(o=>{ if(o._dud) (mapTC._dud=mapTC._dud||[]).push(o.fecha+": "+o._dud.join(", ")); return o.fecha && (o.venta||o.compra||o.promedio); }); }
 const M_PLAN={codigo:"codigo",tipo:"tipo",categoria:"categoria",nombre:"nombre",origen:"origen",estado:"estado"};
 function mapPlan(raw){ return raw.map(r=>{ const o=pick(r,M_PLAN);
   return {codigo:String(o.codigo||""),tipo:o.tipo||"",categoria:o.categoria||"",nombre:o.nombre||"",origen:o.origen||"",estado:o.estado||"Activa"};

@@ -1475,7 +1475,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V186";
+const APP_VERSION = "V187";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -8135,6 +8135,7 @@ async function nmFbAplicarDatos(res){
   catch(e){ console.error(e); STATE.fbErr="No se pudieron leer las tareas desde Firebase: "+(e&&e.message||e); }
   try{ await nmFbCargarAjustes(); }catch(e){ console.error("ajustes Firebase",e); }
   try{ tcAutoHoy(); }catch(_){}
+  try{ setTimeout(nmWidgetPublicar,1500); }catch(_){}
 }
 /* V185: Mercury (ya no se actualiza), Inversiones, Préstamos y Devoluciones viven en Firebase.
    La primera vez se copian desde Google Sheets; desde entonces el sistema ignora esas hojas. */
@@ -8158,6 +8159,35 @@ async function nmFbHistoricos(res){
     if(all.length){ res.tc=all; STATE.histFB.tc=true; }
   }catch(e){ console.error("TC Firebase",e); }
 }
+/* V187: resumen para el WIDGET del iPhone (Scriptable). Se guarda en Firebase config/widget
+   cada vez que un administrador abre o actualiza el sistema. Todo en USD, base devengado, todas las empresas. */
+function nmWidgetResumen(){
+  const sv={cur:CUR,emp:STATE.empresa,base:STATE.resBase,yr:STATE.year,ch:STATE.clasifHoja};
+  CUR="USD"; STATE.empresa="__all"; STATE.resBase="devengado"; STATE.clasifHoja=false;
+  try{
+    const hoy=new Date(), y=hoy.getFullYear(), mi=hoy.getMonth(); const pm=mi===0?11:mi-1, py=mi===0?y-1:y;
+    const mes=_repTotales(y,mi), ant=_repTotales(py,pm), anio=_repTotales(y,null);
+    const MES=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+    const u=e=>(e.impUSD!=null?+e.impUSD:(+e.imp||0))||0;
+    const est=(e,x)=>String(e.e||"").trim().toLowerCase()===x;
+    const cxp=(STATE.egresos||[]).filter(e=>est(e,"pendiente")).reduce((a,e)=>a+u(e),0);
+    const nCxp=(STATE.egresos||[]).filter(e=>est(e,"pendiente")).length;
+    const inv=(STATE.inv||[]).reduce((a,e)=>a+(+e.importe||0),0), pre=(STATE.pre||[]).reduce((a,e)=>a+(+e.importe||0),0), dev=(STATE.dev||[]).reduce((a,e)=>a+(+e.importe||0),0);
+    const pagado=(STATE.egresos||[]).filter(e=>est(e,"pagado")).reduce((a,e)=>a+u(e),0);
+    const caja=inv+pre-pagado-dev;
+    const g3=[1,2,3].map(k=>{ const d=new Date(y,mi-k,1); return _repTotales(d.getFullYear(),d.getMonth()).expense; });
+    const burn=(g3[0]+g3[1]+g3[2])/3;
+    const tc=tcRateLatest();
+    const serie=[]; for(let k=5;k>=0;k--){ const d=new Date(y,mi-k,1); const t=_repTotales(d.getFullYear(),d.getMonth()); serie.push({m:MES[d.getMonth()],i:Math.round(t.income),e:Math.round(t.expense)}); }
+    return {actualizado:new Date().toISOString(), mesNombre:MES[mi]+" "+y, mesAntNombre:MES[pm]+" "+py,
+      mesIng:Math.round(mes.income), mesEg:Math.round(mes.expense), mesRes:Math.round(mes.result),
+      antIng:Math.round(ant.income), antEg:Math.round(ant.expense), antRes:Math.round(ant.result),
+      anioIng:Math.round(anio.income), anioEg:Math.round(anio.expense), anioRes:Math.round(anio.result),
+      cxp:Math.round(cxp), nCxp:nCxp, caja:Math.round(caja), burn:Math.round(burn), runway:burn>0?Math.round(caja/burn*10)/10:null,
+      tc:tc||null, serie:serie};
+  } finally { CUR=sv.cur; STATE.empresa=sv.emp; STATE.resBase=sv.base; STATE.year=sv.yr; STATE.clasifHoja=sv.ch; }
+}
+function nmWidgetPublicar(){ if(!nmFbActivo()||!NMFB.esAdmin()) return; try{ const r=nmWidgetResumen(); NMFB.cfgSet("widget",r).catch(e=>console.error("widget",e)); }catch(e){ console.error("widget",e); } }
 /* V186: guarda la cotización de HOY (Binance P2P, vía el servidor) en Firebase */
 function tcHoyISO(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function tcGuardarHoyFB(c){ if(!nmFbActivo()||!NMFB.esAdmin()||!c||c.venta==null) return Promise.resolve(null);

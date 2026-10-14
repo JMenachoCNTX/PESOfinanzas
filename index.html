@@ -1133,6 +1133,30 @@ html.tema-oscuro .nm-foto{background:#0B2B26}
 
 /* Pantalla de mudanza (cuando se abre desde el enlace viejo de Apps Script) */
 html.mudado body>*{display:none!important}
+
+/* ===== V174: pantalla de espera "los clásicos trabajando" (kit de marca NUMMEROS) ===== */
+.nm-overlay{--fondo:#F4FAF5;--borde:#DAF1DE;--texto:#163832;--texto-suave:#557363;--acento:#235347}
+html.tema-oscuro .nm-overlay{--fondo:#051F20;--borde:#163832;--texto:#DAF1DE;--texto-suave:#8EB69B;--acento:#8EB69B}
+.nm-overlay{position:fixed;inset:0;z-index:9999;background:var(--fondo);display:grid;place-items:center}
+.nm-overlay[hidden]{display:none}
+.nm-pantalla{position:relative;overflow:hidden;width:100%;height:100%;display:grid;place-items:center;padding:40px 24px;font-family:Questrial,"Century Gothic",sans-serif}
+.nm-marca-agua{position:absolute;right:-60px;bottom:-110px;width:300px;height:auto;opacity:.5;pointer-events:none}
+.nm-marca-agua path{fill:var(--borde)}
+.nm-panel{position:relative;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;max-width:340px;width:100%}
+.nm-retrato{position:relative;width:132px;height:132px;border-radius:50%;overflow:hidden;flex:none;background:var(--borde);box-shadow:0 0 0 1px var(--borde),0 10px 30px rgba(5,31,32,.12)}
+.nm-retrato img{width:100%;height:100%;object-fit:cover;display:block;animation:nmAparecer .6s ease-out both}
+.nm-retrato::after{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(70% 60% at 30% 70%,rgba(142,182,155,.55),transparent 65%);animation:nmLuz 2.6s ease-in-out infinite}
+@keyframes nmLuz{0%,100%{opacity:.45}50%{opacity:1}}
+@keyframes nmAparecer{from{opacity:0;transform:scale(1.06)}to{opacity:1;transform:none}}
+.nm-logo-marca{height:26px;width:auto;display:block}
+.nm-logo-oscuro{display:none}
+html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{display:block}
+.nm-titulo{font-family:Akshar,"Arial Narrow",sans-serif;font-weight:600;font-size:24px;line-height:1.2;margin:0;color:var(--texto)}
+.nm-paso{font-size:14px;margin:0;color:var(--texto-suave);min-height:1.2em}
+.nm-barra{width:190px;height:8px;border-radius:999px;overflow:hidden;position:relative;background:var(--borde)}
+.nm-barra::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(120deg,var(--acento) 0 9px,var(--borde) 9px 18px);background-size:36px 100%;animation:nmCorrer .62s linear infinite}
+@keyframes nmCorrer{from{background-position:0 0}to{background-position:36px 0}}
+@media (prefers-reduced-motion:reduce){.nm-barra::before,.nm-retrato::after,.nm-retrato img{animation:none!important}}
 </style>
 </head>
 <body>
@@ -1336,12 +1360,18 @@ html.mudado body>*{display:none!important}
   </div>
 </div>
 
-<div class="refresh-overlay" id="refreshOverlay">
-  <div class="ro-inner">
-    <figure class="nm-foto ro-foto ro-claro"><img src="marca/clasicos/euclides-laptop.jpg" alt="Euclides trabajando en la laptop"><span class="nm-chip"><b>Euclides</b>Matemático griego · c. 300 a. C.</span></figure>
-    <figure class="nm-foto ro-foto ro-oscuro"><img src="marca/clasicos/arquimedes-pensando.jpg" alt="Arquímedes pensando frente a la pantalla"><span class="nm-chip"><b>Arquímedes</b>Matemático griego · c. 287 a. C.</span></figure>
-    <img class="ro-logo" id="roLogo" alt="NUMMEROS">
-    <div class="ro-txt">Actualizando datos<span class="ll-dots"></span></div>
+<!-- V174: pantalla "Actualizando datos" con los clásicos (kit de marca NUMMEROS) -->
+<div class="nm-overlay" id="nmCargando" hidden>
+  <div class="nm-pantalla">
+    <svg class="nm-marca-agua" viewBox="0 0 546 728" aria-hidden="true"><path d="M0 427 L0 728 L136 728 L136 634 Z M410 0 L410 85 L546 292 L546 0 Z M0 0 L148 0 L410 458.5 L410 341 L546 548 L546 728 L401.71 728 L136 263 L136 379 L0 172 Z"></path></svg>
+    <div class="nm-panel">
+      <div class="nm-retrato"><img id="nmRetrato" src="marca/clasicos/euclides-compas.jpg" alt=""></div>
+      <img class="nm-logo-marca nm-logo-claro" src="marca/logos/nummeros-logotipo-horizontal-principal.svg" alt="NUMMEROS">
+      <img class="nm-logo-marca nm-logo-oscuro" src="marca/logos/nummeros-logotipo-horizontal-claro.svg" alt="NUMMEROS">
+      <p class="nm-titulo">Actualizando datos</p>
+      <p class="nm-paso" id="nmPaso"></p>
+      <div class="nm-barra" role="progressbar" aria-label="Actualizando datos"></div>
+    </div>
   </div>
 </div>
 <div class="tip" id="tip"></div>
@@ -1351,7 +1381,7 @@ if (window.__NUMMEROS_MUDADO) { throw new Error("NUMMEROS: este enlace se mudó 
 if (window.NUMMEROS_MARCA) {
   try {
     var _NM = window.NUMMEROS_MARCA;
-    document.addEventListener("DOMContentLoaded", function(){ var ro=document.getElementById("refreshOverlay"); if(ro) ro.style.backgroundImage=_NM.fondoCSS("#F4FAF5","#E3F1E7",120); });
+
   } catch (e) {}
 }
 if (window.Chart && Chart.defaults) {
@@ -1425,7 +1455,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V173";
+const APP_VERSION = "V174";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -7871,13 +7901,28 @@ function conectar(pin){
     .withFailureHandler(function(e){ fail((NMFB.on?"Servidor de datos (Apps Script): ":"")+((e&&e.message)?e.message:"Error de conexión con el servidor.")); })
     .getData(pin);
 }
+var NM_CLASICOS = [
+  { foto:"marca/clasicos/pitagoras-tablet.jpg",   nombre:"Pitágoras",  frase:"Pitágoras está contando tus ventas…" },
+  { foto:"marca/clasicos/euclides-compas.jpg",    nombre:"Euclides",   frase:"Euclides está ordenando tus reportes…" },
+  { foto:"marca/clasicos/arquimedes-balanza.jpg", nombre:"Arquímedes", frase:"Arquímedes está cuadrando tus cuentas…" }
+];
+function nmCargando(mostrar, frase){
+  var capa = document.getElementById("nmCargando"); if(!capa) return;
+  if (mostrar){
+    var c = NM_CLASICOS[Math.floor(Math.random() * NM_CLASICOS.length)];
+    var img = document.getElementById("nmRetrato");
+    img.src = c.foto; img.alt = c.nombre;
+    document.getElementById("nmPaso").textContent = frase || c.frase;
+  }
+  capa.hidden = !mostrar;
+}
 function actualizarDatos(){
   let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
   if(!pin){ showLogin(); return; }
   const b=$("#btnConnect"); const t=b.innerHTML; b.innerHTML="Actualizando…";
-  const ov=$("#refreshOverlay"); if(ov) ov.classList.add("show");
+  nmCargando(true);
   const start=Date.now();
-  const done=(cb)=>{ const wait=Math.max(0,900-(Date.now()-start)); setTimeout(()=>{ b.innerHTML=t; if(ov) ov.classList.remove("show"); if(cb) cb(); }, wait); };
+  const done=(cb)=>{ const wait=Math.max(0,1400-(Date.now()-start)); setTimeout(()=>{ b.innerHTML=t; nmCargando(false); if(cb) cb(); }, wait); };
   google.script.run
     .withSuccessHandler(async function(res){ if(res&&!res.error){ aplicarDatos(res); await nmFbAplicarDatos(res); } done(function(){ if(res&&!res.error){ buildYears(); buildEmpresas(); render(); } else { showLogin(); } }); })
     .withFailureHandler(function(){ done(); })
@@ -8120,7 +8165,7 @@ document.addEventListener("click", function(e){
   try{ STATE.iaKey = localStorage.getItem("peso_ia_key")||""; }catch(_){ STATE.iaKey=""; }
   const vb=$("#verBadge"); if(vb) vb.textContent=APP_VERSION;
   const pb=$("#pesoBadge"); if(pb) pb.src=PESO_SQUARE;
-  const rl=$("#roLogo"); if(rl) rl.src=NUMMEROS_HORIZ;
+
   const _ll=$("#loginLogo"); if(_ll) _ll.src=NUMMEROS_FULL;
   const _llw=$("#loginLogoWhite"); if(_llw) _llw.src=NUMMEROS_WHITE;
   document.title="NUMMEROS · PE$O "+APP_VERSION;

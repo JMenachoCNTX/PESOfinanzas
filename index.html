@@ -1168,6 +1168,14 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
 .nm-odo .nm-v3 .nm-tira{animation-duration:.95s}
 .nm-odo .nm-v4 .nm-tira{animation-duration:1.18s}
 @keyframes nmRodar{from{transform:translateY(0)}to{transform:translateY(-11.5em)}}
+
+/* ===== V180: Presupuesto ===== */
+.pr-tbl td,.pr-tbl th{white-space:nowrap}
+.pr-tbl tr.pr-grp td{background:var(--field);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.pr-in{width:110px;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--field);color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
+.pr-in.pr-aj{border-color:var(--brand);box-shadow:inset 0 0 0 1px var(--brand)}
+.pr-tbl .pr-rst{padding:2px 6px;margin-left:4px}
+.pr-tbl tfoot td{border-top:2px solid var(--border)}
 @media (prefers-reduced-motion:reduce){.nm-barra::before,.nm-retrato::after,.nm-retrato img{animation:none!important}}
 </style>
 </head>
@@ -1467,7 +1475,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V179";
+const APP_VERSION = "V180";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1771,7 +1779,7 @@ function pnlRows(allYears){
   const _cH=STATE.clasifHoja===true;   // V178: true = clasificación antigua (columnas de las hojas), solo para comparar
   try{ ensureHuellas(); ensureHuellasMerc(); ensureHuellasBitgo(); }catch(_){}
   const _aE=s=>{ if(_cH) return {kcuenta:s.kcuenta,grupoc:s.grupoc,ksubgrupo:s.ksubgrupo,cp:s.cp,ca:s.ca||s.cc}; const a=ancEgreso(s); return a; };
-  (STATE.egresos||[]).forEach(e=>{ _expandEgreso(e).forEach(s=>{ if(!yOk(s.g)) return; if(!empPassRow(s)) return; const A=_aE(s); add(A.kcuenta, A.grupoc, A.ksubgrupo, A.cp, A.ca, (+s.imp||0), (s.impBOB!=null?s.impBOB:bobOf(+s.imp||0,s.fecha)), s.m, s.g, "Egresos"); }); });
+  (STATE.egresos||[]).forEach(e=>{ _expandEgreso(e).forEach(s=>{ if(!yOk(s.g)) return; if(!empPassRow(s)) return; if(STATE._pnlSoloPagado && /pendiente|presupuestado/i.test(String(s.e||""))) return; const A=_aE(s); add(A.kcuenta, A.grupoc, A.ksubgrupo, A.cp, A.ca, (+s.imp||0), (s.impBOB!=null?s.impBOB:bobOf(+s.imp||0,s.fecha)), s.m, s.g, "Egresos"); }); });
   const find=(cols,...n)=>{ for(const x of n){ const c=cols.find(k=>normHdr(k)===x); if(c)return c; } for(const x of n){ const c=cols.find(k=>normHdr(k).includes(x)); if(c)return c; } return null; };
   const bg=STATE.bitgo||{cols:[],rows:[]}, bc=bg.cols||[];
   const bAmt=find(bc,"amount","monto","importe"), bDate=find(bc,"mmddyyyy","fecha","date","datetime"),
@@ -2370,6 +2378,73 @@ function render(){
   try{ nmOdometro(); }catch(e){}
 }
 /* ============================================================
+   V180: PRESUPUESTO — se arma solo con el promedio de los últimos 3 meses
+   (lo realmente pagado, por fecha de pago) y se puede ajustar a mano.
+   Suma las cuentas por pagar (Pendiente) y muestra lo Presupuestado registrado.
+   Los ajustes se guardan en Firebase (config/presupuesto).
+   ============================================================ */
+let NM_PRESU=null;
+function presuCargar(){ if(NM_PRESU||!nmFbActivo()) return; NM_PRESU={ajustes:{}}; NMFB.cfgGet("presupuesto").then(d=>{ NM_PRESU=(d&&d.ajustes)?{ajustes:d.ajustes}:{ajustes:{}}; if(STATE.section==="resumen") render(); }).catch(()=>{}); }
+function presuGuardar(){ if(!nmFbActivo()||!NM_PRESU) return; nmAjGuardar("presupuesto",{ajustes:NM_PRESU.ajustes}); }
+function renderPresupuesto(){
+  const app=$("#app"); if(!app) return; presuCargar();
+  const hoy=new Date(); const yNow=hoy.getFullYear(), mNow=hoy.getMonth();
+  if(!STATE.presuMes){ const d=new Date(yNow,mNow+1,1); STATE.presuMes=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+  const [ty,tm]=STATE.presuMes.split("-").map(Number); const tMi=tm-1;
+  // últimos 3 meses COMPLETOS antes del mes actual
+  const ref=[]; for(let k=3;k>=1;k--){ const d=new Date(yNow,mNow-k,1); ref.push({g:d.getFullYear(),mi:d.getMonth()}); }
+  const save={base:STATE.resBase,year:STATE.year};
+  let rows=[]; try{ STATE.resBase="caja"; STATE._pnlSoloPagado=true; rows=pnlRows(true); } finally { STATE.resBase=save.base; STATE._pnlSoloPagado=false; }
+  const esTraspaso=r=>/traspaso/i.test(r.grupo+" "+r.subg+" "+r.cp+" "+r.ca);
+  const inRef=r=>ref.some(x=>x.g===r.g && x.mi===monthIdx(r.m));
+  const L={}; const key=(gr,cp,ca)=>gr+"\u0000"+cp+"\u0000"+ca;
+  const get=(gr,cp,ca)=>L[key(gr,cp,ca)]||(L[key(gr,cp,ca)]={gr,cp,ca,ref:[0,0,0],pend:0,presu:0});
+  rows.filter(r=>!r.income && !r.dato && !esTraspaso(r) && inRef(r)).forEach(r=>{ const o=get(r.grupo,r.cp,r.ca); const i=ref.findIndex(x=>x.g===r.g&&x.mi===monthIdx(r.m)); o.ref[i]+=(+r.imp||0); });
+  // Cuentas por pagar: Pendiente (todo lo no pagado hasta el mes del presupuesto) y Presupuestado del mes
+  const val=e=>CUR==="BOB"?(e.impBOB!=null?+e.impBOB:(+e.imp||0)*(RATE||0)):(e.impUSD!=null?+e.impUSD:(+e.imp||0));
+  const pendRows=[], presuRows=[];
+  (STATE.egresos||[]).forEach(e=>{ if(!empPassRow(e)) return; const est=String(e.e||"").trim().toLowerCase(); const mi=monthIdx(e.m), g=e.g;
+    const antes = (g<ty) || (g===ty && mi<=tMi);
+    if(est==="pendiente" && antes){ const a=ancEgreso(e); const o=get(a.grupoc||"(sin grupo)",a.cp||"(sin cuenta principal)",a.ca||"(sin cuenta)"); o.pend+=val(e); pendRows.push(e); }
+    if(est==="presupuestado" && g===ty && mi===tMi){ const a=ancEgreso(e); const o=get(a.grupoc||"(sin grupo)",a.cp||"(sin cuenta principal)",a.ca||"(sin cuenta)"); o.presu+=val(e); presuRows.push(e); } });
+  const aj=(NM_PRESU&&NM_PRESU.ajustes)||{}; const ak=o=>STATE.presuMes+"|"+o.ca;
+  const fx=CUR==="BOB"?(RATE||1):1; // los ajustes se guardan en USD
+  const lista=Object.values(L).map(o=>{ o.prom=(o.ref[0]+o.ref[1]+o.ref[2])/3; const a=aj[ak(o)]; o.aj=(a!=null); o.bud=(a!=null)?(+a*fx):Math.max(o.prom,o.presu); o.tot=o.bud+o.pend; return o; })
+    .filter(o=>o.prom||o.pend||o.presu||o.aj).sort((a,b)=>String(a.gr).localeCompare(String(b.gr))||b.tot-a.tot);
+  const T=k=>lista.reduce((s,o)=>s+(+o[k]||0),0);
+  const MES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const mopts=[]; for(let k=0;k<=12;k++){ const d=new Date(yNow,mNow+k,1); const v=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); mopts.push(`<option value="${v}"${v===STATE.presuMes?" selected":""}>${MES[d.getMonth()]} ${d.getFullYear()}</option>`); }
+  const refTxt=ref.map(x=>MES[x.mi].slice(0,3)+" "+String(x.g).slice(2)).join(", ");
+  let gAnt=null; const filas=lista.map(o=>{ const head=o.gr!==gAnt?`<tr class="pr-grp"><td colspan="8" style="text-align:left"><b>${esc(o.gr)}</b></td></tr>`:""; gAnt=o.gr;
+    return head+`<tr><td style="text-align:left">${esc(o.ca)}<span class="sub2">${esc(o.cp)}</span></td>
+      ${o.ref.map(v=>`<td>${v?money(v):'<span class="zero">–</span>'}</td>`).join("")}<td><b>${money(o.prom)}</b></td>
+      <td><input class="pr-in${o.aj?" pr-aj":""}" data-ca="${esc(o.ca)}" value="${Math.round(o.bud)}" inputmode="decimal" title="${o.aj?"Ajustado a mano":"Sugerido: promedio (o lo presupuestado si es mayor)"}">${o.aj?`<button class="btn ghost pr-rst" data-ca="${esc(o.ca)}" title="Volver al promedio">↻</button>`:""}</td>
+      <td>${o.pend?money(o.pend):'<span class="zero">–</span>'}</td><td><b>${money(o.tot)}</b></td></tr>`; }).join("");
+  app.innerHTML=`
+    <div class="toolbar-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <div class="seg" id="resBase"><button data-b="devengado">Devengado</button><button data-b="caja">Caja</button><button data-b="presupuesto" class="on">Presupuesto</button></div>
+      <label class="mini" style="display:flex;gap:8px;align-items:center">Mes a presupuestar <span class="select-wrap"><select id="prMes">${mopts.join("")}</select></span></label>
+    </div>
+    <div class="grid kpis">
+      ${kpi("Presupuesto del mes",money(T("bud")),"promedio "+refTxt+" (ajustable)","#235347","◇")}
+      ${kpi("Cuentas por pagar",money(T("pend")),pendRows.length+" pagos pendientes hasta "+MES[tMi],"#B42318","◷")}
+      ${kpi("Total que se necesita",money(T("tot")),"presupuesto + lo que ya se debe","#163832","=")}
+      ${kpi("Promedio mensual real",money(T("prom")),"pagado en "+refTxt,"#8EB69B","≈")}
+    </div>
+    <div class="card"><div class="head"><h3>Presupuesto de ${MES[tMi]} ${ty}</h3><span class="mini">${CUR} · los valores se pueden cambiar</span></div>
+      <p class="section-intro">La columna <b>Presupuesto</b> se llena sola con el <b>promedio de lo pagado</b> en ${refTxt} (o con lo <b>Presupuestado</b> registrado en Egresos si es mayor). Cámbiala si quieres ajustar algo: queda guardada para ese mes. <b>Por pagar</b> son los egresos en estado <b>Pendiente</b> hasta ${MES[tMi]}. No incluye Traspasos Internos.</p>
+      <div class="tbl-scroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Cuenta</th>${ref.map(x=>`<th>${MES[x.mi].slice(0,3)} ${String(x.g).slice(2)}</th>`).join("")}<th>Promedio</th><th>Presupuesto</th><th>Por pagar</th><th>Total</th></tr></thead>
+      <tbody>${filas||`<tr><td colspan="8">${emptyState("No hay gastos pagados en los últimos 3 meses ni cuentas por pagar.")}</td></tr>`}</tbody>
+      <tfoot><tr><td style="text-align:left"><b>Total</b></td>${[0,1,2].map(i=>`<td><b>${money(lista.reduce((s,o)=>s+o.ref[i],0))}</b></td>`).join("")}<td><b>${money(T("prom"))}</b></td><td><b>${money(T("bud"))}</b></td><td><b>${money(T("pend"))}</b></td><td><b>${money(T("tot"))}</b></td></tr></tfoot></table></div>
+    </div>`;
+  document.querySelectorAll("#resBase button").forEach(b=>b.addEventListener("click",()=>{STATE.resBase=b.dataset.b;render();}));
+  $("#prMes").addEventListener("change",ev=>{ STATE.presuMes=ev.target.value; render(); });
+  document.querySelectorAll(".pr-in").forEach(inp=>inp.addEventListener("change",()=>{ if(!NM_PRESU) NM_PRESU={ajustes:{}};
+    const v=parseFloat(String(inp.value).replace(/[^0-9.\-]/g,"")); const k=STATE.presuMes+"|"+inp.dataset.ca;
+    if(isNaN(v)) delete NM_PRESU.ajustes[k]; else NM_PRESU.ajustes[k]=v/fx; presuGuardar(); render(); }));
+  document.querySelectorAll(".pr-rst").forEach(b=>b.addEventListener("click",()=>{ if(!NM_PRESU) return; delete NM_PRESU.ajustes[STATE.presuMes+"|"+b.dataset.ca]; presuGuardar(); render(); }));
+}
+/* ============================================================
    V175: los números de los cuadritos (KPI) giran como un contador
    al entrar a cada pestaña (≈3 s) y se detienen en el valor real.
    ============================================================ */
@@ -2842,6 +2917,7 @@ function estadoCuentaHTML(){
     </div>`;
 }
 function renderResumen(){
+  if(STATE.resBase==="presupuesto"){ renderPresupuesto(); return; }
   const rows=egresosBaseRows();
   const cats=pivot(rows);
   const total = rows.reduce((s,e)=>s+(+e.imp||0),0);
@@ -2916,6 +2992,7 @@ function renderResumen(){
       <div class="seg" id="resBase" title="Devengado = mes al que corresponde el gasto (Fecha de Contabilización) · Caja = mes en que se pagó (Fecha de Pago)">
         <button data-b="devengado" class="${(STATE.resBase||'devengado')==='devengado'?'on':''}">Devengado</button>
         <button data-b="caja" class="${STATE.resBase==='caja'?'on':''}">Caja</button>
+        <button data-b="presupuesto" class="${STATE.resBase==='presupuesto'?'on':''}" title="Presupuesto del mes: promedio de los últimos 3 meses (ajustable) + cuentas por pagar">Presupuesto</button>
       </div>
       <div class="seg" id="resClasif" title="Sistema = la clasificación de Egresos ▸ General (Asignación automática + tus correcciones + Plan de Cuentas). Hojas = como se calculaba antes de la V178 (columnas escritas en cada hoja). Úsalo solo para comparar.">
         <button data-c="sis" class="${STATE.clasifHoja?'':'on'}">Clasificación del sistema</button>

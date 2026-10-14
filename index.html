@@ -1475,7 +1475,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V183";
+const APP_VERSION = "V184";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1558,7 +1558,7 @@ let STATE = {
   egresos: DEMO_EGRESOS, ingresos: DEMO_INGRESOS,
   rrhh: DEMO_RRHH, inv: DEMO_INV, pre: DEMO_PRE, dev: DEMO_DEV, mercury: [], bitgo: {cols:[],rows:[]}, plan: [], asignacion: [], asigManual: [], tc: [], tcActual:null,
   live:false, year:null, estado:"__all", view:"month",
-  section:"inicio", egTab:"graficos", egSearch:"", egCat:"__all", egCuenta:"__all", egMes:"__all", egPais:"__all", egEstado:"__all", egTipoPago:"__all", egCuentaK:"__all", egGrupo:"__all", egSubg:"__all", egCA:"__all", egCosto:"__all", egBenef:"__all", egCAest:"__all", egEmpResp:"__all", egTipo:"__all", egCentro:"__all", egFiltersOpen:false, egSel:null,
+  section:"inicio", egTab:"general", egSearch:"", egCat:"__all", egCuenta:"__all", egMes:"__all", egPais:"__all", egEstado:"__all", egTipoPago:"__all", egCuentaK:"__all", egGrupo:"__all", egSubg:"__all", egCA:"__all", egCosto:"__all", egBenef:"__all", egCAest:"__all", egEmpResp:"__all", egTipo:"__all", egCentro:"__all", egFiltersOpen:false, egSel:null,
   egSort:{key:"imp",dir:"desc"},
   mSearch:"", mTab:"graficos", mSort:{key:"fecha",dir:"desc"}, mStatus:"__all", mCuenta:"__all", mMes:"__all", mCanalitica:"__all", mContab:"__all", mCAest:"__all", mDesc:"__all", mSel:null,
   bgSearch:"", bgCat:"__all", bgTab:"graficos", bgSort:{key:"",dir:"desc"}, bgAsset:"__all", bgTipo:"__all", bgWallet:"__all", bgCanalitica:"__all", bgContab:"__all", bgCAest:"__all", bgComent:"__all", bgSel:null,
@@ -2566,7 +2566,7 @@ function nmOdometro(forzar){
 function SUBTABS_MAP(){ return {
   resumen:{key:"resTab", items:[["resumen","Resumen"],["eresultados","Estado de Resultados"],["graficos","Gráficos"],["comparativo","Comparativo"],["estadocuenta","Estado de Cuenta"]]},
   ingresos:{key:"ingTab", items:[["general","General"]].concat((typeof ING_GW!=="undefined"?ING_GW:[]).map(g=>[g,g]))},
-  egresos:{key:"egTab", items:[["lista","Lista"],["general","General"],["proveedor","Por Proveedor"],["graficos","Gráficos"]]},
+  egresos:{key:"egTab", items:[["general","General"],["proveedor","Por Proveedor"],["graficos","Gráficos"]]},
   costos:{key:"cosTab", items:[["lista","Lista de Costos"],["costingreso","Costos por Ingreso",{key:"cosProv",items:PNL_TABS.map(t=>[t,t])}],["pagados","Costos Pagados"],["detalle","Detalle por proveedor"],["graficos","Gráficos"]]},
   cxp:{key:"cxpTab", items:[["graficos","Gráficos"],["lista","Lista"],["presupuesto","Presupuesto"]]},
   bancos:{key:"bancosTab", items:[["mercury","Mercury"],["bitgo","BitGo"],["tesabiz","Tesabiz"],["otras","Otras Cuentas"]]},
@@ -3801,12 +3801,13 @@ function reglasCostosIndex(){
 function reglaCosto(keyText){ return reglasCostosIndex()[_normTxt(keyText)]||null; }
 
 function renderEgresos(){
-  if(STATE.egTab==="general"){ renderEgresosGeneral(); return; }
-  if(STATE.egTab==="proveedor"){ renderEgresosProveedor(); return; }
+  const enBanco=STATE.section==="bancos";   // V184: la "Lista" ahora vive en Bancos ▸ Tesabiz / Otras Cuentas
+  if(!enBanco && (STATE.egTab==="general"||STATE.egTab==="lista"||!STATE.egTab)){ renderEgresosGeneral(); return; }
+  if(!enBanco && STATE.egTab==="proveedor"){ renderEgresosProveedor(); return; }
   ensureHuellas();
   if(!STATE.egSel) STATE.egSel=new Set();
 
-  const all=STATE.egresos;
+  const all=enBanco?(STATE.egresos||[]).filter(r=>STATE.bancosTab==="tesabiz"?esPagoTesabiz(r):!esPagoTesabiz(r)):STATE.egresos;
   let rows=all.filter(r=> STATE.year==="__all"||r.g===STATE.year);
   if(STATE.egCat!=="__all")    rows=rows.filter(r=>catLabel(r.cp)===STATE.egCat);
   if(STATE.egCuenta!=="__all") rows=rows.filter(r=>String(r.cc||"")===STATE.egCuenta);
@@ -3849,7 +3850,7 @@ function renderEgresos(){
   const lTipo=[...new Set(base.map(e=>{const g=reglaCosto(e.ben);return (g&&g.tipo)||"";}).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const lCentro=[...new Set(base.map(e=>{const g=reglaCosto(e.ben);return (g&&g.centro)||"";}).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
 
-  const isGraf = STATE.egTab==="graficos";
+  const isGraf = !enBanco && STATE.egTab==="graficos";
   const kpisHTML=`<div class="grid kpis">
       ${kpiCol(
         kpi("Egresos (USD)",fmt(total),rows.length+" movimientos","#235347","◆"),
@@ -6799,15 +6800,31 @@ function renderBancos(){
         <button data-t="otras" class="${tab==='otras'?'on':''}">Otras Cuentas</button>
       </div>
     </div>`;
-  const app=$("#app"); if(app){ app.insertAdjacentHTML("afterbegin", seg);
+  const app=$("#app"); if(app){ app.insertAdjacentHTML("afterbegin", seg+((tab==="tesabiz"||tab==="otras")?bancosResumenHTML(tab):""));
     document.querySelectorAll("#bancosTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.bancosTab=b.dataset.t;render();})); }
 }
-function renderBancosTesabiz(){
+/* V184: pagos hechos desde Tesabiz (se reconocen por "Tesabiz" en Tipo de Pago, Pagado por, Concepto o Comentarios) */
+function esPagoTesabiz(r){ return /tesabiz/i.test([r.tipo,r.pagadopor,r.con,r.coment,r.cuenta].map(x=>String(x||"")).join(" ")); }
+function renderBancosLista(intro){ renderEgresos(); const app=$("#app"); if(!app) return; const p=$("#egTabs"); if(p) p.remove();
+  app.insertAdjacentHTML("afterbegin",`<p class="section-intro">${intro}</p>`); }
+function bancosResumenHTML(tab){
+  let ab=0, de=0, n=0; const usd=x=>(x<0?"-$":"$")+f2(Math.abs(x)); const yOk=g=>STATE.year==="__all"||g===STATE.year;
+  if(tab==="mercury"){ (STATE.mercury||[]).forEach(r=>{ if(!yOk(r.g)) return; const v=+r.monto||0; if(v>0) ab+=v; else de+=-v; n++; }); }
+  else if(tab==="bitgo"){ const bc=bitgoCols(); const bg=STATE.bitgo||{rows:[]}; if(bc.amtCol) (bg.rows||[]).forEach(r=>{ const d=bc.dateCol?new Date(r[bc.dateCol]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const v=toNum(r[bc.amtCol]); if(!v) return; if(v>0) ab+=v; else de+=-v; n++; }); }
+  else { (STATE.egresos||[]).filter(r=>yOk(r.g)&&(tab==="tesabiz"?esPagoTesabiz(r):!esPagoTesabiz(r))).forEach(r=>{ de+=(r.impUSD!=null?(+r.impUSD||0):(+r.imp||0)); n++; }); }
+  return `<div class="caja" style="margin-bottom:16px"><div class="c"><div class="l">Abonos (+) · entradas</div><div class="v" style="color:var(--emerald)">${usd(ab)}</div></div>
+    <div class="c"><div class="l">Débitos (−) · salidas</div><div class="v neg">${usd(de)}</div></div>
+    <div class="c hi"><div class="l">Neto del período</div><div class="v${ab-de<0?" neg":""}">${usd(ab-de)}</div></div>
+    <div class="c"><div class="l">Movimientos</div><div class="v">${n}</div></div></div>`;
+}
+function renderBancosTesabiz(){ renderBancosLista('Pagos hechos desde <b>Tesabiz</b> (de tu lista de Egresos). Todos son <b>débitos</b> (salidas). Cuando tengamos el extracto de Tesabiz, aquí también se verán los abonos.'); }
+function renderBancosTesabizViejo(){
   $("#app").innerHTML=`
     <p class="section-intro">Cuenta <b>Tesabiz</b> como <b>banco</b>: aquí irá el detalle de <b>lo que ingresa</b> y <b>lo que sale</b> de esta cuenta (movimientos de la cuenta), no las ganancias. Es distinto a la pestaña <b>Ingresos → Tesabiz</b>, que solo muestra el ingreso por ganancia.</p>`+
     emptyState('Aún no está conectado el <b>extracto de la cuenta Tesabiz</b> (entradas y salidas). Dime de qué <b>hoja del Google Sheet</b> leer los movimientos de esta cuenta (y qué columnas son fecha, concepto, entrada/salida) y lo conecto con el mismo diseño de Mercury/BitGo.');
 }
-function renderOtrasCuentas(){
+function renderOtrasCuentas(){ renderBancosLista('<b>Otras cuentas</b>: los pagos de tu lista de Egresos que no salieron de Mercury, BitGo ni Tesabiz (pagos de los CEOs con sus cuentas o tarjetas, etc.). Aquí registras y clasificas esos gastos.'); }
+function renderOtrasCuentasViejo(){
   $("#app").innerHTML=`
     <p class="section-intro">Otras cuentas bancarias o de pago.</p>`+
     emptyState('Aún no hay <b>otras cuentas</b> configuradas. Aquí podrás mostrar el detalle de cuentas adicionales cuando definas de qué hoja del Google Sheet leerlas. Dime el nombre de la hoja y lo conecto.');

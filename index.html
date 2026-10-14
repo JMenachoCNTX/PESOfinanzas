@@ -1475,7 +1475,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V185";
+const APP_VERSION = "V186";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -7218,6 +7218,16 @@ function registrarCotizacionHoy(){
   if(!pin){ showLogin(); return; }
   if(!(window.google&&google.script&&google.script.run)){ m.className="msg err"; m.textContent="Debe abrirse desde el enlace de Apps Script."; return; }
   const b=$("#tcReg"); b.textContent="Registrando…"; b.disabled=true; m.className="msg"; m.textContent="";
+  if(nmFbActivo()){
+    google.script.run.withSuccessHandler(function(c){
+        if(!c||c.error){ b.textContent="Registrar cotización de hoy"; b.disabled=false; m.className="msg err"; m.textContent=(c&&c.error)||"No se pudo obtener la cotización."; return; }
+        STATE.tcActual=c;
+        tcGuardarHoyFB(c).then(f=>{ b.textContent="Registrar cotización de hoy"; b.disabled=false; m.className="msg ok"; m.textContent="Cotización de "+f.fecha+" guardada en el sistema ✓ (Venta Bs "+f2(f.venta)+")"; RATE=tcRateLatest(); render(); })
+          .catch(e=>{ b.textContent="Registrar cotización de hoy"; b.disabled=false; m.className="msg err"; m.textContent=(e&&e.message)||"No se pudo guardar."; }); })
+      .withFailureHandler(function(e){ b.textContent="Registrar cotización de hoy"; b.disabled=false; m.className="msg err"; m.textContent=(e&&e.message)||"Error."; })
+      .obtenerCotizacion(pin);
+    return;
+  }
   google.script.run
     .withSuccessHandler(function(res){ b.textContent="Registrar cotización de hoy"; b.disabled=false;
       if(!res||res.error){ m.className="msg err"; m.textContent=(res&&res.error)||"No se pudo registrar."; return; }
@@ -8124,6 +8134,7 @@ async function nmFbAplicarDatos(res){
   try{ const d=await NMFB.cargarDatos(res||{}); STATE.tareas=d.tareas; STATE.asigManual=d.asigManual; STATE._amSrc=null; STATE._amIdx=null; STATE.fbErr=null; }
   catch(e){ console.error(e); STATE.fbErr="No se pudieron leer las tareas desde Firebase: "+(e&&e.message||e); }
   try{ await nmFbCargarAjustes(); }catch(e){ console.error("ajustes Firebase",e); }
+  try{ tcAutoHoy(); }catch(_){}
 }
 /* V185: Mercury (ya no se actualiza), Inversiones, Préstamos y Devoluciones viven en Firebase.
    La primera vez se copian desde Google Sheets; desde entonces el sistema ignora esas hojas. */
@@ -8138,7 +8149,25 @@ async function nmFbHistoricos(res){
     }catch(e){ console.error("histórico "+n,e); }
   }
   STATE.histRaw={inv:res.inv||[],pre:res.pre||[],devoluciones:res.devoluciones||[]};
+  // V186: Tipo de Cambio diario (antes hojas TC2024/TC2025/TC2026) → Firebase. Se juntan por fecha.
+  try{ const fb=(await NMFB.histGet("tc"))||[]; const sh=Array.isArray(res.tc)?res.tc:[];
+    const by={}; fb.forEach(r=>{ if(r&&r.fecha) by[String(r.fecha).slice(0,10)]=r; });
+    let nuevos=0; sh.forEach(r=>{ const f=r&&r.fecha?String(r.fecha).slice(0,10):""; if(!f) return; const a=by[f]; if(!a || (a.venta!==r.venta && r.venta!=null)){ by[f]=r; nuevos++; } });
+    const all=Object.keys(by).sort().map(k=>by[k]);
+    if(nuevos && NMFB.esAdmin()) await NMFB.histSet("tc",all);
+    if(all.length){ res.tc=all; STATE.histFB.tc=true; }
+  }catch(e){ console.error("TC Firebase",e); }
 }
+/* V186: guarda la cotización de HOY (Binance P2P, vía el servidor) en Firebase */
+function tcHoyISO(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function tcGuardarHoyFB(c){ if(!nmFbActivo()||!NMFB.esAdmin()||!c||c.venta==null) return Promise.resolve(null);
+  const hoy=tcHoyISO(); const fila={fecha:hoy,venta:c.venta,compra:c.compra,promedio:c.promedio,fuente:c.fuente||"Binance P2P USDT/BOB",actualizado:c.actualizado||""};
+  return NMFB.histGet("tc").then(rows=>{ rows=(rows||[]).filter(r=>String(r.fecha).slice(0,10)!==hoy); rows.push(fila); rows.sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+    return NMFB.histSet("tc",rows).then(()=>{ STATE.tc=mapTC(rows); return fila; }); }); }
+function tcAutoHoy(){ if(!nmFbActivo()||!NMFB.esAdmin()||STATE._tcAutoHecho) return; STATE._tcAutoHecho=true;
+  const hoy=tcHoyISO(); if((STATE.tc||[]).some(r=>String(r.fecha).slice(0,10)===hoy)) return;
+  let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){} if(!pin||!(window.google&&google.script&&google.script.run)) return;
+  google.script.run.withSuccessHandler(c=>{ if(c&&!c.error){ STATE.tcActual=STATE.tcActual||c; tcGuardarHoyFB(c).catch(()=>{}); } }).withFailureHandler(()=>{}).obtenerCotizacion(pin); }
 /* Editor simple para Inversiones / Préstamos / Devoluciones (agregar, editar, borrar) */
 const HIST_CAMPOS={
   inv:[["fechadeinversion","Fecha","date"],["concepto","Concepto"],["inversionista","Inversionista"],["importe","Importe","num"],["moneda","Moneda"],["empresa","Empresa"],["comentarios","Comentarios"]],

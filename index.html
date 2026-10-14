@@ -1080,6 +1080,18 @@ html.tema-oscuro .ro-foto{box-shadow:0 24px 60px -24px rgba(0,0,0,.8)}
 .refresh-overlay .ro-txt{margin-top:-6px}
 @keyframes ro-foto{from{transform:translateY(0) scale(1)}to{transform:translateY(-6px) scale(1.012)}}
 @media(prefers-reduced-motion:reduce){.ro-foto{animation:none}}
+
+/* ===== V169: usuarios ===== */
+.us-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,.7fr) minmax(0,1fr) auto;gap:10px;align-items:end}
+.us-form label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+.us-form input,.us-form select,.us-cl input{width:100%;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 11px;font:inherit;font-size:13.5px}
+.us-cl{display:flex;gap:6px;align-items:center}
+.us-cl .btn{flex:none;padding:9px 12px}
+.us-btn .btn{padding:10px 16px}
+@media(max-width:1000px){.us-form{grid-template-columns:1fr 1fr}.us-btn{grid-column:1/-1}}
+.us-clave{font:600 14px var(--display);letter-spacing:.06em;font-variant-numeric:tabular-nums}
+.nm-clave-big{font:700 28px var(--display);letter-spacing:.08em;text-align:center;background:var(--field);border:1px dashed var(--verde-300);border-radius:12px;padding:16px;margin:14px 0 18px;color:var(--text)}
+#fbFields .field input{text-align:left;letter-spacing:.02em}
 /* ===================== MODO OSCURO ===================== */
 html.tema-oscuro{color-scheme:dark;
   --fondo-marca:#051F20; --field:#163832; --error:#F97066; --aviso:#FDB022;
@@ -1147,6 +1159,7 @@ html.mudado body>*{display:none!important}
     <button data-s="calendario">Calendario</button>
     <button data-s="tareas">Tareas</button>
     <button data-s="archivos">Archivos</button>
+    <button data-s="usuarios" style="display:none">Usuarios</button>
     <button data-s="plan">Plan de Cuentas</button>
     <button data-s="tc">Tipos de Cambio</button>
     <button data-s="ia">IA · Asistente</button>
@@ -1229,10 +1242,14 @@ html.mudado body>*{display:none!important}
       <div class="modal login-card glass">
         <img class="login-logo" id="loginLogo" alt="NUMMEROS">
         <h2>Bienvenido de nuevo</h2>
-        <p class="lead">Ingresa tu clave para ver las finanzas de PE$O.</p>
-        <div class="field">
+        <p class="lead" id="loginLead">Ingresa tu clave para ver las finanzas de PE$O.</p>
+        <div class="field" id="pinField">
           <label>Clave de acceso</label>
           <input id="pin" type="password" placeholder="••••••••" autocomplete="off">
+        </div>
+        <div id="fbFields" hidden>
+          <div class="field"><label for="fbEmail">Correo</label><input id="fbEmail" type="email" placeholder="tu correo" autocomplete="username" style="text-align:left;letter-spacing:0"></div>
+          <div class="field"><label for="fbClave">Clave de acceso</label><input id="fbClave" type="password" placeholder="PESO-XXXX-XXXX" autocomplete="current-password"></div>
         </div>
         <div class="login-err" id="loginErr"></div>
         <button class="btn primary" id="loginBtn" style="width:100%;justify-content:center;padding:12px">Entrar</button>
@@ -1394,7 +1411,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V168";
+const APP_VERSION = "V169";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2274,7 +2291,7 @@ function render(){
   CUR = STATE.currency||"USD";
   RATE = tcRateLatest();
   if(CUR==="BOB" && !RATE) CUR="USD";
-  const map={archivos:renderArchivos,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
+  const map={usuarios:renderUsuarios,archivos:renderArchivos,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
     socios:renderSociosCapital,inversiones:renderInversiones,prestamos:renderPrestamos,devoluciones:renderDevoluciones,rendiciones:renderRendiciones,ingresos:renderIngresosTab,costos:renderCostos,bancos:renderBancos,mercury:renderMercury,bitgo:renderBitgo,plan:renderPlan,tc:renderTC,ia:renderIA,cierre:renderCierre,calendario:renderCalendario,tareas:renderTareas};
   try{ (map[STATE.section]||renderResumen)(); }
   catch(err){
@@ -2570,14 +2587,14 @@ function applyFilterVisibility(){
   const s=STATE.section;
   const showEstado = (s==="resumen");
   const showView = (s==="resumen");
-  const showYear = (s!=="rrhh" && s!=="bitgo" && s!=="plan" && s!=="tc" && s!=="inicio" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="cierre" && s!=="calendario" && s!=="tareas" && s!=="archivos");
-  const showCur = (s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="inicio" && s!=="rendiciones" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos");
+  const showYear = (s!=="rrhh" && s!=="bitgo" && s!=="plan" && s!=="tc" && s!=="inicio" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="cierre" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="usuarios");
+  const showCur = (s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="inicio" && s!=="rendiciones" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="usuarios");
   const gr=(id,on)=>{ const e=$("#"+id); if(e) e.style.display=on?"":"none"; };
   gr("gfYear",showYear); gr("gfEstado",showEstado); gr("gfCur",showCur); gr("gfView",showView);
   const anyG = showYear||showEstado||showCur||showView;
   const gb=$("#gFiltBtn"); if(gb) gb.style.display = anyG?"":"none";
   if(!anyG){ const gp=$("#gFilters"); if(gp) gp.hidden=true; }
-  const showEmp = (s!=="inicio" && s!=="flujo" && s!=="flujo2" && s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos");
+  const showEmp = (s!=="inicio" && s!=="flujo" && s!=="flujo2" && s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="usuarios");
   const eb=$("#empBtn"); if(eb) eb.style.display = showEmp?"":"none";
 }
 
@@ -3380,6 +3397,7 @@ function caSetOverride(fuente, hu, ca){
     if(bulk){ const s={Egresos:STATE.egSel,Mercury:STATE.mSel,BitGo:STATE.bgSel}[fuente]; if(s) s.clear(); }
     caClosePopover(); render();
   };
+  if(nmFbActivo()){ caClosePopover(); NMFB.asigGuardar(hus.map(h=>({fuente:fuente,huella:h,ca:ca}))).then(apply).catch(e=>alert("No se pudo guardar la asignación: "+((e&&e.message)||e))); return; }
   let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
   if(window.google && google.script && google.script.run){
     caClosePopover();
@@ -5321,7 +5339,7 @@ function renderTareas(){
     </div>`;
   const ed=STATE.taEdit?all.find(x=>String(x.id)===String(STATE.taEdit)):null;
   const F=STATE.taForm;
-  app.innerHTML=`
+  app.innerHTML=`${STATE.fbErr?`<div class="msg err" style="display:block">${esc(STATE.fbErr)}</div>`:""}
     <div class="grid kpis">
       ${kpi("Pendientes",String(nPend),"por hacer","#235347","✓")}
       ${kpi("Vencidas",String(nVenc),nVenc?"revisar hoy":"todo al día","#B42318","!")}
@@ -5458,6 +5476,7 @@ function tareaGuardar(t){
     const row={id:id||("T"+Date.now()), tarea:t.tarea||"", estado:t.estado||"Pendiente", prioridad:t.prioridad||"Media", vence:t.vence||"", notas:t.notas||"", creado:(t.creado||"")};
     if(i>=0) arr[i]=Object.assign({},arr[i],row); else arr.push(row);
     STATE.tareas=arr; render(); };
+  if(nmFbActivo()){ NMFB.tareaGuardar(Object.assign({},t,{id:t.id||("T"+Date.now())})).then(o=>apply(o)).catch(e=>alert("No se pudo guardar la tarea: "+((e&&e.message)||e))); return; }
   let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
   if(window.google&&google.script&&google.script.run){
     google.script.run.withSuccessHandler(function(res){ if(res&&res.error){alert("No se pudo guardar: "+res.error);return;} apply(res); })
@@ -5467,6 +5486,7 @@ function tareaGuardar(t){
 function tareaBorrar(id){
   id=String(id||"");
   const apply=()=>{ STATE.tareas=(STATE.tareas||[]).filter(x=>String(x.id)!==id); render(); };
+  if(nmFbActivo()){ NMFB.tareaBorrar(id).then(apply).catch(e=>alert("No se pudo borrar: "+((e&&e.message)||e))); return; }
   let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
   if(window.google&&google.script&&google.script.run){
     google.script.run.withSuccessHandler(function(res){ if(res&&res.error){alert("No se pudo borrar: "+res.error);return;} apply(); })
@@ -5627,7 +5647,7 @@ function ensureSectionPdfButton(){
   const btn=document.getElementById("topPdfBtn"); if(!btn) return;
   const app=document.getElementById("app");
   const hayContenido = !!app && (app.querySelector("table") || app.querySelector(".card.kpi") || app.querySelector(".grid.kpis"));
-  const mostrar = STATE.section!=="inicio" && STATE.section!=="tareas" && STATE.section!=="archivos" && hayContenido;
+  const mostrar = STATE.section!=="inicio" && STATE.section!=="tareas" && STATE.section!=="archivos" && STATE.section!=="usuarios" && hayContenido;
   btn.hidden=!mostrar;
   if(!mostrar) return;
   const esCostos = (STATE.section==="costos");
@@ -7428,7 +7448,6 @@ function mapRRHH(raw){ return raw.map(r=>{ const o=pick(r,M_RRHH);
   o.exp=String(_rhCol(r,["exp",/expedido|extension/])||"").trim();
   o.nac=gd(_rhCol(r,[/nacimiento/])).iso||"";
   o.retiro=gd(_rhCol(r,[/retiro|fechadesalida|fechadebaja|^baja$|cese|desvinc|fechafin|finalizacion|fechadeegreso/])).iso||"";
-  o.jornada=String(_rhCol(r,[/jornada|modalidad/])||"").trim();
   o.sexo=String(_rhCol(r,["sexo",/genero/])||"").trim();
   o.moneda=String(_rhCol(r,["moneda"])||"").trim();
   return o; }).filter(o=>o.nombre); }
@@ -7521,6 +7540,223 @@ const M_PLAN={codigo:"codigo",tipo:"tipo",categoria:"categoria",nombre:"nombre",
 function mapPlan(raw){ return raw.map(r=>{ const o=pick(r,M_PLAN);
   return {codigo:String(o.codigo||""),tipo:o.tipo||"",categoria:o.categoria||"",nombre:o.nombre||"",origen:o.origen||"",estado:o.estado||"Activa"};
 }).filter(o=> o.codigo||o.nombre); }
+
+/* ============================================================
+   FIREBASE (V169): usuarios con correo + clave, Tareas y Asignación Manual
+   Mientras FIREBASE_CONFIG esté vacío, el sistema funciona como antes (clave única).
+   ============================================================ */
+const FIREBASE_CONFIG = null;   // ← se completa con el bloque firebaseConfig del proyecto "nummeros-peso"
+const NMFB={
+  on: !!(FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey),
+  db:null, auth:null, sesion:null, _ini:null,
+  init(){ if(!this.on) return Promise.resolve(false); if(this._ini) return this._ini;
+    const V="10.14.1", base="https://www.gstatic.com/firebasejs/"+V+"/";
+    const load=src=>new Promise((ok,ko)=>{ const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=()=>ko(new Error("No se pudo cargar Firebase")); document.head.appendChild(s); });
+    this._ini=load(base+"firebase-app-compat.js").then(()=>Promise.all([load(base+"firebase-auth-compat.js"),load(base+"firebase-firestore-compat.js")])).then(()=>{
+      const app=firebase.apps.length?firebase.app():firebase.initializeApp(FIREBASE_CONFIG);
+      this.auth=app.auth(); this.db=app.firestore(); return true; });
+    return this._ini; },
+  async anon(){ await this.init(); if(this.auth.currentUser) return this.auth.currentUser;
+    await new Promise(ok=>{ const u=this.auth.onAuthStateChanged(()=>{ u(); ok(); }); });
+    if(!this.auth.currentUser) await this.auth.signInAnonymously(); return this.auth.currentUser; },
+  async inicialHecha(){ await this.anon(); const d=await this.db.doc("config/inicial").get(); return d.exists; },
+  _norm(e){ return String(e||"").trim().toLowerCase(); },
+  async login(email,clave){
+    email=this._norm(email); clave=String(clave||"").trim();
+    if(!email||!clave) throw new Error("Escribe tu correo y tu clave de acceso.");
+    if(!/^[A-Za-z0-9._-]{6,60}$/.test(clave)) throw new Error("Correo o clave incorrectos.");
+    const u=await this.anon();
+    const c=await this.db.doc("claves/"+clave).get();
+    if(!c.exists || this._norm(c.data().email)!==email) throw new Error("Correo o clave incorrectos.");
+    if(c.data().activo!==true) throw new Error("Tu acceso está desactivado. Habla con el administrador.");
+    await this.db.doc("sesiones/"+u.uid).set({email:email,clave:clave,desde:new Date().toISOString(),navegador:navigator.userAgent.slice(0,120)});
+    const ap=await this.db.doc("config/apps").get();
+    this.sesion={email:email,clave:clave,rol:c.data().rol||"usuario",nombre:c.data().nombre||email};
+    try{ localStorage.setItem("nm_fb_email",email); }catch(_){}
+    return (ap.exists&&ap.data().pin)||"";
+  },
+  async restaurar(){ const u=await this.anon(); const s=await this.db.doc("sesiones/"+u.uid).get(); if(!s.exists) return null;
+    try{ return await this.login(s.data().email,s.data().clave); }catch(e){ try{ await this.db.doc("sesiones/"+u.uid).delete(); }catch(_){} return null; } },
+  async logout(){ try{ const u=this.auth&&this.auth.currentUser; if(u) await this.db.doc("sesiones/"+u.uid).delete(); }catch(_){} this.sesion=null; },
+  async setupInicial(email,nombre,pin){
+    const u=await this.anon(); const clave=nmClaveNueva(); email=this._norm(email);
+    const b=this.db.batch(); const ahora=new Date().toISOString();
+    b.set(this.db.doc("config/inicial"),{email:email,fecha:ahora});
+    b.set(this.db.doc("claves/"+clave),{email:email,nombre:nombre||email,rol:"admin",activo:true,creado:ahora,por:email});
+    b.set(this.db.doc("config/apps"),{pin:pin,actualizado:ahora});
+    await b.commit(); await this.login(email,clave); return clave; },
+  esAdmin(){ return !!(this.sesion&&this.sesion.rol==="admin"); },
+  // ---- usuarios ----
+  async usuarios(){ const q=await this.db.collection("claves").get(); return q.docs.map(d=>Object.assign({clave:d.id},d.data())).sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre))); },
+  async usuarioGuardar(o,claveAnterior){ const ahora=new Date().toISOString();
+    const data={email:this._norm(o.email),nombre:String(o.nombre||"").trim()||this._norm(o.email),rol:o.rol==="admin"?"admin":"usuario",activo:o.activo!==false,actualizado:ahora,por:this.sesion.email};
+    if(claveAnterior && claveAnterior!==o.clave){ const b=this.db.batch(); const prev=await this.db.doc("claves/"+claveAnterior).get();
+      b.set(this.db.doc("claves/"+o.clave),Object.assign({creado:(prev.exists&&prev.data().creado)||ahora},data)); b.delete(this.db.doc("claves/"+claveAnterior)); await b.commit(); }
+    else { if(!claveAnterior){ data.creado=ahora; const ex=await this.db.doc("claves/"+o.clave).get(); if(ex.exists) throw new Error("Esa clave ya está en uso. Genera otra."); }
+      await this.db.doc("claves/"+o.clave).set(data,{merge:true}); } },
+  async usuarioBorrar(clave){ await this.db.doc("claves/"+clave).delete(); },
+  async appsPin(){ const d=await this.db.doc("config/apps").get(); return d.exists?(d.data().pin||""):""; },
+  async appsPinSet(pin){ await this.db.doc("config/apps").set({pin:pin,actualizado:new Date().toISOString()},{merge:true}); },
+  // ---- datos ----
+  _id(fuente,huella){ let h1=0xdeadbeef, h2=0x41c6ce57; const str=fuente+"\u0000"+huella;
+    for(let i=0;i<str.length;i++){ const ch=str.charCodeAt(i); h1=Math.imul(h1^ch,2654435761); h2=Math.imul(h2^ch,1597334677); }
+    h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909); h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
+    return String(fuente).replace(/[^A-Za-z0-9]/g,"")+"_"+(h2>>>0).toString(36)+(h1>>>0).toString(36); },
+  async _lote(ops){ for(let i=0;i<ops.length;i+=400){ const b=this.db.batch(); ops.slice(i,i+400).forEach(f=>f(b)); await b.commit(); } },
+  async cargarDatos(desdeSheets){
+    const mig=await this.db.doc("config/migracion").get(); const M=mig.exists?mig.data():{};
+    const ahora=new Date().toISOString(), por=this.sesion.email, upd={};
+    if(!M.tareas){ const ts=(desdeSheets.tareas||[]).filter(t=>t&&(t.tarea||t.id));
+      await this._lote(ts.map(t=>b=>{ const id=String(t.id||("T"+Date.now()+Math.random().toString(36).slice(2,6))).replace(/\//g,"-");
+        b.set(this.db.doc("tareas/"+id),{id:id,tarea:String(t.tarea||""),estado:String(t.estado||"Pendiente"),prioridad:String(t.prioridad||"Media"),vence:String(t.vence||"").slice(0,10),notas:String(t.notas||""),creado:String(t.creado||"").slice(0,10),actualizado:ahora,por:por}); }));
+      upd.tareas=true; upd.tareasN=ts.length; upd.tareasFecha=ahora; }
+    if(!M.asig){ const as=(desdeSheets.asigManual||[]).filter(a=>a&&a.fuente&&a.huella&&a.ca);
+      await this._lote(as.map(a=>b=>{ b.set(this.db.doc("asignacionManual/"+this._id(a.fuente,a.huella)),{fuente:String(a.fuente),huella:String(a.huella),ca:String(a.ca),actualizado:ahora,por:por}); }));
+      upd.asig=true; upd.asigN=as.length; upd.asigFecha=ahora; }
+    if(Object.keys(upd).length) await this.db.doc("config/migracion").set(upd,{merge:true});
+    const [qt,qa]=await Promise.all([this.db.collection("tareas").get(),this.db.collection("asignacionManual").get()]);
+    return {tareas:qt.docs.map(d=>Object.assign({id:d.id},d.data())), asigManual:qa.docs.map(d=>{ const x=d.data(); return {fuente:x.fuente,huella:x.huella,ca:x.ca}; })};
+  },
+  async tareaGuardar(t){ const id=String(t.id||("T"+Date.now())).replace(/\//g,"-");
+    const o={id:id,tarea:String(t.tarea||""),estado:String(t.estado||"Pendiente"),prioridad:String(t.prioridad||"Media"),vence:String(t.vence||"").slice(0,10),notas:String(t.notas||""),creado:String(t.creado||_isoHoy()),actualizado:new Date().toISOString(),por:this.sesion.email};
+    await this.db.doc("tareas/"+id).set(o); return o; },
+  async tareaBorrar(id){ await this.db.doc("tareas/"+String(id).replace(/\//g,"-")).delete(); },
+  async asigGuardar(items){ const ahora=new Date().toISOString(), por=this.sesion.email;
+    await this._lote(items.map(it=>b=>{ const ref=this.db.doc("asignacionManual/"+this._id(it.fuente,it.huella));
+      if(it.ca) b.set(ref,{fuente:String(it.fuente),huella:String(it.huella),ca:String(it.ca),actualizado:ahora,por:por}); else b.delete(ref); })); }
+};
+function nmClaveNueva(){ const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; const r=new Uint32Array(8); try{ crypto.getRandomValues(r); }catch(_){ for(let i=0;i<8;i++) r[i]=Math.floor(Math.random()*1e9); }
+  let s=""; for(let i=0;i<8;i++){ s+=A[r[i]%A.length]; if(i===3) s+="-"; } return "PESO-"+s; }
+function nmFbActivo(){ return NMFB.on && !!NMFB.sesion; }
+/* Aplica Tareas y Asignación Manual guardadas en Firebase (y copia la primera vez lo que había en Sheets) */
+async function nmFbAplicarDatos(res){
+  if(!nmFbActivo()) return;
+  try{ const d=await NMFB.cargarDatos(res||{}); STATE.tareas=d.tareas; STATE.asigManual=d.asigManual; STATE._amSrc=null; STATE._amIdx=null; STATE.fbErr=null; }
+  catch(e){ console.error(e); STATE.fbErr="No se pudieron leer las tareas desde Firebase: "+(e&&e.message||e); }
+}
+
+/* ---------- Pantalla de acceso con correo + clave ---------- */
+function nmLoginModo(){
+  const card=document.querySelector(".login-card"); if(!card) return;
+  const fbBox=$("#fbFields"), pinField=$("#pinField");
+  if(!NMFB.on){ if(fbBox) fbBox.hidden=true; if(pinField) pinField.hidden=false; return; }
+  if(pinField) pinField.hidden=true; if(fbBox) fbBox.hidden=false;
+  const em=$("#fbEmail"); try{ if(em && !em.value) em.value=localStorage.getItem("nm_fb_email")||""; }catch(_){}
+}
+async function nmEntrarFB(){
+  const btn=$("#loginBtn"), err=$("#loginErr"), card=document.querySelector(".login-card");
+  const fail=(m)=>{ if(card) card.classList.remove("loading"); btn.textContent="Entrar"; btn.disabled=false; err.textContent=m; err.style.display="block"; };
+  err.style.display="none"; btn.disabled=true; if(card) card.classList.add("loading");
+  try{
+    if(!(await NMFB.inicialHecha())){ if(card) card.classList.remove("loading"); btn.disabled=false; nmSetupInicialUI(); return; }
+    const pin=await NMFB.login(($("#fbEmail")||{}).value,($("#fbClave")||{}).value);
+    if(!pin){ fail("Falta la clave del servidor. El administrador debe configurarla en la pestaña Usuarios."); return; }
+    conectar(pin);
+  }catch(e){ fail((e&&e.message)||"No se pudo entrar."); }
+}
+function nmSetupInicialUI(){
+  const ov=document.createElement("div"); ov.className="overlay show"; ov.style.zIndex="400";
+  ov.innerHTML=`<div class="modal"><h2>Configuración inicial</h2>
+    <p class="lead">Es la primera vez que se usa el acceso con usuarios. Crea tu cuenta de <b>administrador</b>. Para confirmar que eres tú, escribe la clave del sistema que usabas hasta ahora.</p>
+    <div class="field"><label>Tu nombre</label><input id="siNom" autocomplete="name"></div>
+    <div class="field"><label>Tu correo</label><input id="siEmail" type="email" autocomplete="email"></div>
+    <div class="field"><label>Clave del sistema que usabas hasta ahora</label><input id="siPin" type="password" autocomplete="off"></div>
+    <div class="msg" id="siMsg"></div>
+    <div class="modal-actions"><button class="btn" id="siCancel">Cancelar</button><button class="btn primary" id="siOk">Crear administrador</button></div></div>`;
+  document.body.appendChild(ov);
+  const m=ov.querySelector("#siMsg");
+  ov.querySelector("#siCancel").onclick=()=>ov.remove();
+  ov.querySelector("#siOk").onclick=()=>{ const nom=ov.querySelector("#siNom").value.trim(), em=ov.querySelector("#siEmail").value.trim(), pin=ov.querySelector("#siPin").value.trim();
+    if(!em||!pin){ m.className="msg err"; m.textContent="Escribe tu correo y la clave del sistema."; return; }
+    const b=ov.querySelector("#siOk"); b.disabled=true; b.textContent="Verificando…"; m.className="msg"; m.textContent="";
+    google.script.run.withSuccessHandler(async function(res){
+      if(!res||res.error){ b.disabled=false; b.textContent="Crear administrador"; m.className="msg err"; m.textContent="La clave del sistema no es correcta."; return; }
+      try{ const clave=await NMFB.setupInicial(em,nom,pin);
+        ov.querySelector(".modal").innerHTML=`<h2>¡Listo!</h2><p class="lead">Tu cuenta de administrador está creada. Esta es <b>tu clave de acceso</b> (también podrás verla en la pestaña Usuarios):</p>
+          <div class="nm-clave-big">${esc(clave)}</div><div class="modal-actions"><button class="btn" id="siCopy">Copiar</button><button class="btn primary" id="siGo">Entrar al sistema</button></div>`;
+        ov.querySelector("#siCopy").onclick=()=>{ try{ navigator.clipboard.writeText(clave); }catch(_){} };
+        ov.querySelector("#siGo").onclick=()=>{ ov.remove(); const e1=$("#fbEmail"), c1=$("#fbClave"); if(e1) e1.value=em; if(c1) c1.value=clave; conectar(pin); };
+      }catch(e){ b.disabled=false; b.textContent="Crear administrador"; m.className="msg err"; m.textContent="No se pudo crear: "+((e&&e.message)||e); }
+    }).withFailureHandler(function(){ b.disabled=false; b.textContent="Crear administrador"; m.className="msg err"; m.textContent="Error de conexión con el servidor."; }).getData(pin);
+  };
+}
+function nmMostrarUsuariosNav(){ const b=document.querySelector('#sidenav button[data-s="usuarios"]'); if(b) b.style.display=NMFB.esAdmin()?"":"none"; }
+
+/* ---------- Pestaña USUARIOS (solo administradores) ---------- */
+async function nmUsuariosCargar(){ STATE.usLoading=true; try{ STATE.usuarios=await NMFB.usuarios(); STATE.usPin=await NMFB.appsPin(); STATE.usErr=null; }catch(e){ STATE.usErr=(e&&e.message)||String(e); } STATE.usLoading=false; if(STATE.section==="usuarios") render(); }
+function renderUsuarios(){
+  const app=$("#app"); if(!app) return;
+  if(!NMFB.on){ app.innerHTML=`<div class="card">${emptyState("La pestaña Usuarios se activa cuando el sistema se conecta a Firebase.")}</div>`; return; }
+  if(!NMFB.esAdmin()){ app.innerHTML=`<div class="card">${emptyState("Solo los administradores pueden ver esta pestaña.")}</div>`; return; }
+  if(!STATE.usuarios && !STATE.usLoading){ nmUsuariosCargar(); }
+  if(!STATE.usuarios){ app.innerHTML=`<div class="card"><div class="loading"><div class="spin"></div>Cargando usuarios…</div></div>`; return; }
+  const L=STATE.usuarios, ed=STATE.usEdit?L.find(u=>u.clave===STATE.usEdit):null;
+  const F=STATE.usForm||(ed?{nombre:ed.nombre,email:ed.email,rol:ed.rol,clave:ed.clave}:{nombre:"",email:"",rol:"usuario",clave:nmClaveNueva()});
+  STATE.usForm=F;
+  const correosRRHH=[...new Set((STATE.rrhh||[]).map(r=>String(r.correo||"").trim().toLowerCase()).filter(e=>/@/.test(e)))].filter(e=>!L.some(u=>u.email===e));
+  const ver=STATE.usVer||{};
+  const filas=L.map(u=>{ const yo=u.clave===NMFB.sesion.clave; return `<tr${u.activo?"":' class="row-inactivo"'}>
+      <td style="text-align:left">${esc(u.nombre||"")}${yo?' <span class="tag">tú</span>':""}<span class="sub2">${esc(u.email)}</span></td>
+      <td>${u.rol==="admin"?'<span class="st bob">Administrador</span>':'<span class="st usd">Usuario</span>'}</td>
+      <td>${u.activo?'<span class="st activo">Activo</span>':'<span class="st inactivo">Desactivado</span>'}</td>
+      <td><span class="us-clave">${ver[u.clave]?esc(u.clave):"••••-••••"}</span></td>
+      <td><span class="ta-acts">
+        <button class="btn ghost us-ver" data-c="${esc(u.clave)}" title="${ver[u.clave]?"Ocultar":"Ver"} clave">${ver[u.clave]?"Ocultar":"Ver"}</button>
+        <button class="btn ghost us-copy" data-c="${esc(u.clave)}" title="Copiar mensaje con el acceso">Copiar acceso</button>
+        <button class="btn ghost us-edit" data-c="${esc(u.clave)}" title="Editar">✎</button>
+        ${yo?"":`<button class="btn ghost us-act" data-c="${esc(u.clave)}">${u.activo?"Desactivar":"Activar"}</button><button class="btn ghost us-del" data-c="${esc(u.clave)}" title="Borrar">✕</button>`}
+      </span></td></tr>`; }).join("");
+  app.innerHTML=`
+    ${STATE.usErr?`<div class="msg err" style="display:block">${esc(STATE.usErr)}</div>`:""}
+    <div class="card"><div class="head"><h3>${ed?"Editar usuario":"Nuevo usuario"}</h3>${ed?'<button class="btn ghost" id="usCancel">Cancelar</button>':""}</div>
+      <div class="us-form">
+        <div><label for="usNom">Nombre</label><input id="usNom" value="${esc(F.nombre||"")}" placeholder="Ej.: Ana Rojas" autocomplete="off"></div>
+        <div><label for="usEmail">Correo</label><input id="usEmail" type="email" list="usCorreos" value="${esc(F.email||"")}" placeholder="correo@peso-latam.com" autocomplete="off"><datalist id="usCorreos">${correosRRHH.map(e=>`<option value="${esc(e)}"></option>`).join("")}</datalist></div>
+        <div><label for="usRol">Permiso</label><div class="select-wrap"><select id="usRol"><option value="usuario"${F.rol!=="admin"?" selected":""}>Usuario</option><option value="admin"${F.rol==="admin"?" selected":""}>Administrador</option></select></div></div>
+        <div><label for="usClave">Clave de acceso</label><div class="us-cl"><input id="usClave" value="${esc(F.clave||"")}" autocomplete="off"><button class="btn" id="usGen" title="Generar otra clave">↻</button></div></div>
+        <div class="us-btn"><button class="btn primary" id="usSave">${ed?"Guardar cambios":"Crear usuario"}</button></div>
+      </div>
+      <div class="msg" id="usMsg"></div>
+      <p class="gcal-note">La clave puede tener letras, números, puntos y guiones (mínimo 8). Si cambias la clave de alguien, su sesión se cierra y debe entrar con la nueva.${correosRRHH.length?" En «Correo» puedes elegir los correos corporativos de RRHH.":""}</p>
+    </div>
+    <div class="card"><div class="head"><h3>Usuarios con acceso</h3><span class="mini">${L.filter(u=>u.activo).length} activos de ${L.length}</span></div>
+      <div class="tbl-scroll"><table><thead><tr><th style="text-align:left">Usuario</th><th>Permiso</th><th>Estado</th><th>Clave</th><th></th></tr></thead><tbody>${filas}</tbody></table></div></div>
+    <div class="card"><div class="head"><h3>Clave del servidor de datos</h3><span class="mini">la usa el sistema por dentro para leer Google Sheets</span></div>
+      <div class="us-cl" style="max-width:520px"><input id="usPin" type="password" value="${esc(STATE.usPin||"")}" autocomplete="off"><button class="btn" id="usPinVer">Ver</button><button class="btn primary" id="usPinSave">Guardar</button></div>
+      <p class="gcal-note">Los usuarios no la ven ni la escriben: entran con su correo y su clave. Si algún día cambias la clave en Apps Script (CLAVE_ACCESO), cámbiala también aquí.</p></div>`;
+  const msg=$("#usMsg");
+  const rd=()=>{ STATE.usForm={nombre:$("#usNom").value,email:$("#usEmail").value,rol:$("#usRol").value,clave:$("#usClave").value}; };
+  ["#usNom","#usEmail","#usClave"].forEach(s=>$(s).addEventListener("input",rd)); $("#usRol").addEventListener("change",rd);
+  $("#usGen").addEventListener("click",()=>{ rd(); STATE.usForm.clave=nmClaveNueva(); render(); });
+  const cc=$("#usCancel"); if(cc) cc.addEventListener("click",()=>{ STATE.usEdit=null; STATE.usForm=null; render(); });
+  $("#usSave").addEventListener("click",async()=>{ rd(); const f=STATE.usForm; const em=String(f.email||"").trim().toLowerCase(), cl=String(f.clave||"").trim();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ msg.className="msg err"; msg.textContent="Escribe un correo válido."; return; }
+    if(!/^[A-Za-z0-9._-]{8,60}$/.test(cl)){ msg.className="msg err"; msg.textContent="La clave debe tener al menos 8 caracteres (letras, números, puntos o guiones)."; return; }
+    if(!ed && L.some(u=>u.email===em)){ msg.className="msg err"; msg.textContent="Ese correo ya tiene acceso. Edítalo en la lista."; return; }
+    if(ed && ed.clave===NMFB.sesion.clave && f.rol!=="admin"){ msg.className="msg err"; msg.textContent="No puedes quitarte el permiso de administrador a ti mismo."; return; }
+    const b=$("#usSave"); b.disabled=true; b.textContent="Guardando…";
+    try{ await NMFB.usuarioGuardar({nombre:f.nombre,email:em,rol:f.rol,clave:cl,activo:ed?ed.activo:true}, ed?ed.clave:null);
+      if(ed && ed.clave===NMFB.sesion.clave && ed.clave!==cl){ await NMFB.login(em,cl); }
+      STATE.usEdit=null; STATE.usForm=null; STATE.usVer=Object.assign({},STATE.usVer,{[cl]:true}); STATE.usuarios=null; nmUsuariosCargar();
+    }catch(e){ b.disabled=false; b.textContent=ed?"Guardar cambios":"Crear usuario"; msg.className="msg err"; msg.textContent=(e&&e.message)||"No se pudo guardar."; } });
+  document.querySelectorAll(".us-ver").forEach(b=>b.addEventListener("click",()=>{ const v=Object.assign({},STATE.usVer); v[b.dataset.c]=!v[b.dataset.c]; STATE.usVer=v; render(); }));
+  document.querySelectorAll(".us-copy").forEach(b=>b.addEventListener("click",async()=>{ const u=L.find(x=>x.clave===b.dataset.c); if(!u) return;
+    const t="Hola "+(u.nombre||"")+", este es tu acceso al sistema de finanzas de PE$O:\n\nEnlace: https://nummeros.peso.contaxbolivia.com/\nCorreo: "+u.email+"\nClave de acceso: "+u.clave+"\n\nNo compartas tu clave.";
+    try{ await navigator.clipboard.writeText(t); b.textContent="✓ Copiado"; }catch(_){ prompt("Copia este mensaje:",t); } setTimeout(()=>{ b.textContent="Copiar acceso"; },1800); }));
+  document.querySelectorAll(".us-edit").forEach(b=>b.addEventListener("click",()=>{ STATE.usEdit=b.dataset.c; STATE.usForm=null; render(); try{ window.scrollTo({top:0,behavior:"smooth"}); }catch(_){} }));
+  document.querySelectorAll(".us-act").forEach(b=>b.addEventListener("click",async()=>{ const u=L.find(x=>x.clave===b.dataset.c); if(!u) return;
+    try{ await NMFB.usuarioGuardar(Object.assign({},u,{activo:!u.activo}),u.clave); STATE.usuarios=null; nmUsuariosCargar(); }catch(e){ alert((e&&e.message)||"No se pudo cambiar."); } }));
+  document.querySelectorAll(".us-del").forEach(b=>b.addEventListener("click",async()=>{ const u=L.find(x=>x.clave===b.dataset.c); if(!u||!confirm("¿Quitar el acceso de "+(u.nombre||u.email)+"? Ya no podrá entrar al sistema.")) return;
+    try{ await NMFB.usuarioBorrar(u.clave); STATE.usuarios=null; nmUsuariosCargar(); }catch(e){ alert((e&&e.message)||"No se pudo borrar."); } }));
+  $("#usPinVer").addEventListener("click",()=>{ const i=$("#usPin"); i.type=i.type==="password"?"text":"password"; });
+  $("#usPinSave").addEventListener("click",()=>{ const v=$("#usPin").value.trim(); if(!v) return; const b=$("#usPinSave"); b.disabled=true; b.textContent="Verificando…";
+    const fin=(t)=>{ b.textContent=t; setTimeout(()=>{ b.textContent="Guardar"; b.disabled=false; },1600); };
+    google.script.run.withSuccessHandler(async function(res){
+      if(!res||res.error){ fin("Guardar"); alert("Esa clave no es aceptada por el servidor (Apps Script)."); return; }
+      try{ await NMFB.appsPinSet(v); STATE.usPin=v; try{ localStorage.setItem("peso_pin",v); }catch(_){} fin("✓ Guardado"); }catch(e){ fin("Guardar"); alert((e&&e.message)||"No se pudo guardar."); } })
+      .withFailureHandler(function(){ fin("Guardar"); alert("Error de conexión con el servidor."); }).getData(v); });
+}
+
 function conectar(pin){
   const btn=$("#loginBtn"), err=$("#loginErr"), card=document.querySelector(".login-card");
   err.style.display="none"; btn.disabled=true;
@@ -7530,10 +7766,11 @@ function conectar(pin){
     fail("Esta versión debe abrirse desde el enlace del Apps Script, no como archivo local."); return;
   }
   google.script.run
-    .withSuccessHandler(function(res){
+    .withSuccessHandler(async function(res){
       if(!res||res.error){ fail(res&&res.error?res.error:"No se pudo conectar."); return; }
       try{ localStorage.setItem("peso_pin",pin); }catch(_){}
       aplicarDatos(res);
+      await nmFbAplicarDatos(res); nmMostrarUsuariosNav();
       btn.textContent="Entrar"; btn.disabled=false;
       if(card) card.classList.remove("loading");
       $("#loginOverlay").classList.remove("show");
@@ -7550,12 +7787,12 @@ function actualizarDatos(){
   const start=Date.now();
   const done=(cb)=>{ const wait=Math.max(0,900-(Date.now()-start)); setTimeout(()=>{ b.innerHTML=t; if(ov) ov.classList.remove("show"); if(cb) cb(); }, wait); };
   google.script.run
-    .withSuccessHandler(function(res){ done(function(){ if(res&&!res.error){ aplicarDatos(res); buildYears(); buildEmpresas(); render(); } else { showLogin(); } }); })
+    .withSuccessHandler(async function(res){ if(res&&!res.error){ aplicarDatos(res); await nmFbAplicarDatos(res); } done(function(){ if(res&&!res.error){ buildYears(); buildEmpresas(); render(); } else { showLogin(); } }); })
     .withFailureHandler(function(){ done(); })
     .getData(pin);
 }
-function cerrarSesion(){ try{ localStorage.removeItem("peso_pin"); }catch(_){} showLogin(); }
-function showLogin(){ const c=document.querySelector(".login-card"); if(c) c.classList.remove("loading"); $("#loginOverlay").classList.add("show"); const i=$("#pin"); if(i){ i.value=""; i.focus(); } try{ iaFabShow(false); }catch(_){} }
+function cerrarSesion(){ try{ localStorage.removeItem("peso_pin"); }catch(_){} if(NMFB.on){ NMFB.logout(); STATE.usuarios=null; nmMostrarUsuariosNav(); const c=$("#fbClave"); if(c) c.value=""; } showLogin(); }
+function showLogin(){ const c=document.querySelector(".login-card"); if(c) c.classList.remove("loading"); $("#loginOverlay").classList.add("show"); nmLoginModo(); const i=NMFB.on?($("#fbEmail")&&$("#fbEmail").value?$("#fbClave"):$("#fbEmail")):$("#pin"); if(i){ if(!NMFB.on) i.value=""; i.focus(); } try{ iaFabShow(false); }catch(_){} }
 
 /* ---------- Registrar gasto (escribe en HistorialEgresos) ---------- */
 function distinctVals(field){ const s=new Set(); STATE.egresos.forEach(r=>{ const v=(r[field]!=null?String(r[field]).trim():""); if(v) s.add(v); }); return [...s].sort((a,b)=>a.localeCompare(b)); }
@@ -7685,6 +7922,7 @@ const NAV_ICONS={
   plan:'<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>',
   tc:'<path d="M3 8l4-4 4 4M7 4v9a3 3 0 0 0 3 3h10"/><path d="M21 16l-4 4-4-4M17 20v-9a3 3 0 0 0-3-3H3"/>',
   calendario:'<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4M7.5 13h3M13.5 13h3M7.5 16.5h3M13.5 16.5h3"/>',
+  usuarios:'<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><rect x="15" y="11" width="7" height="6" rx="1.2"/><path d="M16.5 11V9.5a2 2 0 0 1 4 0V11"/>',
   archivos:'<path d="M3 7a2 2 0 0 1 2-2h4.5l2 2.5H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10.5h18"/>',
   tareas:'<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5l1.3 1.3L7.8 4M4 11.5l1.3 1.3L7.8 10M4 17.5l1.3 1.3L7.8 16"/>',
   socios:'<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="18" cy="7" r="3"/><path d="M18 5.4v3.2M16.9 6.1h1.7a.8 .8 0 0 1 0 1.6h-1.4"/>'
@@ -7751,8 +7989,9 @@ $("#btnConnect").addEventListener("click",actualizarDatos);
 { const gb=$("#gFiltBtn"); if(gb) gb.addEventListener("click",e=>{ e.stopPropagation(); const gp=$("#gFilters"); if(gp){ gp.hidden=!gp.hidden; gb.classList.toggle("on",!gp.hidden); } });
   document.addEventListener("mousedown",e=>{ const gp=$("#gFilters"),gb2=$("#gFiltBtn"); if(gp&&!gp.hidden){ if(gp.contains(e.target)||(gb2&&gb2.contains(e.target)))return; gp.hidden=true; if(gb2)gb2.classList.remove("on"); } },true); }
 $("#btnLogout").addEventListener("click",cerrarSesion);
-$("#loginBtn").addEventListener("click",()=>conectar($("#pin").value));
+$("#loginBtn").addEventListener("click",()=>{ if(NMFB.on) nmEntrarFB(); else conectar($("#pin").value); });
 $("#pin").addEventListener("keydown",e=>{ if(e.key==="Enter") conectar($("#pin").value); });
+["#fbEmail","#fbClave"].forEach(sel=>{ const el=$(sel); if(el) el.addEventListener("keydown",e=>{ if(e.key==="Enter") nmEntrarFB(); }); });
 $("#egFormClose").addEventListener("click",cerrarFormEgreso);
 $("#egFormCancel").addEventListener("click",cerrarFormEgreso);
 $("#egFormSave").addEventListener("click",guardarEgreso);
@@ -7794,9 +8033,16 @@ document.addEventListener("click", function(e){
   document.title="NUMMEROS · PE$O "+APP_VERSION;
   if(window.innerWidth<=900) document.body.classList.add("nav-hidden"); // móvil: menú oculto al inicio
   buildYears(); buildEmpresas(); render();               // arma la UI vacía detrás del login
-  let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
-  if(pin){ $("#pin").value=pin; conectar(pin); }   // auto-entra si ya se validó en esta sesión
-  else { showLogin(); }
+  if(NMFB.on){                                       // acceso con correo + clave (Firebase)
+    const ld=$("#loginLead"); if(ld) ld.textContent="Entra con tu correo y tu clave de acceso.";
+    const ln=document.querySelector(".login-note"); if(ln) ln.textContent="Cada persona tiene su propio acceso. Si olvidaste tu clave, pídesela al administrador.";
+    nmLoginModo(); const card=document.querySelector(".login-card"); $("#loginOverlay").classList.add("show"); if(card) card.classList.add("loading");
+    NMFB.restaurar().then(pin=>{ if(pin){ conectar(pin); } else { showLogin(); } }).catch(()=>showLogin());
+  } else {
+    let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
+    if(pin){ $("#pin").value=pin; conectar(pin); }   // auto-entra si ya se validó en esta sesión
+    else { showLogin(); }
+  }
 })();
 
 
@@ -7939,7 +8185,6 @@ async function pdfCertificado(doc,r,fechaEmision,logos){
   doc.setFillColor(...P.amarillo); doc.rect(W/2-18,66,36,1.6,"F");
   const tw=W-2*M; let y=82;
   const desde=_rhFecha(D.ingreso,true), hasta=D.retiro?_rhFecha(D.retiro,true):"";
-  const jor=D.jornada?(" "+D.jornada):"";
   const emis=parseLocalDate(fechaEmision)||new Date();
   const ciTxt=[D.ci,D.exp].filter(Boolean).join(" ");
   const quien=fem?"la Señora":"el Señor", portador=fem?"portadora":"portador";
@@ -7947,7 +8192,7 @@ async function pdfCertificado(doc,r,fechaEmision,logos){
     {t:"Por medio de la presente, la empresa "},{t:E.razon,b:true},{t:", con Número de Identificación Tributaria "},{t:E.nit+".",b:true},{br:true},
     {t:"CERTIFICA:",b:true},{br:true},
     {t:"Que "+quien+" "},{t:D.nombre.toUpperCase(),b:true},{t:ciTxt?(", "+portador+" de la Cédula de Identidad N° "):""},{t:ciTxt?ciTxt+",":"",b:true},
-    {t:D.activo?" se desempeña en nuestra empresa en el cargo de ":" se desempeñó en nuestra empresa en el cargo de "},{t:(D.cargo||"").toUpperCase(),b:true},{t:jor+" desde el "},{t:desde,b:true},
+    {t:D.activo?" se desempeña en nuestra empresa en el cargo de ":" se desempeñó en nuestra empresa en el cargo de "},{t:(D.cargo||"").toUpperCase(),b:true},{t:" desde el "},{t:desde,b:true},
     {t:D.activo?" a la fecha.":(hasta?" hasta el ":".")},{t:(!D.activo&&hasta)?hasta+".":"",b:true},{br:true},
     {t:"Durante su vinculación laboral, "+(D.activo?"percibe":"percibió")+" una remuneración mensual básica de "},{t:_rhMon(D.sf,D.moneda)+" ("+montoEnLetras(D.sf,D.moneda)+")",b:true},{t:"."},{br:true},
     {t:"En el ejercicio de sus funciones, "+(fem?"la Sra. ":"el Sr. ")+(D.nombre.split(/\s+/).slice(-2,-1)[0]||D.nombre)+" ha demostrado ser "+(fem?"una ":"un ")},{t:"profesional responsable, "+(fem?"dedicada y comprometida":"dedicado y comprometido"),b:true},
@@ -8002,7 +8247,7 @@ function renderRRHHDocs(app,intro,seg,rows){
           <div class="rh-form" id="rhExtraForm">
             ${inp("rx_ci","Carnet de identidad",D.ci,"text","Ej.: 13110856")}${inp("rx_exp","Expedido en",D.exp,"text","Ej.: SC")}
             ${inp("rx_nac","Fecha de nacimiento",D.nac,"date")}${inp("rx_ingreso","Fecha de ingreso",D.ingreso,"date")}
-            ${inp("rx_cargo","Cargo",D.cargo)}${inp("rx_jornada","Jornada",D.jornada,"text","Ej.: part time")}
+            ${inp("rx_cargo","Cargo",D.cargo)}
             <div><label for="rx_trato">Trato</label><div class="select-wrap"><select id="rx_trato"><option${D.trato==="Sr."?" selected":""}>Sr.</option><option${D.trato==="Sra."?" selected":""}>Sra.</option></select></div></div>
             <div><label for="rx_moneda">Moneda</label><div class="select-wrap"><select id="rx_moneda"><option${D.moneda==="USD"?" selected":""}>USD</option><option${D.moneda==="BOB"?" selected":""}>BOB</option></select></div></div>
             ${D.activo?"":inp("rx_retiro","Fecha de retiro",D.retiro,"date")}
@@ -8024,7 +8269,7 @@ function renderRRHHDocs(app,intro,seg,rows){
       </div>
       <div class="rh-docs-der"><div class="card rh-prev"><div class="head"><h3>Vista previa</h3><span class="mini" id="rhPrevTxt">preparando…</span></div><iframe id="rhPrev" title="Vista previa del PDF"></iframe></div></div>
     </div>`;
-  const leerExtra=()=>{ if(!D) return; const o={}; ["ci","exp","nac","ingreso","cargo","jornada","trato","moneda","retiro","otros","desc","descDet"].forEach(k=>{ const el=$("#rx_"+k); if(el) o[k]=el.value; }); rhExtraSet(D.nombre,o); };
+  const leerExtra=()=>{ if(!D) return; const o={}; ["ci","exp","nac","ingreso","cargo","trato","moneda","retiro","otros","desc","descDet"].forEach(k=>{ const el=$("#rx_"+k); if(el) o[k]=el.value; }); rhExtraSet(D.nombre,o); };
   const prev=async()=>{ if(!r) return; const fr=$("#rhPrev"), tx=$("#rhPrevTxt"); try{ const u=await rhGenerar(S.tipo==="boleta"?"boleta":"cert",[ord.find(x=>x.nombre===S.persona)],{mes:+S.mes,anio:+S.anio,fecha:S.fecha},"url"); if(fr&&u){ if(fr.dataset.u) URL.revokeObjectURL(fr.dataset.u); fr.dataset.u=u; fr.src=u+"#toolbar=0&view=FitH"; } if(tx) tx.textContent=(S.tipo==="boleta"?"Boleta · "+MONTH_ES_LONG[S.mes]+" "+S.anio:"Certificado")+" · "+S.persona; }catch(e){ if(tx) tx.textContent="No se pudo generar la vista previa."; } };
   let tm=null; const prevLuego=()=>{ clearTimeout(tm); tm=setTimeout(prev,450); };
   document.querySelectorAll("#rhDocTipo button").forEach(b=>b.addEventListener("click",()=>{ S.tipo=b.dataset.t; render(); }));

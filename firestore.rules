@@ -1,0 +1,58 @@
+rules_version = '2';
+// Reglas de seguridad de NUMMEROS · PE$O (Firestore)
+// - Cada usuario entra con su correo + clave de acceso (creados en la pestaña Usuarios).
+// - La "clave" es el ID del documento en /claves: quien no la conoce no puede leerla (no se pueden listar).
+// - Solo los administradores pueden ver, crear o cambiar usuarios y claves.
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function sesionRef() { return /databases/$(db)/documents/sesiones/$(request.auth.uid); }
+    function claveRef(c) { return /databases/$(db)/documents/claves/$(c); }
+    function tieneSesion() { return request.auth != null && exists(sesionRef()); }
+    function claveDeSesion() { return get(sesionRef()).data.clave; }
+    function claveOk() {
+      return tieneSesion()
+        && exists(claveRef(claveDeSesion()))
+        && get(claveRef(claveDeSesion())).data.activo == true
+        && get(claveRef(claveDeSesion())).data.email == get(sesionRef()).data.email;
+    }
+    function esAdmin() { return claveOk() && get(claveRef(claveDeSesion())).data.rol == "admin"; }
+    function inicialHecha() { return exists(/databases/$(db)/documents/config/inicial); }
+
+    // Usuarios y claves de acceso
+    match /claves/{clave} {
+      allow get: if request.auth != null;
+      allow list, update, delete: if esAdmin();
+      // el primer administrador se crea una sola vez, junto con config/inicial
+      allow create: if esAdmin()
+        || (request.auth != null && !inicialHecha()
+            && existsAfter(/databases/$(db)/documents/config/inicial)
+            && request.resource.data.rol == "admin");
+    }
+
+    // Sesión de cada navegador (usuario anónimo de Firebase + correo + clave)
+    match /sesiones/{uid} {
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && exists(claveRef(request.resource.data.clave))
+        && get(claveRef(request.resource.data.clave)).data.activo == true
+        && get(claveRef(request.resource.data.clave)).data.email == request.resource.data.email;
+      allow get, delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Configuración
+    match /config/inicial {
+      allow get: if request.auth != null;
+      allow create: if request.auth != null && !inicialHecha();
+    }
+    match /config/{doc} {
+      allow read: if claveOk();
+      allow write: if esAdmin() || (doc == "apps" && request.auth != null && !inicialHecha() && existsAfter(/databases/$(db)/documents/config/inicial));
+    }
+
+    match /config/migracion { allow write: if claveOk(); }
+
+    // Datos del sistema
+    match /tareas/{id} { allow read, write: if claveOk(); }
+    match /asignacionManual/{id} { allow read, write: if claveOk(); }
+  }
+}

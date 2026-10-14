@@ -56,12 +56,13 @@ async function pedirAcceso() {
   a.title = "NUMMEROS · PE$O";
   a.message = "Escribe el correo y la clave con los que entras al sistema.";
   a.addTextField("correo", "");
-  a.addSecureTextField("clave", "");
+  a.addTextField("clave (se ve para que revises que esté bien escrita)", "");
   a.addAction("Guardar");
   a.addCancelAction("Cancelar");
   const i = await a.presentAlert();
   if (i === -1) return null;
-  const o = { email: a.textFieldValue(0).trim().toLowerCase(), clave: a.textFieldValue(1).trim() };
+  const limpio = t => String(t || "").replace(/[\u200B-\u200D\uFEFF\u00A0]/g, " ").trim();
+  const o = { email: limpio(a.textFieldValue(0)).toLowerCase(), clave: limpio(a.textFieldValue(1)) };
   guardar(o);
   return o;
 }
@@ -81,8 +82,12 @@ async function token(cfg) {
 }
 
 async function abrirSesion(cfg, tk) {
-  const body = { fields: { email: { stringValue: cfg.email }, clave: { stringValue: cfg.clave }, desde: { stringValue: new Date().toISOString() }, navegador: { stringValue: "Widget Scriptable" } } };
-  const r = await http(`${FS}/sesiones/${cfg.uid}`, "PATCH", body, tk);
+  const intento = clave => http(`${FS}/sesiones/${cfg.uid}`, "PATCH", { fields: { email: { stringValue: cfg.email }, clave: { stringValue: clave }, desde: { stringValue: new Date().toISOString() }, navegador: { stringValue: "Widget Scriptable" } } }, tk);
+  let r = await intento(cfg.clave);
+  // el iPhone a veces pone en mayúscula la primera letra: se prueba también en minúscula
+  if (r.status !== 200 && cfg.clave && cfg.clave[0] !== cfg.clave[0].toLowerCase()) {
+    const alt = cfg.clave[0].toLowerCase() + cfg.clave.slice(1); const r2 = await intento(alt);
+    if (r2.status === 200) { cfg.clave = alt; r = r2; } }
   if (r.status !== 200) {
     const det = (r.json && r.json.error && (r.json.error.status || r.json.error.message)) || "";
     const e = new Error("No se pudo entrar con " + cfg.email + " (código " + r.status + (det ? " · " + det : "") + "). Revisa el correo y la clave: abre el script en la app y elige «Cambiar correo / clave».");

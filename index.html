@@ -1425,7 +1425,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V172";
+const APP_VERSION = "V173";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -7607,9 +7607,9 @@ const NMFB={
   async login(email,clave){
     email=this._norm(email); clave=String(clave||"").trim();
     if(!email||!clave) throw new Error("Escribe tu correo y tu clave de acceso.");
-    const u=await this.anon();
-    await this._entrar(u,email,clave);
-    return this._cargarSesion(email,clave);
+    this._paso="1 Firebase"; const u=await this.anon();
+    this._paso="2 clave"; await this._entrar(u,email,clave);
+    this._paso="3 cuenta"; const pin=await this._cargarSesion(email,clave); this._paso=""; return pin;
   },
   async restaurar(){ const u=await this.anon(); const s=await this.db.doc("sesiones/"+u.uid).get(); if(!s.exists) return null;
     const e=this._norm(s.data().email), c=String(s.data().clave||"");
@@ -7712,7 +7712,8 @@ async function nmEntrarFB(){
     const pin=await NMFB.login(($("#fbEmail")||{}).value,($("#fbClave")||{}).value);
     if(!pin){ fail("Falta la clave del servidor. El administrador debe configurarla en la pestaña Usuarios."); return; }
     conectar(pin);
-  }catch(e){ fail(nmFbMsg(e)); }
+  }catch(e){ console.error(e); const det=[NMFB._paso?"paso "+NMFB._paso:"",(e&&e.code)||""].filter(Boolean).join(" · ");
+    fail(nmFbMsg(e)+(det?" ("+det+")":"")); }
 }
 function nmFbMsg(e){ const c=(e&&e.code)||"", m=(e&&e.message)||String(e||"");
   if(/network|failed to fetch|offline|unavailable/i.test(c+" "+m)) return "No se pudo conectar con Firebase. Revisa tu internet y vuelve a intentar.";
@@ -7858,7 +7859,7 @@ function conectar(pin){
   }
   google.script.run
     .withSuccessHandler(async function(res){
-      if(!res||res.error){ fail(res&&res.error?res.error:"No se pudo conectar."); return; }
+      if(!res||res.error){ fail((NMFB.on?"Servidor de datos (Apps Script): ":"")+(res&&res.error?res.error:"No se pudo conectar.")); return; }
       try{ localStorage.setItem("peso_pin",pin); }catch(_){}
       aplicarDatos(res);
       await nmFbAplicarDatos(res); nmMostrarUsuariosNav();
@@ -7867,7 +7868,7 @@ function conectar(pin){
       $("#loginOverlay").classList.remove("show");
       setMode(true); buildYears(); buildEmpresas(); render();
     })
-    .withFailureHandler(function(e){ fail((e&&e.message)?e.message:"Error de conexión con el servidor."); })
+    .withFailureHandler(function(e){ fail((NMFB.on?"Servidor de datos (Apps Script): ":"")+((e&&e.message)?e.message:"Error de conexión con el servidor.")); })
     .getData(pin);
 }
 function actualizarDatos(){

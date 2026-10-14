@@ -1380,14 +1380,25 @@ window.PESO_API_URL = "https://script.google.com/macros/s/AKfycby5Fv8P1VQS_ScBhz
           if (st.fail) st.fail(e0); else console.error(e0);
           return;
         }
-        fetch(window.PESO_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" }, // petición simple → evita preflight CORS
-          body: JSON.stringify({ fn: String(prop), args: args })
-        })
-        .then(function(r){ return r.json(); })
-        .then(function(res){ if (st.ok) st.ok(res); })
-        .catch(function(err){ if (st.fail) st.fail(err); else console.error(err); });
+        // Reintenta hasta 3 veces si la conexión falla (Apps Script a veces responde con error momentáneo)
+        var cuerpo = JSON.stringify({ fn: String(prop), args: args });
+        var intentar = function(n){
+          return fetch(window.PESO_API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" }, // petición simple → evita preflight CORS
+            body: cuerpo
+          }).then(function(r){ return r.text(); }).then(function(t){
+            try { return JSON.parse(t); }
+            catch(e){ throw new Error("El servidor de datos (Apps Script) respondió algo inesperado. Intenta de nuevo en un momento."); }
+          }).catch(function(err){
+            if (n < 3) return new Promise(function(ok){ setTimeout(ok, 1200*n); }).then(function(){ return intentar(n+1); });
+            var m = (err && err.message) || String(err);
+            if (/failed to fetch|load failed|networkerror/i.test(m)) m = "No se pudo conectar con el servidor de datos (Apps Script). Revisa tu internet y vuelve a intentar.";
+            throw new Error(m);
+          });
+        };
+        intentar(1)
+          .then(function(res){ if (st.ok) st.ok(res); }, function(err){ if (st.fail) st.fail(err); else console.error(err); });
       };
     }});
     return proxy;
@@ -1411,7 +1422,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V170";
+const APP_VERSION = "V171";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -7659,8 +7670,14 @@ async function nmEntrarFB(){
     const pin=await NMFB.login(($("#fbEmail")||{}).value,($("#fbClave")||{}).value);
     if(!pin){ fail("Falta la clave del servidor. El administrador debe configurarla en la pestaña Usuarios."); return; }
     conectar(pin);
-  }catch(e){ fail((e&&e.message)||"No se pudo entrar."); }
+  }catch(e){ fail(nmFbMsg(e)); }
 }
+function nmFbMsg(e){ const c=(e&&e.code)||"", m=(e&&e.message)||String(e||"");
+  if(/network|failed to fetch|offline|unavailable/i.test(c+" "+m)) return "No se pudo conectar con Firebase. Revisa tu internet y vuelve a intentar.";
+  if(/admin-restricted|operation-not-allowed/i.test(c+m)) return "Firebase: falta habilitar el acceso «Anónimo» en Authentication.";
+  if(/unauthorized-domain/i.test(c+m)) return "Firebase: falta agregar nummeros.peso.contaxbolivia.com en Dominios autorizados.";
+  if(/permission/i.test(c+m)) return "Firebase rechazó el acceso (permisos). Revisa que las reglas estén publicadas.";
+  return m||"No se pudo entrar."; }
 function nmSetupInicialUI(){
   const ov=document.createElement("div"); ov.className="overlay show"; ov.style.zIndex="400";
   ov.innerHTML=`<div class="modal"><h2>Configuración inicial</h2>

@@ -1467,7 +1467,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V176";
+const APP_VERSION = "V177";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -5268,8 +5268,8 @@ const _p2=n=>String(n).padStart(2,"0");
 function _isoHoy(){ const n=new Date(); return n.getFullYear()+"-"+_p2(n.getMonth()+1)+"-"+_p2(n.getDate()); }
 function _isoMas(iso,dias){ const d=new Date(iso+"T12:00:00"); d.setDate(d.getDate()+dias); return d.getFullYear()+"-"+_p2(d.getMonth()+1)+"-"+_p2(d.getDate()); }
 /* Calendarios de Google elegidos (se guardan en este navegador) */
-function gcalIds(){ let s=""; try{ s=localStorage.getItem("nm_gcal_ids")||""; }catch(_){} return s.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean); }
-function gcalSetIds(txt){ try{ localStorage.setItem("nm_gcal_ids", String(txt||"").trim()); }catch(_){} }
+function gcalIds(){ let s=""; if(nmFbActivo()&&NM_AJ.gcal!=null) s=NM_AJ.gcal; else { try{ s=localStorage.getItem("nm_gcal_ids")||""; }catch(_){} } return s.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean); }
+function gcalSetIds(txt){ const v=String(txt||"").trim(); try{ localStorage.setItem("nm_gcal_ids", v); }catch(_){} if(nmFbActivo()){ NM_AJ.gcal=v; nmAjGuardar("gcal",{ids:v}); } }
 function gcalCuenta(){ const ids=gcalIds(); const e=ids.find(x=>/@/.test(x)&&!/group\.calendar|import\.calendar/.test(x)); return e||""; }
 /* Enlace para crear un evento en Google Calendar (se abre ya lleno; solo hay que tocar Guardar) */
 function gcalLink(titulo, iso, detalles){
@@ -5476,6 +5476,7 @@ function _archNorm(r){ return {id:String(r.id||("A"+Date.now()+Math.floor(Math.r
 function archivosGuardar(){
   const lista=(STATE.archivos||[]);
   try{ localStorage.setItem("nm_archivos", JSON.stringify(lista)); }catch(_){}
+  if(nmFbActivo()){ NM_AJ.archivos=lista; nmAjGuardar("archivos",{lista:lista}); return; }
   if(!STATE.archServer) return;
   let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
   if(window.google&&google.script&&google.script.run){
@@ -5526,7 +5527,7 @@ function renderArchivos(){
           <button class="btn ghost ar-edit" data-id="${esc(a.id)}" title="Editar">✎</button><button class="btn ghost ar-del" data-id="${esc(a.id)}" title="Quitar">✕</button></div></div></div>`; };
   const cuerpo=Object.keys(grupos).sort((a,b)=>a.localeCompare(b)).map(g=>`<h4 class="arch-cat">${esc(g)}</h4><div class="arch-grid">${grupos[g].map(card).join("")}</div>`).join("");
   app.innerHTML=`
-    <div class="card"><div class="head"><h3>${ed?"Editar acceso":"Agregar un archivo"}</h3><span class="arch-store">${STATE.archServer?"✓ Se guardan en tu Google Sheet (hoja Archivos)":"Se guardan en este navegador"}</span></div>
+    <div class="card"><div class="head"><h3>${ed?"Editar acceso":"Agregar un archivo"}</h3><span class="arch-store">${nmFbActivo()?"✓ Se guardan en el sistema (Firebase): todos los usuarios los ven":(STATE.archServer?"✓ Se guardan en tu Google Sheet (hoja Archivos)":"Se guardan en este navegador")}</span></div>
       <div class="arch-form">
         <div><label for="arN">Nombre</label><input id="arN" placeholder="Ej.: P&L 2026" value="${esc(F.n||"")}" autocomplete="off"></div>
         <div><label for="arU">Enlace</label><input id="arU" type="url" placeholder="Pega el enlace (Google Sheets, Drive, PDF, web…)" value="${esc(F.u||"")}" autocomplete="off"></div>
@@ -7750,6 +7751,9 @@ const NMFB={
     const [qt,qa]=await Promise.all([this.db.collection("tareas").get(),this.db.collection("asignacionManual").get()]);
     return {tareas:qt.docs.map(d=>Object.assign({id:d.id},d.data())), asigManual:qa.docs.map(d=>{ const x=d.data(); return {fuente:x.fuente,huella:x.huella,ca:x.ca}; })};
   },
+  // V177: ajustes que antes vivían en el navegador (Archivos, RRHH, Google Calendar) → Firebase config/{nombre}
+  async cfgGet(n){ const d=await this.db.doc("config/"+n).get(); return d.exists?d.data():null; },
+  async cfgSet(n,o){ await this.db.doc("config/"+n).set(Object.assign({},o,{actualizado:new Date().toISOString(),por:(this.sesion&&this.sesion.email)||""})); },
   async tareaGuardar(t){ const id=String(t.id||("T"+Date.now())).replace(/\//g,"-");
     const o={id:id,tarea:String(t.tarea||""),estado:String(t.estado||"Pendiente"),prioridad:String(t.prioridad||"Media"),vence:String(t.vence||"").slice(0,10),notas:String(t.notas||""),creado:String(t.creado||_isoHoy()),actualizado:new Date().toISOString(),por:this.sesion.email};
     await this.db.doc("tareas/"+id).set(o); return o; },
@@ -7766,7 +7770,32 @@ async function nmFbAplicarDatos(res){
   if(!nmFbActivo()) return;
   try{ const d=await NMFB.cargarDatos(res||{}); STATE.tareas=d.tareas; STATE.asigManual=d.asigManual; STATE._amSrc=null; STATE._amIdx=null; STATE.fbErr=null; }
   catch(e){ console.error(e); STATE.fbErr="No se pudieron leer las tareas desde Firebase: "+(e&&e.message||e); }
+  try{ await nmFbCargarAjustes(); }catch(e){ console.error("ajustes Firebase",e); }
 }
+/* V177: Archivos, datos extra de RRHH, datos de la empresa (RRHH) y calendarios de Google se guardan en Firebase.
+   La primera vez se copian solos desde este navegador / la hoja "Archivos". */
+const NM_AJ={archivos:null,rhExtra:null,rhEmpresa:null,gcal:null};
+function _lsJSON(k,def){ try{ const v=JSON.parse(localStorage.getItem(k)||"null"); return v==null?def:v; }catch(_){ return def; } }
+async function nmFbCargarAjustes(){
+  if(!nmFbActivo()) return;
+  const adm=NMFB.esAdmin();
+  const [a,rx,re,gc]=await Promise.all(["archivos","rhExtra","rhEmpresa","gcal"].map(n=>NMFB.cfgGet(n).catch(()=>null)));
+  // Archivos
+  if(a && Array.isArray(a.lista)){ NM_AJ.archivos=a.lista; STATE.archivos=a.lista.map(_archNorm).filter(x=>x.nombre&&x.enlace); }
+  else { const base=(Array.isArray(STATE.archivos)&&STATE.archivos.length)?STATE.archivos:_archLocal().map(_archNorm);
+    STATE.archivos=base; if(adm && base.length){ try{ await NMFB.cfgSet("archivos",{lista:base}); NM_AJ.archivos=base; }catch(_){} } }
+  STATE.archServer=true;
+  // RRHH: datos extra por persona
+  if(rx && rx.datos){ NM_AJ.rhExtra=rx.datos; }
+  else { const loc=_lsJSON("nm_rh_extra",{}); NM_AJ.rhExtra=loc||{}; if(adm && Object.keys(NM_AJ.rhExtra).length){ try{ await NMFB.cfgSet("rhExtra",{datos:NM_AJ.rhExtra}); }catch(_){} } }
+  // RRHH: datos de la empresa para boletas y certificados
+  if(re && re.datos){ NM_AJ.rhEmpresa=re.datos; }
+  else { const loc=_lsJSON("nm_rh_empresa",{}); NM_AJ.rhEmpresa=loc||{}; if(adm && Object.keys(NM_AJ.rhEmpresa).length){ try{ await NMFB.cfgSet("rhEmpresa",{datos:NM_AJ.rhEmpresa}); }catch(_){} } }
+  // Google Calendar
+  if(gc && typeof gc.ids==="string"){ NM_AJ.gcal=gc.ids; }
+  else { let loc=""; try{ loc=localStorage.getItem("nm_gcal_ids")||""; }catch(_){} NM_AJ.gcal=loc; if(adm && loc){ try{ await NMFB.cfgSet("gcal",{ids:loc}); }catch(_){} } }
+}
+function nmAjGuardar(n,o){ if(!nmFbActivo()) return; NMFB.cfgSet(n,o).catch(e=>alert("No se pudo guardar en Firebase: "+((e&&e.message)||e)+(NMFB.esAdmin()?"":" (solo un administrador puede cambiar esto)"))); }
 
 /* ---------- Pantalla de acceso con correo + clave ---------- */
 function nmLoginModo(){
@@ -8233,12 +8262,12 @@ document.addEventListener("click", function(e){
    ============================================================ */
 const PESO_PDF={amarillo:[255,219,58],slate:[8,36,34],stone:[207,202,191],linen:[239,235,231],cream:[254,252,249],gris:[96,104,100]};
 const RH_EMP_DEF={razon:"PESO S.R.L. - PESO CORPORATION",corto:"PE$O CORPORATION",nit:"697191028",direccion:"Manzano 40, Torre 1, Piso 17, Oficina 1711",ciudad:"Santa Cruz de la Sierra",pais:"Bolivia",web:"Peso Latam",firmante:"David Alejandro Terán Pacheco",firmanteCargo:"Gerente General"};
-function rhEmpresa(){ let o={}; try{ o=JSON.parse(localStorage.getItem("nm_rh_empresa")||"{}"); }catch(_){} return Object.assign({},RH_EMP_DEF,o||{}); }
-function rhEmpresaSet(o){ try{ localStorage.setItem("nm_rh_empresa",JSON.stringify(o)); }catch(_){} }
+function rhEmpresa(){ let o={}; if(nmFbActivo()&&NM_AJ.rhEmpresa) o=NM_AJ.rhEmpresa; else { try{ o=JSON.parse(localStorage.getItem("nm_rh_empresa")||"{}"); }catch(_){} } return Object.assign({},RH_EMP_DEF,o||{}); }
+function rhEmpresaSet(o){ try{ localStorage.setItem("nm_rh_empresa",JSON.stringify(o)); }catch(_){} if(nmFbActivo()){ NM_AJ.rhEmpresa=o; nmAjGuardar("rhEmpresa",{datos:o}); } }
 /* Datos extra por colaborador (CI, nacimiento, retiro…): de la hoja RRHH si existen; si no, los que escribas aquí (se guardan en este navegador) */
-function rhExtraAll(){ try{ return JSON.parse(localStorage.getItem("nm_rh_extra")||"{}")||{}; }catch(_){ return {}; } }
+function rhExtraAll(){ if(nmFbActivo()&&NM_AJ.rhExtra) return NM_AJ.rhExtra; try{ return JSON.parse(localStorage.getItem("nm_rh_extra")||"{}")||{}; }catch(_){ return {}; } }
 function rhExtra(nombre){ const all=rhExtraAll(); return all[nombre]||{}; }
-function rhExtraSet(nombre,o){ const all=rhExtraAll(); all[nombre]=Object.assign({},all[nombre]||{},o); try{ localStorage.setItem("nm_rh_extra",JSON.stringify(all)); }catch(_){} }
+function rhExtraSet(nombre,o){ const all=rhExtraAll(); all[nombre]=Object.assign({},all[nombre]||{},o); try{ localStorage.setItem("nm_rh_extra",JSON.stringify(all)); }catch(_){} if(nmFbActivo()){ NM_AJ.rhExtra=all; nmAjGuardar("rhExtra",{datos:all}); } }
 function rhDatos(r){ const x=rhExtra(r.nombre||"");
   const v=(k)=> (x[k]!=null&&String(x[k]).trim()!=="") ? x[k] : (r[k]||"");
   return {nombre:r.nombre||"",cargo:v("cargo")||r.cargo||"",ci:v("ci"),exp:v("exp"),nac:v("nac"),ingreso:v("ingreso")||r.ingreso||"",retiro:v("retiro"),

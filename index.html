@@ -1475,7 +1475,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V181";
+const APP_VERSION = "V182";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2446,6 +2446,91 @@ function renderPresupuesto(){
   document.querySelectorAll(".pr-rst").forEach(b=>b.addEventListener("click",()=>{ if(!NM_PRESU) return; delete NM_PRESU.ajustes[STATE.presuMes+"|"+b.dataset.ca]; presuGuardar(); render(); }));
 }
 /* ============================================================
+   V182: DETALLE DE COSTOS POR PROVEEDOR
+   - Un pago global (ej.: 1.000 USD a Bridge) se puede DESGLOSAR según la factura
+     en sus Cuentas Analíticas (Bridge Mes, KYC, Comisión ACH, WIRE…).
+   - Cada Cuenta Analítica de costo se marca Fijo/Variable y Operativo/Marketing/Administrativo.
+   Se guarda en Firebase: config/costosDesglose y config/costosTipo. (No cambia el P&L.)
+   ============================================================ */
+let NM_DESG=null, NM_CTIPO=null;
+function desgCargar(){ if(NM_DESG||!nmFbActivo()) return; NM_DESG={}; NM_CTIPO={};
+  Promise.all([NMFB.cfgGet("costosDesglose"),NMFB.cfgGet("costosTipo")]).then(([a,b])=>{ NM_DESG=(a&&a.items)||{}; NM_CTIPO=(b&&b.tipos)||{}; if(STATE.section==="costos") render(); }).catch(()=>{}); }
+function desgKey(r){ return (r.origen||"")+"|"+(r.hu||""); }
+function renderCostosDetalle(app, seg, pbase0){
+  desgCargar(); const D=NM_DESG||{}, CT=NM_CTIPO||{};
+  // pagos de costo con su huella (para poder desglosarlos)
+  const pagos=egresosUnificados().filter(r=>esCostoNiv(r.grupoc,r.ksubgrupo)&&!esTraspasoNiv(r.grupoc,r.ksubgrupo,r.cp,r.ca));
+  const val=r=>CUR==="BOB"?(r.bob!=null?+r.bob:0):(+r.usd||0);
+  const PJ=planJerarquiaIndex();
+  const lineas=[]; // {cp, ca, mi, g, v}
+  pagos.forEach(r=>{ const d=D[desgKey(r)];
+    if(d && d.length){ const tot=d.reduce((a,x)=>a+(+x.monto||0),0)||1; const v=val(r);
+      d.forEach(x=>{ const j=(PJ[_normTxt(x.ca)]||[])[0]; lineas.push({cp:(j&&j.cp)||r.cp, ca:x.ca, mi:r.mi, g:r.g, v:v*(+x.monto||0)/tot}); }); }
+    else lineas.push({cp:r.cp||"(sin cuenta principal)", ca:r.ca||"(sin cuenta)", mi:r.mi, g:r.g, v:val(r)}); });
+  const provs=[...new Set(lineas.map(l=>l.cp))].sort((a,b)=>a.localeCompare(b));
+  const prov=STATE.cosDetProv&&provs.includes(STATE.cosDetProv)?STATE.cosDetProv:"__all";
+  const L=prov==="__all"?lineas:lineas.filter(l=>l.cp===prov);
+  const meses=[...new Set(L.filter(l=>l.mi>=0).map(l=>l.g*12+l.mi))].sort((a,b)=>a-b).slice(-12);
+  const MES=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const byCa={}; L.forEach(l=>{ const k=l.cp+"\u0000"+l.ca; const o=byCa[k]||(byCa[k]={cp:l.cp,ca:l.ca,m:{},t:0}); const mk=l.g*12+l.mi; o.m[mk]=(o.m[mk]||0)+l.v; o.t+=l.v; });
+  const filasCa=Object.values(byCa).sort((a,b)=>a.cp.localeCompare(b.cp)||b.t-a.t);
+  const nat=ca=>(CT[ca]&&CT[ca].nat)||""; const area=ca=>(CT[ca]&&CT[ca].area)||"";
+  const nMes=Math.max(1,meses.length);
+  const sumIf=f=>filasCa.filter(f).reduce((a,o)=>a+o.t,0)/nMes;
+  const sel=(cls,ca,v,opts)=>`<span class="select-wrap"><select class="${cls}" data-ca="${esc(ca)}"><option value="">—</option>${opts.map(o=>`<option${o===v?" selected":""}>${o}</option>`).join("")}</select></span>`;
+  let cpAnt=null;
+  const filas=filasCa.map(o=>{ const h=(prov==="__all"&&o.cp!==cpAnt)?`<tr class="pr-grp"><td colspan="${meses.length+4}" style="text-align:left"><b>${esc(o.cp)}</b></td></tr>`:""; cpAnt=o.cp;
+    return h+`<tr><td style="text-align:left">${esc(o.ca)}</td><td>${sel("ct-nat",o.ca,nat(o.ca),["Fijo","Variable"])}</td><td>${sel("ct-area",o.ca,area(o.ca),["Operativo","Marketing","Administrativo"])}</td>
+      ${meses.map(mk=>`<td>${o.m[mk]?money(o.m[mk]):'<span class="zero">–</span>'}</td>`).join("")}<td><b>${money(o.t)}</b></td></tr>`; }).join("");
+  // pagos para desglosar (del proveedor elegido)
+  const pagosP=(prov==="__all"?pagos:pagos.filter(r=>r.cp===prov)).slice().sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha))).slice(0,60);
+  const casPlan=Object.keys(PJ).length?[...new Set((STATE.plan||[]).filter(r=>_pnorm(r.categoria)==="cuentaanalitica").map(r=>r.nombre))]:caMasterList();
+  const pagoFilas=pagosP.map(r=>{ const d=D[desgKey(r)]||[]; return `<tr><td>${fmtDate(r.fecha)}</td><td style="text-align:left">${esc(r.con||"–")}<span class="sub2">${esc(r.origen)} · ${esc(r.ca||"")}</span></td><td><b>${money(val(r))}</b></td>
+      <td style="text-align:left">${d.length?d.map(x=>`<span class="tag">${esc(x.ca)}: ${f2(x.monto)}</span>`).join(" "):'<span class="zero">sin desglose</span>'}</td>
+      <td><button class="btn ghost dg-ed" data-k="${esc(desgKey(r))}" data-tot="${val(r)}" data-con="${esc(r.con||"")}">${d.length?"Editar":"Desglosar"}</button></td></tr>`; }).join("");
+  app.innerHTML=`
+    <p class="section-intro">Cuánto te cobra cada proveedor <b>y por qué</b>. Si pagas una factura con varios conceptos en un solo pago, usa <b>Desglosar</b> y reparte el monto en sus Cuentas Analíticas (ej.: Bridge Mes, KYC, Comisión ACH). Marca cada concepto como <b>Fijo/Variable</b> y <b>Operativo/Marketing/Administrativo</b>. Esto no cambia el P&L: es el detalle para analizar.</p>
+    ${seg}
+    <div class="seg" id="cdProv" style="flex-wrap:wrap;margin-bottom:14px"><button data-p="__all" class="${prov==="__all"?"on":""}">Todos</button>${provs.map(p=>`<button data-p="${esc(p)}" class="${prov===p?"on":""}">${esc(p)}</button>`).join("")}</div>
+    <div class="grid kpis">
+      ${kpi("Costos fijos /mes",money(sumIf(o=>nat(o.ca)==="Fijo")),"promedio de los meses mostrados","#163832","◆")}
+      ${kpi("Costos variables /mes",money(sumIf(o=>nat(o.ca)==="Variable")),"promedio","#235347","≈")}
+      ${kpi("Marketing /mes",money(sumIf(o=>area(o.ca)==="Marketing")),"Operativo: "+money(sumIf(o=>area(o.ca)==="Operativo")),"#8EB69B","◎")}
+      ${kpi("Administrativo /mes",money(sumIf(o=>area(o.ca)==="Administrativo")),"sin marcar: "+money(sumIf(o=>!nat(o.ca))),"#B42318","▤")}
+    </div>
+    <div class="card"><div class="head"><h3>Costos por concepto y mes</h3><span class="mini">${CUR} · últimos ${meses.length} meses con datos</span></div>
+      <div class="tbl-scroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Concepto (Cuenta Analítica)</th><th>Fijo / Variable</th><th>Área</th>${meses.map(mk=>`<th>${MES[mk%12]} ${String(Math.floor(mk/12)).slice(2)}</th>`).join("")}<th>Total</th></tr></thead>
+      <tbody>${filas||`<tr><td colspan="${meses.length+4}">${emptyState("No hay costos en este período.")}</td></tr>`}</tbody></table></div></div>
+    <div class="card"><div class="head"><h3>Pagos para desglosar</h3><span class="mini">${prov==="__all"?"todos los proveedores":esc(prov)} · últimos ${pagosP.length}</span></div>
+      <div class="tbl-scroll"><table><thead><tr><th>Fecha</th><th style="text-align:left">Pago</th><th>Monto</th><th style="text-align:left">Desglose</th><th></th></tr></thead><tbody>${pagoFilas||`<tr><td colspan="5">${emptyState("Sin pagos.")}</td></tr>`}</tbody></table></div></div>
+    <datalist id="dgCas">${casPlan.map(c=>`<option value="${esc(c)}"></option>`).join("")}</datalist>`;
+  document.querySelectorAll("#cdProv button").forEach(b=>b.addEventListener("click",()=>{ STATE.cosDetProv=b.dataset.p; render(); }));
+  const ctSave=()=>nmAjGuardar("costosTipo",{tipos:NM_CTIPO});
+  document.querySelectorAll(".ct-nat,.ct-area").forEach(el=>el.addEventListener("change",()=>{ if(!NM_CTIPO) NM_CTIPO={}; const ca=el.dataset.ca; const o=Object.assign({},NM_CTIPO[ca]||{}); o[el.classList.contains("ct-nat")?"nat":"area"]=el.value; NM_CTIPO[ca]=o; ctSave(); render(); }));
+  document.querySelectorAll(".dg-ed").forEach(b=>b.addEventListener("click",()=>desgModal(b.dataset.k, +b.dataset.tot, b.dataset.con)));
+}
+function desgModal(k, total, con){
+  const cur=((NM_DESG||{})[k]||[]).map(x=>Object.assign({},x)); if(!cur.length) cur.push({ca:"",monto:""});
+  const ov=document.createElement("div"); ov.className="overlay show"; ov.style.zIndex="400";
+  const sumTxt=()=>{ const suma=cur.reduce((a,x)=>a+(parseFloat(x.monto)||0),0); return `Suma: <b>${f2(suma)}</b> de ${f2(total)} ${Math.abs(suma-total)>0.01&&suma?'· <span style="color:var(--error)">no coincide: se repartirá en proporción</span>':""}`; };
+  const draw=()=>{
+    ov.innerHTML=`<div class="modal" style="max-width:620px"><h2>Desglosar pago</h2><p class="lead">${esc(con)} · <b>${money(total)}</b>. Escribe cada concepto de la factura y su monto.</p>
+      ${cur.map((x,i)=>`<div class="us-cl" style="margin-bottom:8px"><input class="dg-ca" data-i="${i}" list="dgCas" value="${esc(x.ca)}" placeholder="Cuenta Analítica (ej.: Bridge Mes)" style="flex:2"><input class="dg-m" data-i="${i}" value="${esc(x.monto)}" inputmode="decimal" placeholder="Monto" style="flex:1;text-align:right"><button class="btn ghost dg-x" data-i="${i}">✕</button></div>`).join("")}
+      <button class="btn ghost" id="dgAdd">+ Agregar concepto</button>
+      <p class="mini" id="dgSum" style="margin-top:10px">${sumTxt()}</p>
+      <div class="modal-actions"><button class="btn" id="dgDel">Quitar desglose</button><button class="btn" id="dgCancel">Cancelar</button><button class="btn primary" id="dgOk">Guardar</button></div></div>`;
+    ov.querySelectorAll(".dg-ca").forEach(el=>el.addEventListener("input",()=>{ cur[+el.dataset.i].ca=el.value; }));
+    ov.querySelectorAll(".dg-m").forEach(el=>el.addEventListener("input",()=>{ cur[+el.dataset.i].monto=el.value; const sm=ov.querySelector("#dgSum"); if(sm) sm.innerHTML=sumTxt(); }));
+    ov.querySelectorAll(".dg-x").forEach(el=>el.addEventListener("click",()=>{ cur.splice(+el.dataset.i,1); if(!cur.length) cur.push({ca:"",monto:""}); draw(); }));
+    ov.querySelector("#dgAdd").onclick=()=>{ cur.push({ca:"",monto:""}); draw(); };
+    ov.querySelector("#dgCancel").onclick=()=>ov.remove();
+    ov.querySelector("#dgDel").onclick=()=>{ if(!NM_DESG) NM_DESG={}; delete NM_DESG[k]; nmAjGuardar("costosDesglose",{items:NM_DESG}); ov.remove(); render(); };
+    ov.querySelector("#dgOk").onclick=()=>{ const ok=cur.filter(x=>String(x.ca).trim()&&parseFloat(x.monto)>0).map(x=>({ca:String(x.ca).trim(),monto:parseFloat(x.monto)}));
+      if(!NM_DESG) NM_DESG={}; if(ok.length) NM_DESG[k]=ok; else delete NM_DESG[k]; nmAjGuardar("costosDesglose",{items:NM_DESG}); ov.remove(); render(); };
+  };
+  draw(); document.body.appendChild(ov);
+}
+/* ============================================================
    V175: los números de los cuadritos (KPI) giran como un contador
    al entrar a cada pestaña (≈3 s) y se detienen en el valor real.
    ============================================================ */
@@ -2482,7 +2567,7 @@ function SUBTABS_MAP(){ return {
   resumen:{key:"resTab", items:[["resumen","Resumen"],["eresultados","Estado de Resultados"],["graficos","Gráficos"],["comparativo","Comparativo"],["estadocuenta","Estado de Cuenta"]]},
   ingresos:{key:"ingTab", items:[["general","General"]].concat((typeof ING_GW!=="undefined"?ING_GW:[]).map(g=>[g,g]))},
   egresos:{key:"egTab", items:[["lista","Lista"],["general","General"],["proveedor","Por Proveedor"],["graficos","Gráficos"]]},
-  costos:{key:"cosTab", items:[["lista","Lista de Costos"],["costingreso","Costos por Ingreso",{key:"cosProv",items:PNL_TABS.map(t=>[t,t])}],["pagados","Costos Pagados"],["graficos","Gráficos"]]},
+  costos:{key:"cosTab", items:[["lista","Lista de Costos"],["costingreso","Costos por Ingreso",{key:"cosProv",items:PNL_TABS.map(t=>[t,t])}],["pagados","Costos Pagados"],["detalle","Detalle por proveedor"],["graficos","Gráficos"]]},
   cxp:{key:"cxpTab", items:[["graficos","Gráficos"],["lista","Lista"],["presupuesto","Presupuesto"]]},
   bancos:{key:"bancosTab", items:[["mercury","Mercury"],["bitgo","BitGo"],["tesabiz","Tesabiz"],["otras","Otras Cuentas"]]},
   reportes:{key:"repTop", items:[["reportes","Reportes"],["cierre","Cierre de Mes"]]},
@@ -4641,6 +4726,7 @@ function renderCostos(){
         <button data-t="lista" class="${tab==='lista'?'on':''}">Lista de Costos</button>
         <button data-t="costingreso" class="${isPnl?'on':''}">Costos por Ingreso</button>
         <button data-t="pagados" class="${tab==='pagados'?'on':''}">Costos Pagados</button>
+        <button data-t="detalle" class="${tab==='detalle'?'on':''}">Detalle por proveedor</button>
         <button data-t="graficos" class="${tab==='graficos'?'on':''}">Gráficos</button>
       </div>
     </div>`;
@@ -4690,6 +4776,7 @@ function renderCostos(){
   }
 
   // ================= COSTOS PAGADOS =================
+  if(tab==="detalle"){ renderCostosDetalle(app, seg, pbase); wire(); return; }
   if(tab==="pagados"){
     const PS=STATE.cosPagSort||{key:"impUSD",dir:"desc"};
     const sorted=[...prows].sort(mkCmp(PS.key,PS.dir,["impOrig","impUSD","impBOB"],["fecha"]));

@@ -83,7 +83,11 @@ async function token(cfg) {
 async function abrirSesion(cfg, tk) {
   const body = { fields: { email: { stringValue: cfg.email }, clave: { stringValue: cfg.clave }, desde: { stringValue: new Date().toISOString() }, navegador: { stringValue: "Widget Scriptable" } } };
   const r = await http(`${FS}/sesiones/${cfg.uid}`, "PATCH", body, tk);
-  if (r.status !== 200) throw new Error("Correo o clave incorrectos. Abre el widget en la app para escribirlos de nuevo.");
+  if (r.status !== 200) {
+    const det = (r.json && r.json.error && (r.json.error.status || r.json.error.message)) || "";
+    const e = new Error("No se pudo entrar con " + cfg.email + " (código " + r.status + (det ? " · " + det : "") + "). Revisa el correo y la clave: abre el script en la app y elige «Cambiar correo / clave».");
+    e.acceso = true; throw e;
+  }
   cfg.sesion = true; guardar(cfg);
 }
 
@@ -94,7 +98,11 @@ async function datos() {
     cfg = await pedirAcceso(); if (!cfg) throw new Error("Sin acceso.");
   }
   let tk = await token(cfg);
-  if (!cfg.sesion) await abrirSesion(cfg, tk);
+  if (!cfg.sesion) {
+    try { await abrirSesion(cfg, tk); }
+    catch (e) { if (!e.acceso || config.runsInWidget) throw e;
+      const n = await pedirAcceso(); if (!n) throw e; cfg = Object.assign(leer() || {}, n); cfg.sesion = false; guardar(cfg); tk = await token(cfg); await abrirSesion(cfg, tk); }
+  }
   let r = await http(`${FS}/config/widget`, "GET", null, tk);
   if (r.status === 403 || r.status === 401) { await abrirSesion(cfg, tk); r = await http(`${FS}/config/widget`, "GET", null, tk); }
   if (r.status === 403 && !config.runsInWidget) { cfg = await pedirAcceso(); tk = await token(cfg); await abrirSesion(cfg, tk); r = await http(`${FS}/config/widget`, "GET", null, tk); }

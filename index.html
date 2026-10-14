@@ -1054,6 +1054,21 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 /* Ampliar */
 body.fs-abierto{overflow:hidden}
 
+
+/* ===== V167: Boletas y certificados ===== */
+.rh-docs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:16px;align-items:start}
+.rh-docs-der{position:sticky;top:84px}
+@media(max-width:1100px){.rh-docs{grid-template-columns:1fr}.rh-docs-der{position:static}}
+.rh-form{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.rh-form .full{grid-column:1/-1}
+.rh-form label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+.rh-form input,.rh-form select{width:100%;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 11px;font:inherit;font-size:13.5px}
+.rh-acc{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.rh-acc .btn{padding:10px 16px}
+.rh-emp{margin-top:18px;border-top:1px solid var(--border);padding-top:12px}
+.rh-emp summary{cursor:pointer;font:600 14px var(--display);color:var(--muted)}
+.rh-prev iframe{display:block;width:100%;height:min(80vh,920px);border:1px solid var(--border);border-radius:10px;background:#fff}
+tr.rh-sel td{background:var(--brand-soft)}
 /* ===================== MODO OSCURO ===================== */
 html.tema-oscuro{color-scheme:dark;
   --fondo-marca:#051F20; --field:#163832; --error:#F97066; --aviso:#FDB022;
@@ -1366,7 +1381,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V166";
+const APP_VERSION = "V167";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2274,7 +2289,7 @@ function SUBTABS_MAP(){ return {
   reportes:{key:"repTop", items:[["reportes","Reportes"],["cierre","Cierre de Mes"]]},
   flujo:{key:"flujoTab", items:[["uno","Flujo"],["dos","Flujo 2"]]},
   socios:{key:"socioTab", items:[["inversiones","Inversiones"],["prestamos","Préstamos"],["devoluciones","Devoluciones"],["rendiciones","Rendiciones"]]},
-  rrhh:{key:"rhTab", items:[["resumen","Resumen"],["pagos","Pagos"],["planillas","Planillas"],["datos","Datos Personales"]]}
+  rrhh:{key:"rhTab", items:[["resumen","Resumen"],["pagos","Pagos"],["planillas","Planillas"],["datos","Datos Personales"],["documentos","Boletas y certificados"]]}
 }; }
 function navGoSub(section, key, val, key2, val2){
   STATE.section=section; if(key) STATE[key]=val; if(key2) STATE[key2]=val2;
@@ -3711,6 +3726,7 @@ function renderRRHH(){
       <button data-t="pagos" class="${tab==='pagos'?'on':''}">Pagos</button>
       <button data-t="planillas" class="${tab==='planillas'?'on':''}">Planillas</button>
       <button data-t="datos" class="${tab==='datos'?'on':''}">Datos Personales</button>
+      <button data-t="documentos" class="${tab==='documentos'?'on':''}">Boletas y certificados</button>
     </div>`;
   const kpisHTML=`<div class="grid kpis">
       ${kpi("Colaboradores activos",String(act.length),"de "+rows.length+" registrados","#235347","◆")}
@@ -3852,6 +3868,9 @@ function renderRRHH(){
     const ms=$("#rhPlanMesSel"); if(ms) ms.addEventListener("change",e=>{STATE.rhPlanMes=+e.target.value;render();});
     wire(); return;
   }
+
+  // ---- BOLETAS Y CERTIFICADOS (V167) ----
+  if(tab==="documentos"){ renderRRHHDocs(app,intro,seg,rows); wire(); return; }
 
   // ---- DATOS PERSONALES (tabla Costo de nómina · detalle, con búsqueda/filtros/orden) ----
   const nombres=[...new Set(rows.map(r=>String(r.nombre||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
@@ -7388,8 +7407,18 @@ function mapEgresosHist(raw){
   }).filter(o=> o.impOrig!==0 || o.cp || o.cc);
 }
 const M_RRHH={nombretrabajador:"nombre",cargo:"cargo",sueldofijo:"sf",bonosextras:"be",bonosporkpis:"bk",estado:"estado",fechadeingreso:"ingreso",correocorporativo:"correo"};
+/* Busca columnas opcionales de la hoja RRHH por nombre aproximado (CI, nacimiento, retiro, jornada, sexo, moneda) */
+function _rhCol(r,tests){ for(const k in r){ if(tests.some(t=>typeof t==="string"?k===t:t.test(k))){ const v=r[k]; if(v!=null&&String(v).trim()!=="") return v; } } return ""; }
 function mapRRHH(raw){ return raw.map(r=>{ const o=pick(r,M_RRHH);
-  ["sf","be","bk"].forEach(f=>o[f]=toNum(o[f])); o.ingreso=gd(o.ingreso).iso; return o; }).filter(o=>o.nombre); }
+  ["sf","be","bk"].forEach(f=>o[f]=toNum(o[f])); o.ingreso=gd(o.ingreso).iso;
+  o.ci=String(_rhCol(r,["ci","nci","cedula","carnet",/carnet|cedula|identidad|documento|^dni|^nroci|^numeroci/])||"").trim();
+  o.exp=String(_rhCol(r,["exp",/expedido|extension/])||"").trim();
+  o.nac=gd(_rhCol(r,[/nacimiento/])).iso||"";
+  o.retiro=gd(_rhCol(r,[/retiro|fechadesalida|fechadebaja|^baja$|cese|desvinc|fechafin|finalizacion|fechadeegreso/])).iso||"";
+  o.jornada=String(_rhCol(r,[/jornada|modalidad/])||"").trim();
+  o.sexo=String(_rhCol(r,["sexo",/genero/])||"").trim();
+  o.moneda=String(_rhCol(r,["moneda"])||"").trim();
+  return o; }).filter(o=>o.nombre); }
 const M_INV={concepto:"concepto",fechadeinversion:"fecha",inversionista:"inversionista",importe:"importe",comentarios:"coment",moneda:"moneda",empresa:"empresa"};
 function mapInv(raw){ return raw.map(r=>{ const o=pick(r,M_INV); o.importe=toNum(o.importe);
   const d=gd(o.fecha);o.fecha=d.iso;o.g=d.year; o._emp=empNorm(o.empresa)||"caiman"; return o; }).filter(o=>o.importe); }
@@ -7756,6 +7785,251 @@ document.addEventListener("click", function(e){
   if(pin){ $("#pin").value=pin; conectar(pin); }   // auto-entra si ya se validó en esta sesión
   else { showLogin(); }
 })();
+
+
+/* ============================================================
+   RRHH · BOLETAS DE PAGO Y CERTIFICADOS DE TRABAJO (V167)
+   PDF con la marca PE$O (amarillo #FFDB3A, slate #082422, linen, stone).
+   ============================================================ */
+const PESO_PDF={amarillo:[255,219,58],slate:[8,36,34],stone:[207,202,191],linen:[239,235,231],cream:[254,252,249],gris:[96,104,100]};
+const RH_EMP_DEF={razon:"PESO S.R.L. - PESO CORPORATION",corto:"PE$O CORPORATION",nit:"697191028",direccion:"Manzano 40, Torre 1, Piso 17, Oficina 1711",ciudad:"Santa Cruz de la Sierra",pais:"Bolivia",web:"Peso Latam",firmante:"David Alejandro Terán Pacheco",firmanteCargo:"Gerente General"};
+function rhEmpresa(){ let o={}; try{ o=JSON.parse(localStorage.getItem("nm_rh_empresa")||"{}"); }catch(_){} return Object.assign({},RH_EMP_DEF,o||{}); }
+function rhEmpresaSet(o){ try{ localStorage.setItem("nm_rh_empresa",JSON.stringify(o)); }catch(_){} }
+/* Datos extra por colaborador (CI, nacimiento, retiro…): de la hoja RRHH si existen; si no, los que escribas aquí (se guardan en este navegador) */
+function rhExtraAll(){ try{ return JSON.parse(localStorage.getItem("nm_rh_extra")||"{}")||{}; }catch(_){ return {}; } }
+function rhExtra(nombre){ const all=rhExtraAll(); return all[nombre]||{}; }
+function rhExtraSet(nombre,o){ const all=rhExtraAll(); all[nombre]=Object.assign({},all[nombre]||{},o); try{ localStorage.setItem("nm_rh_extra",JSON.stringify(all)); }catch(_){} }
+function rhDatos(r){ const x=rhExtra(r.nombre||"");
+  const v=(k)=> (x[k]!=null&&String(x[k]).trim()!=="") ? x[k] : (r[k]||"");
+  return {nombre:r.nombre||"",cargo:v("cargo")||r.cargo||"",ci:v("ci"),exp:v("exp"),nac:v("nac"),ingreso:v("ingreso")||r.ingreso||"",retiro:v("retiro"),
+    jornada:v("jornada"),trato:x.trato||r.trato||_rhTratoAuto(r),moneda:(x.moneda||r.moneda||"USD").toUpperCase(),sf:+r.sf||0,be:+r.be||0,bk:+r.bk||0,
+    activo:rrhhIsAct(r),otros:+(x.otros||0),desc:+(x.desc||0),descDet:x.descDet||""}; }
+function _rhTratoAuto(r){ const s=_normTxt(r.sexo||""); if(/^f|mujer|femen/.test(s)) return "Sra."; if(/^m|hombre|mascul/.test(s)) return "Sr."; return "Sr."; }
+/* ---- formatos ---- */
+const _MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+function _rhFecha(iso,larga){ const d=parseLocalDate?parseLocalDate(iso):null; if(!d||isNaN(d)) return iso?String(iso):"—";
+  return larga? (_p2(d.getDate())+" de "+_MESES[d.getMonth()]+" de "+d.getFullYear()) : (_p2(d.getDate())+"/"+_p2(d.getMonth()+1)+"/"+d.getFullYear()); }
+function _rhNum(n){ return (Math.round((+n||0)*100)/100).toLocaleString("es-BO",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function _rhMon(n,mon){ return (mon==="BOB"?"Bs ":"USD ")+_rhNum(n); }
+function numeroALetras(n){
+  n=Math.floor(Math.abs(+n||0));
+  const U=["","uno","dos","tres","cuatro","cinco","seis","siete","ocho","nueve","diez","once","doce","trece","catorce","quince","dieciséis","diecisiete","dieciocho","diecinueve","veinte","veintiuno","veintidós","veintitrés","veinticuatro","veinticinco","veintiséis","veintisiete","veintiocho","veintinueve"];
+  const D=["","","","treinta","cuarenta","cincuenta","sesenta","setenta","ochenta","noventa"];
+  const C=["","ciento","doscientos","trescientos","cuatrocientos","quinientos","seiscientos","setecientos","ochocientos","novecientos"];
+  const cien=x=>{ if(x===0) return ""; if(x===100) return "cien"; const c=Math.floor(x/100), r=x%100; let s=C[c];
+    if(r){ s+=(s?" ":"")+(r<30?U[r]:D[Math.floor(r/10)]+(r%10?" y "+U[r%10]:"")); } return s; };
+  if(n===0) return "cero";
+  let out=[]; const mill=Math.floor(n/1e6), miles=Math.floor((n%1e6)/1000), resto=n%1000;
+  if(mill) out.push(mill===1?"un millón":cien(mill).replace(/uno$/,"un")+" millones");
+  if(miles) out.push(miles===1?"mil":cien(miles).replace(/uno$/,"un")+" mil");
+  if(resto) out.push(cien(resto));
+  return out.join(" ");
+}
+function montoEnLetras(n,mon){ const ent=Math.floor(Math.abs(+n||0)), cent=Math.round((Math.abs(+n||0)-ent)*100);
+  const t=numeroALetras(ent); return t.charAt(0).toUpperCase()+t.slice(1)+" "+_p2(cent)+"/100 "+(mon==="BOB"?"Bolivianos":"Dólares Americanos"); }
+/* ---- imágenes de la marca PE$O ---- */
+const _rhImgCache={};
+function _rhImg(nombre){ if(_rhImgCache[nombre]) return _rhImgCache[nombre];
+  _rhImgCache[nombre]=fetch("marca/peso/"+nombre+".png").then(r=>r.blob()).then(b=>new Promise((ok,ko)=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.onerror=ko; fr.readAsDataURL(b); }));
+  return _rhImgCache[nombre]; }
+async function _rhLogos(){ const [am,sl,st]=await Promise.all(["peso-amarillo","peso-slate","peso-stone"].map(_rhImg)); return {am,sl,st}; }
+const _LOGO_R=759/276;
+/* ---- texto con negritas, ajuste de línea y justificado ---- */
+function pdfRich(doc,segs,x,y,w,o){
+  o=o||{}; const size=o.size||10.5, lh=o.lh||size*0.3528*1.55, just=o.justify!==false;
+  try{ doc.setCharSpace(0); }catch(_){}
+  doc.setFontSize(size);
+  const words=[]; segs.forEach(s=>{ if(s.br){ words.push({br:true}); return; } const t0=String(s.t); const pegado=!/^\s/.test(t0); let first=true; t0.split(/(\s+)/).forEach(p=>{ if(!p) return; if(/^\s+$/.test(p)){ words.push({sp:true}); first=false; return; } words.push({t:p,b:!!s.b,glue:first&&pegado&&/^[,.;:)]/.test(p)}); first=false; }); });
+  const width=wd=>{ doc.setFont("helvetica",wd.b?"bold":"normal"); return doc.getTextWidth(wd.t); };
+  doc.setFont("helvetica","normal"); const spW=doc.getTextWidth(" ");
+  let line=[], lw=0;
+  const flush=(last)=>{ if(!line.length){ return; }
+    const gaps=line.filter((w,i)=>i>0&&!w.glue).length, extra=(just&&!last&&gaps>0)?(w-lw)/gaps:0; let cx=x;
+    line.forEach((wd,i)=>{ const nx=line[i+1]; doc.setFont("helvetica",wd.b?"bold":"normal"); doc.text(wd.t,cx,y); cx+=wd.w+((nx&&nx.glue)?0:spW+extra); });
+    y+=lh; line=[]; lw=0; };
+  words.forEach(wd=>{ if(wd.br){ flush(true); y+=lh*0.55; return; } if(wd.sp) return;
+    wd.w=width(wd); const add=(line.length&&!wd.glue?spW:0)+wd.w;
+    if(lw+add>w && line.length){ flush(false); line.push(wd); lw=wd.w; } else { line.push(wd); lw+=add; } });
+  flush(true); return y; }
+/* ---- BOLETA DE PAGO ---- */
+async function pdfBoleta(doc,r,mes,anio,logos){
+  const E=rhEmpresa(), D=rhDatos(r), P=PESO_PDF, W=215.9, H=279.4, M=18;
+  const mon=D.moneda, ing=[["Haber básico",D.sf],["Bono extra",D.be],["Bono por KPI",D.bk],["Otros ingresos",D.otros]];
+  const totIng=ing.reduce((s,e)=>s+(+e[1]||0),0), liquido=totIng-D.desc;
+  const per=MONTH_ES_LONG[mes]+" "+anio;
+  // cabecera slate
+  doc.setFillColor(...P.slate); doc.rect(0,0,W,38,"F");
+  doc.addImage(logos.am,"PNG",M,11,16*_LOGO_R,16);
+  doc.setTextColor(...P.cream); doc.setFont("helvetica","bold"); doc.setFontSize(10.5); doc.text(E.corto,W-M,15,{align:"right"});
+  doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(...P.stone);
+  doc.text(E.direccion,W-M,20.5,{align:"right"}); doc.text(E.ciudad+", "+E.pais+" · NIT "+E.nit,W-M,25.5,{align:"right"});
+  doc.setFillColor(...P.amarillo); doc.rect(0,38,W,2.2,"F");
+  // título
+  doc.setTextColor(...P.slate); doc.setFont("helvetica","bold"); doc.setFontSize(26); doc.text("Boleta de pago",M,58);
+  doc.setFontSize(10); const pw=doc.getTextWidth(per)+10; doc.setFillColor(...P.amarillo); doc.roundedRect(W-M-pw,51.5,pw,9,4.5,4.5,"F");
+  doc.text(per,W-M-pw/2,57.4,{align:"center"});
+  // datos del colaborador
+  let y=68; doc.setFillColor(...P.linen); doc.roundedRect(M,y,W-2*M,34,3,3,"F");
+  const cw=(W-2*M-12)/3, campos=[["Nombre",D.nombre],["Doc. de identidad",[D.ci,D.exp].filter(Boolean).join(" ")||"—"],["Fecha de ingreso",_rhFecha(D.ingreso)],
+    ["Fecha de nacimiento",D.nac?_rhFecha(D.nac):"—"],["Cargo",D.cargo||"—"],["Mes de pago",per]];
+  campos.forEach((c,i)=>{ const cx=M+6+(i%3)*cw, cy=y+9+Math.floor(i/3)*14;
+    doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(...P.gris); doc.text(c[0].toUpperCase(),cx,cy,{charSpace:0.3}); try{ doc.setCharSpace(0); }catch(_){}
+    doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...P.slate); doc.text(doc.splitTextToSize(String(c[1]),cw-4)[0],cx,cy+5.5); });
+  // tabla de conceptos
+  y=112; const c1=M, c2=W-M-58, c3=W-M;
+  doc.setFillColor(...P.slate); doc.roundedRect(M,y,W-2*M,9,2,2,"F");
+  doc.setTextColor(...P.cream); doc.setFont("helvetica","bold"); doc.setFontSize(8.5);
+  doc.text("CONCEPTO",c1+5,y+6); doc.text("INGRESOS",c2,y+6,{align:"right"}); doc.text("DESCUENTOS",c3-5,y+6,{align:"right"});
+  y+=9; doc.setFont("helvetica","normal"); doc.setFontSize(10);
+  const fila=(t,a,b,i)=>{ if(i%2){ doc.setFillColor(...P.cream); doc.rect(M,y,W-2*M,8.5,"F"); }
+    doc.setTextColor(...P.slate); doc.text(t,c1+5,y+5.8); doc.text(a,c2,y+5.8,{align:"right"}); doc.text(b,c3-5,y+5.8,{align:"right"}); y+=8.5; };
+  ing.forEach((e,i)=>fila(e[0],_rhNum(e[1]),"",i));
+  fila("Descuentos"+(D.descDet?" ("+D.descDet+")":""),"",D.desc?_rhNum(D.desc):"0,00",ing.length);
+  doc.setDrawColor(...P.stone); doc.setLineWidth(0.4); doc.line(M,y,W-M,y);
+  doc.setFont("helvetica","bold"); doc.text("Totales",c1+5,y+6.5); doc.text(_rhNum(totIng),c2,y+6.5,{align:"right"}); doc.text(_rhNum(D.desc),c3-5,y+6.5,{align:"right"}); y+=13;
+  // líquido pagable
+  doc.setFillColor(...P.amarillo); doc.roundedRect(M,y,W-2*M,24,3,3,"F");
+  doc.setTextColor(...P.slate); doc.setFontSize(8.5); doc.text("LÍQUIDO PAGABLE",M+7,y+8.5,{charSpace:0.4}); try{ doc.setCharSpace(0); }catch(_){}
+  doc.setFontSize(20); doc.text(_rhMon(liquido,mon),W-M-7,y+11.5,{align:"right"});
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.text("Son: "+montoEnLetras(liquido,mon),M+7,y+18.5);
+  y+=48;
+  // firmas
+  const fw=70; [[M+6,E.corto,"Empleador"],[W-M-6-fw,D.nombre,"Recibí conforme"]].forEach(([fx,n,s])=>{
+    doc.setDrawColor(...P.slate); doc.setLineWidth(0.35); doc.line(fx,y,fx+fw,y);
+    doc.setFont("helvetica","bold"); doc.setFontSize(9.5); doc.setTextColor(...P.slate); doc.text(n,fx+fw/2,y+5.5,{align:"center"});
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(...P.gris); doc.text(s,fx+fw/2,y+10,{align:"center"}); });
+  _rhPie(doc,logos,E);
+}
+/* ---- pie y membrete PE$O ---- */
+function _rhPie(doc,logos,E){ const P=PESO_PDF, W=215.9, H=279.4, M=18;
+  doc.setFillColor(...P.amarillo); doc.rect(0,H-20,W,20,"F");
+  doc.addImage(logos.sl,"PNG",M,H-14,8*_LOGO_R,8);
+  doc.setDrawColor(...P.slate); doc.setLineWidth(0.4); doc.line(M+8*_LOGO_R+7,H-14.5,M+8*_LOGO_R+7,H-5.5);
+  doc.setTextColor(...P.slate); doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.text(E.direccion,M+8*_LOGO_R+12,H-9.2);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.text(E.web,W-M,H-9.2,{align:"right"});
+  doc.setFontSize(6.5); doc.setTextColor(...P.gris); doc.text("Generado con NUMMEROS · "+_rhFecha(_isoHoy()),W-M,H-23,{align:"right"}); }
+/* ---- CERTIFICADO DE TRABAJO ---- */
+async function pdfCertificado(doc,r,fechaEmision,logos){
+  const E=rhEmpresa(), D=rhDatos(r), P=PESO_PDF, W=215.9, H=279.4, M=25;
+  const fem=D.trato==="Sra.";
+  // membrete
+  doc.addImage(logos.am,"PNG",M,16,14*_LOGO_R,14);
+  doc.setTextColor(...P.gris); doc.setFont("helvetica","normal"); doc.setFontSize(8);
+  doc.text(E.razon,W-M,21,{align:"right"}); doc.text("NIT "+E.nit,W-M,25.5,{align:"right"});
+  // marca de agua
+  try{ doc.setGState(new doc.GState({opacity:0.22})); }catch(_){}
+  const ww=95; doc.addImage(logos.st,"PNG",(W-ww)/2,H/2-ww/_LOGO_R/2-6,ww,ww/_LOGO_R);
+  try{ doc.setGState(new doc.GState({opacity:1})); }catch(_){}
+  // título
+  doc.setTextColor(...P.slate); doc.setFont("helvetica","bold"); doc.setFontSize(19);
+  doc.text("CERTIFICADO DE TRABAJO",W/2,62,{align:"center",charSpace:0.6}); try{ doc.setCharSpace(0); }catch(_){}
+  doc.setFillColor(...P.amarillo); doc.rect(W/2-18,66,36,1.6,"F");
+  const tw=W-2*M; let y=82;
+  const desde=_rhFecha(D.ingreso,true), hasta=D.retiro?_rhFecha(D.retiro,true):"";
+  const jor=D.jornada?(" "+D.jornada):"";
+  const emis=parseLocalDate(fechaEmision)||new Date();
+  const ciTxt=[D.ci,D.exp].filter(Boolean).join(" ");
+  const quien=fem?"la Señora":"el Señor", portador=fem?"portadora":"portador";
+  const segs=[
+    {t:"Por medio de la presente, la empresa "},{t:E.razon,b:true},{t:", con Número de Identificación Tributaria "},{t:E.nit+".",b:true},{br:true},
+    {t:"CERTIFICA:",b:true},{br:true},
+    {t:"Que "+quien+" "},{t:D.nombre.toUpperCase(),b:true},{t:ciTxt?(", "+portador+" de la Cédula de Identidad N° "):""},{t:ciTxt?ciTxt+",":"",b:true},
+    {t:D.activo?" se desempeña en nuestra empresa en el cargo de ":" se desempeñó en nuestra empresa en el cargo de "},{t:(D.cargo||"").toUpperCase(),b:true},{t:jor+" desde el "},{t:desde,b:true},
+    {t:D.activo?" a la fecha.":(hasta?" hasta el ":".")},{t:(!D.activo&&hasta)?hasta+".":"",b:true},{br:true},
+    {t:"Durante su vinculación laboral, "+(D.activo?"percibe":"percibió")+" una remuneración mensual básica de "},{t:_rhMon(D.sf,D.moneda)+" ("+montoEnLetras(D.sf,D.moneda)+")",b:true},{t:"."},{br:true},
+    {t:"En el ejercicio de sus funciones, "+(fem?"la Sra. ":"el Sr. ")+(D.nombre.split(/\s+/).slice(-2,-1)[0]||D.nombre)+" ha demostrado ser "+(fem?"una ":"un ")},{t:"profesional responsable, "+(fem?"dedicada y comprometida":"dedicado y comprometido"),b:true},
+    {t:" con los objetivos de la empresa, manteniendo una conducta intachable durante todo su período de servicio."},{br:true},
+    {t:"El presente certificado se expide a solicitud "+(fem?"de la interesada":"del interesado")+", en la ciudad de "+E.ciudad+", "+E.pais+", a los "+emis.getDate()+" días del mes de "+_MESES[emis.getMonth()]+" de "+emis.getFullYear()+", para los fines que estime conveniente."+(D.activo?"":" No se registran obligaciones laborales pendientes a la fecha de emisión de este documento.")}
+  ];
+  doc.setTextColor(...P.slate);
+  y=pdfRich(doc,segs,M,y,tw,{size:11,lh:6.6});
+  y+=6; doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.text("Atentamente,",M,y);
+  y=Math.max(y+38,205);
+  doc.setDrawColor(...P.slate); doc.setLineWidth(0.35); doc.line(W/2-38,y,W/2+38,y);
+  doc.setFont("helvetica","bold"); doc.setFontSize(10.5); doc.text(E.firmante.toUpperCase(),W/2,y+6,{align:"center"});
+  doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(...P.gris); doc.text(E.firmanteCargo.toUpperCase(),W/2,y+11,{align:"center"});
+  _rhPie(doc,logos,E);
+}
+/* ---- generar y descargar ---- */
+function _rhSlug(s){ return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9]+/g,"_").replace(/^_|_$/g,""); }
+async function rhGenerar(tipo,personas,opts,modo){
+  if(!(window.jspdf&&window.jspdf.jsPDF)){ alert("La librería PDF aún se está cargando. Intenta de nuevo en unos segundos."); return null; }
+  const { jsPDF }=window.jspdf; const logos=await _rhLogos();
+  const doc=new jsPDF({unit:"mm",format:"letter"});
+  for(let i=0;i<personas.length;i++){ if(i) doc.addPage();
+    if(tipo==="boleta") await pdfBoleta(doc,personas[i],opts.mes,opts.anio,logos); else await pdfCertificado(doc,personas[i],opts.fecha,logos); }
+  doc.setProperties({title:(tipo==="boleta"?"Boleta de pago":"Certificado de trabajo"),author:rhEmpresa().corto,creator:"NUMMEROS by CONTAX"});
+  if(modo==="url") return doc.output("bloburl");
+  const nom = personas.length===1 ? _rhSlug(personas[0].nombre) : "Todos";
+  doc.save((tipo==="boleta"?"Boleta_"+_rhSlug(MONTH_ES_LONG[opts.mes])+"_"+opts.anio:"Certificado_Trabajo")+"_"+nom+".pdf");
+  return null;
+}
+/* ---- pantalla ---- */
+function renderRRHHDocs(app,intro,seg,rows){
+  const S=STATE.rhDoc||(STATE.rhDoc={tipo:"boleta",persona:null,mes:new Date().getMonth(),anio:new Date().getFullYear(),fecha:_isoHoy(),verEmp:false});
+  const ord=[...rows].sort((a,b)=>(rrhhIsAct(b)-rrhhIsAct(a))||String(a.nombre).localeCompare(String(b.nombre)));
+  if(!S.persona || !ord.find(r=>r.nombre===S.persona)) S.persona=ord[0]?ord[0].nombre:null;
+  const r=ord.find(x=>x.nombre===S.persona); const D=r?rhDatos(r):null; const E=rhEmpresa();
+  const anios=[]; for(let y=new Date().getFullYear()+1;y>=new Date().getFullYear()-4;y--) anios.push(y);
+  const inp=(id,lbl,val,type,ph)=>`<div><label for="${id}">${lbl}</label><input id="${id}" type="${type||"text"}" value="${esc(val==null?"":val)}" placeholder="${esc(ph||"")}" autocomplete="off"></div>`;
+  const lista=ord.map(x=>`<tr${x.nombre===S.persona?' class="rh-sel"':''}><td style="text-align:left">${esc(x.nombre)}<span class="sub2">${esc(x.cargo||"")}</span></td><td>${rrhhIsAct(x)?'<span class="st activo">Activo</span>':'<span class="st inactivo">Inactivo</span>'}</td>
+      <td><span class="ta-acts"><button class="btn ghost rh-q" data-n="${esc(x.nombre)}" data-t="boleta">Boleta</button><button class="btn ghost rh-q" data-n="${esc(x.nombre)}" data-t="cert">Certificado</button></span></td></tr>`).join("");
+  app.innerHTML=intro+seg+`
+    <div class="rh-docs">
+      <div class="rh-docs-izq">
+        <div class="card"><div class="head"><h3>Generar documento</h3></div>
+          <div class="seg" id="rhDocTipo" style="margin-bottom:14px"><button data-t="boleta" class="${S.tipo==="boleta"?"on":""}">Boleta de pago</button><button data-t="cert" class="${S.tipo==="cert"?"on":""}">Certificado de trabajo</button></div>
+          <div class="rh-form">
+            <div class="full"><label for="rhPer">Colaborador</label><div class="select-wrap"><select id="rhPer">${ord.map(x=>`<option value="${esc(x.nombre)}"${x.nombre===S.persona?" selected":""}>${esc(x.nombre)}${rrhhIsAct(x)?"":" (inactivo)"}</option>`).join("")}</select></div></div>
+            ${S.tipo==="boleta"?`<div><label for="rhMes">Mes</label><div class="select-wrap"><select id="rhMes">${MONTH_ES_LONG.map((m,i)=>`<option value="${i}"${i===+S.mes?" selected":""}>${m}</option>`).join("")}</select></div></div>
+              <div><label for="rhAnio">Año</label><div class="select-wrap"><select id="rhAnio">${anios.map(y=>`<option${y===+S.anio?" selected":""}>${y}</option>`).join("")}</select></div></div>`
+              :`<div class="full">${inp("rhFecha","Fecha de emisión",S.fecha,"date")}</div>`}
+          </div>
+          ${D?`<h4 class="rend-sec-title" style="margin:16px 0 8px">Datos del colaborador <span class="mini" style="font-weight:400">se guardan en este navegador si no están en la hoja RRHH</span></h4>
+          <div class="rh-form" id="rhExtraForm">
+            ${inp("rx_ci","Carnet de identidad",D.ci,"text","Ej.: 13110856")}${inp("rx_exp","Expedido en",D.exp,"text","Ej.: SC")}
+            ${inp("rx_nac","Fecha de nacimiento",D.nac,"date")}${inp("rx_ingreso","Fecha de ingreso",D.ingreso,"date")}
+            ${inp("rx_cargo","Cargo",D.cargo)}${inp("rx_jornada","Jornada",D.jornada,"text","Ej.: part time")}
+            <div><label for="rx_trato">Trato</label><div class="select-wrap"><select id="rx_trato"><option${D.trato==="Sr."?" selected":""}>Sr.</option><option${D.trato==="Sra."?" selected":""}>Sra.</option></select></div></div>
+            <div><label for="rx_moneda">Moneda</label><div class="select-wrap"><select id="rx_moneda"><option${D.moneda==="USD"?" selected":""}>USD</option><option${D.moneda==="BOB"?" selected":""}>BOB</option></select></div></div>
+            ${D.activo?"":inp("rx_retiro","Fecha de retiro",D.retiro,"date")}
+            ${S.tipo==="boleta"?inp("rx_otros","Otros ingresos",D.otros||"","number","0,00")+inp("rx_desc","Descuentos",D.desc||"","number","0,00")+`<div class="full">${inp("rx_descDet","Detalle de descuentos (opcional)",D.descDet,"text","Ej.: anticipo")}</div>`:""}
+          </div>`:emptyState("No hay colaboradores en la hoja RRHH.")}
+          <div class="rh-acc">
+            <button class="btn primary" id="rhDl" ${D?"":"disabled"}>Descargar PDF</button>
+            ${S.tipo==="boleta"?`<button class="btn" id="rhDlTodas">Boletas del mes · todos los activos</button>`:`<button class="btn" id="rhDlTodas">Certificados · todos</button>`}
+          </div>
+          <details class="rh-emp" ${S.verEmp?"open":""}><summary>Datos de la empresa en los documentos</summary>
+            <div class="rh-form" style="margin-top:12px">
+              ${inp("re_razon","Razón social",E.razon)}${inp("re_corto","Nombre corto",E.corto)}${inp("re_nit","NIT",E.nit)}${inp("re_direccion","Dirección",E.direccion)}
+              ${inp("re_ciudad","Ciudad",E.ciudad)}${inp("re_pais","País",E.pais)}${inp("re_firmante","Firma (nombre)",E.firmante)}${inp("re_firmanteCargo","Firma (cargo)",E.firmanteCargo)}${inp("re_web","Pie de página",E.web)}
+            </div><div class="rh-acc"><button class="btn" id="reSave">Guardar datos de la empresa</button><button class="btn ghost" id="reReset">Volver a los originales</button></div>
+          </details>
+        </div>
+        <div class="card"><div class="head"><h3>Colaboradores</h3><span class="mini">${ord.length} · activos e inactivos</span></div>
+          <div class="tbl-scroll"><table><thead><tr><th style="text-align:left">Colaborador</th><th>Estado</th><th></th></tr></thead><tbody>${lista}</tbody></table></div></div>
+      </div>
+      <div class="rh-docs-der"><div class="card rh-prev"><div class="head"><h3>Vista previa</h3><span class="mini" id="rhPrevTxt">preparando…</span></div><iframe id="rhPrev" title="Vista previa del PDF"></iframe></div></div>
+    </div>`;
+  const leerExtra=()=>{ if(!D) return; const o={}; ["ci","exp","nac","ingreso","cargo","jornada","trato","moneda","retiro","otros","desc","descDet"].forEach(k=>{ const el=$("#rx_"+k); if(el) o[k]=el.value; }); rhExtraSet(D.nombre,o); };
+  const prev=async()=>{ if(!r) return; const fr=$("#rhPrev"), tx=$("#rhPrevTxt"); try{ const u=await rhGenerar(S.tipo==="boleta"?"boleta":"cert",[ord.find(x=>x.nombre===S.persona)],{mes:+S.mes,anio:+S.anio,fecha:S.fecha},"url"); if(fr&&u){ if(fr.dataset.u) URL.revokeObjectURL(fr.dataset.u); fr.dataset.u=u; fr.src=u+"#toolbar=0&view=FitH"; } if(tx) tx.textContent=(S.tipo==="boleta"?"Boleta · "+MONTH_ES_LONG[S.mes]+" "+S.anio:"Certificado")+" · "+S.persona; }catch(e){ if(tx) tx.textContent="No se pudo generar la vista previa."; } };
+  let tm=null; const prevLuego=()=>{ clearTimeout(tm); tm=setTimeout(prev,450); };
+  document.querySelectorAll("#rhDocTipo button").forEach(b=>b.addEventListener("click",()=>{ S.tipo=b.dataset.t; render(); }));
+  const per=$("#rhPer"); if(per) per.addEventListener("change",()=>{ S.persona=per.value; render(); });
+  const ms=$("#rhMes"); if(ms) ms.addEventListener("change",()=>{ S.mes=+ms.value; prev(); });
+  const an=$("#rhAnio"); if(an) an.addEventListener("change",()=>{ S.anio=+an.value; prev(); });
+  const fe=$("#rhFecha"); if(fe) fe.addEventListener("change",()=>{ S.fecha=fe.value||_isoHoy(); prev(); });
+  document.querySelectorAll("#rhExtraForm input,#rhExtraForm select").forEach(el=>{ el.addEventListener("input",()=>{ leerExtra(); prevLuego(); }); el.addEventListener("change",()=>{ leerExtra(); prevLuego(); }); });
+  document.querySelectorAll(".rh-q").forEach(b=>b.addEventListener("click",()=>{ S.persona=b.dataset.n; S.tipo=b.dataset.t; render(); try{ window.scrollTo({top:0,behavior:"smooth"}); }catch(_){} }));
+  const dl=$("#rhDl"); if(dl) dl.addEventListener("click",async()=>{ leerExtra(); dl.disabled=true; try{ await rhGenerar(S.tipo==="boleta"?"boleta":"cert",[ord.find(x=>x.nombre===S.persona)],{mes:+S.mes,anio:+S.anio,fecha:S.fecha}); }finally{ dl.disabled=false; } });
+  const dt=$("#rhDlTodas"); if(dt) dt.addEventListener("click",async()=>{ const lst=S.tipo==="boleta"?ord.filter(rrhhIsAct):ord; if(!lst.length){ alert("No hay colaboradores para generar."); return; }
+    if(lst.length>1 && !confirm("Se generará un PDF con "+lst.length+" "+(S.tipo==="boleta"?"boletas":"certificados")+" (una página por persona). ¿Continuar?")) return;
+    dt.disabled=true; try{ await rhGenerar(S.tipo==="boleta"?"boleta":"cert",lst,{mes:+S.mes,anio:+S.anio,fecha:S.fecha}); }finally{ dt.disabled=false; } });
+  const det=document.querySelector(".rh-emp"); if(det) det.addEventListener("toggle",()=>{ S.verEmp=det.open; });
+  const rs=$("#reSave"); if(rs) rs.addEventListener("click",()=>{ const o={}; Object.keys(RH_EMP_DEF).forEach(k=>{ const el=$("#re_"+k); if(el) o[k]=el.value.trim(); }); rhEmpresaSet(o); prev(); rs.textContent="✓ Guardado"; setTimeout(()=>{ rs.textContent="Guardar datos de la empresa"; },1600); });
+  const rr=$("#reReset"); if(rr) rr.addEventListener("click",()=>{ try{ localStorage.removeItem("nm_rh_empresa"); }catch(_){} render(); });
+  prev();
+}
 
 /* ============================================================
    TEMA CLARO / OSCURO (V166) — "auto" sigue al dispositivo

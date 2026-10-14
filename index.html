@@ -1156,6 +1156,18 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
 .nm-barra{width:190px;height:8px;border-radius:999px;overflow:hidden;position:relative;background:var(--borde)}
 .nm-barra::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(120deg,var(--acento) 0 9px,var(--borde) 9px 18px);background-size:36px 100%;animation:nmCorrer .62s linear infinite}
 @keyframes nmCorrer{from{background-position:0 0}to{background-position:36px 0}}
+
+/* ===== V175: contador giratorio en los números de los KPI ===== */
+.kpi .val.nm-odo{overflow:hidden;text-overflow:clip;line-height:1.15em;margin-top:calc(9px - .05em);margin-bottom:calc(4px - .05em)}
+.nm-odo-in{display:inline-flex;align-items:flex-start;line-height:1.15em;height:1.15em;font-variant-numeric:tabular-nums}
+.nm-odo .nm-rod{display:inline-block;height:1.15em;overflow:hidden;width:1ch;line-height:1.15em}
+.nm-odo .nm-tira{display:block;text-align:center;line-height:1.15em;animation:nmRodar 1s linear infinite}
+.nm-odo .nm-odo-c{display:inline-block;line-height:1.15em}
+.nm-odo .nm-v1 .nm-tira{animation-duration:.62s}
+.nm-odo .nm-v2 .nm-tira{animation-duration:.78s}
+.nm-odo .nm-v3 .nm-tira{animation-duration:.95s}
+.nm-odo .nm-v4 .nm-tira{animation-duration:1.18s}
+@keyframes nmRodar{from{transform:translateY(0)}to{transform:translateY(-11.5em)}}
 @media (prefers-reduced-motion:reduce){.nm-barra::before,.nm-retrato::after,.nm-retrato img{animation:none!important}}
 </style>
 </head>
@@ -1455,7 +1467,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V174";
+const APP_VERSION = "V175";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2349,6 +2361,35 @@ function render(){
   try{ paintTopSubtabs(); }catch(e){}
   try{ updateEmpBtn(); }catch(e){}
   try{ marcaLogos(); }catch(e){}
+  try{ nmOdometro(); }catch(e){}
+}
+/* ============================================================
+   V175: los números de los cuadritos (KPI) giran como un contador
+   al entrar a cada pestaña (≈3 s) y se detienen en el valor real.
+   ============================================================ */
+let _nmOdoFirma="";
+function nmOdometro(forzar){
+  const vals=[...document.querySelectorAll("#app .kpi .val")].filter(v=>/\d/.test(v.textContent||""));
+  const firma=STATE.section+"|"+[...document.querySelectorAll("#app .kpi .lbl")].map(l=>l.textContent).join("|");
+  if(!forzar && firma===_nmOdoFirma) return;          // mismo lugar (p. ej. cambio de filtro): no repetir
+  _nmOdoFirma=firma;
+  if(!vals.length) return;
+  try{ if(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches) return; }catch(_){}
+  const TIRA="0<br>1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>0", vel=["nm-v1","nm-v3","nm-v2","nm-v4"];
+  vals.forEach(v=>{
+    const html=v.innerHTML, txt=v.textContent; let n=0;
+    v.classList.add("nm-odo");
+    v.innerHTML='<span class="nm-odo-in">'+[...txt].map(ch=>{
+      if(/[0-9]/.test(ch)){ const k=vel[(n++)%4]; return '<span class="nm-rod '+k+'" data-d="'+ch+'"><span class="nm-tira">'+TIRA+'</span></span>'; }
+      return '<span class="nm-odo-c">'+(ch===" "?"&nbsp;":esc(ch))+'</span>'; }).join("")+'</span>';
+    const rods=[...v.querySelectorAll(".nm-rod")];
+    rods.forEach((r,i)=>{ const t=Math.min(2900,1700+i*110);
+      setTimeout(()=>{ const tira=r.firstChild; if(!tira) return; tira.style.animation="none";
+        tira.style.transform="translateY(0)"; void tira.offsetHeight;
+        tira.style.transition="transform .38s cubic-bezier(.2,.9,.25,1.15)"; tira.style.transform="translateY(-"+(Number(r.dataset.d)*1.15)+"em)"; }, t); });
+    const fin=Math.min(2900,1700+Math.max(0,rods.length-1)*110)+480;
+    setTimeout(()=>{ if(v.isConnected && v.classList.contains("nm-odo")){ v.classList.remove("nm-odo"); v.innerHTML=html; } }, fin);
+  });
 }
 /* ============================================================
    SUB-PESTAÑAS EN LA BARRA SUPERIOR + SUBMENÚS AL PASAR EL CURSOR
@@ -7924,7 +7965,7 @@ function actualizarDatos(){
   const start=Date.now();
   const done=(cb)=>{ const wait=Math.max(0,1400-(Date.now()-start)); setTimeout(()=>{ b.innerHTML=t; nmCargando(false); if(cb) cb(); }, wait); };
   google.script.run
-    .withSuccessHandler(async function(res){ if(res&&!res.error){ aplicarDatos(res); await nmFbAplicarDatos(res); } done(function(){ if(res&&!res.error){ buildYears(); buildEmpresas(); render(); } else { showLogin(); } }); })
+    .withSuccessHandler(async function(res){ if(res&&!res.error){ aplicarDatos(res); await nmFbAplicarDatos(res); } done(function(){ if(res&&!res.error){ buildYears(); buildEmpresas(); _nmOdoFirma=""; render(); } else { showLogin(); } }); })
     .withFailureHandler(function(){ done(); })
     .getData(pin);
 }

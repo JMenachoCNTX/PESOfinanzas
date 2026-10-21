@@ -1176,6 +1176,13 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
 .pr-in.pr-aj{border-color:var(--brand);box-shadow:inset 0 0 0 1px var(--brand)}
 .pr-tbl .pr-rst{padding:2px 6px;margin-left:4px}
 .pr-tbl tfoot td{border-top:2px solid var(--border)}
+
+/* ===== V191: Comprobantes ===== */
+.comp-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:2px dashed var(--border);border-radius:14px;padding:28px 16px;text-align:center;cursor:pointer;background:var(--field);color:var(--text)}
+.comp-drop span{font-size:12.5px;color:var(--muted)} .comp-drop.on{border-color:var(--brand);background:rgba(142,182,155,.18)}
+.comp-th{width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:inline-grid;place-items:center;font:700 11px var(--display);color:var(--muted);background:var(--field)}
+.comp-tbl td{vertical-align:middle}
+.comp-clip{border:0;background:none;cursor:pointer;font-size:14px;padding:0 2px}
 @media (prefers-reduced-motion:reduce){.nm-barra::before,.nm-retrato::after,.nm-retrato img{animation:none!important}}
 </style>
 </head>
@@ -1194,6 +1201,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
     <button data-s="reportes">Reportes</button>
     <button data-s="ingresos">Ingresos</button>
     <button data-s="egresos">Egresos</button>
+    <button data-s="comprobantes">Comprobantes</button>
     <button data-s="costos">Costos</button>
     <button data-s="cxp">Cuentas por Pagar</button>
     <button data-s="bancos">Bancos</button>
@@ -1326,6 +1334,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
       <div>
         <h2>Registrar gasto</h2>
         <p class="lead">Se guardará en la hoja <b>HistorialEgresos</b> del archivo principal y aparecerá en el dashboard.</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="egCompBtn">📎 Leer comprobante con IA</button><input type="file" id="egCompFile" accept="image/*,application/pdf" hidden><span class="mini" id="egCompMsg"></span></div>
       </div>
       <button class="x" id="egFormClose">&times;</button>
     </div>
@@ -1475,7 +1484,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V190";
+const APP_VERSION = "V191";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2362,7 +2371,7 @@ function render(){
   CUR = STATE.currency||"USD";
   RATE = tcRateLatest();
   if(CUR==="BOB" && !RATE) CUR="USD";
-  const map={usuarios:renderUsuarios,archivos:renderArchivos,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
+  const map={usuarios:renderUsuarios,archivos:renderArchivos,comprobantes:renderComprobantes,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
     socios:renderSociosCapital,inversiones:renderInversiones,prestamos:renderPrestamos,devoluciones:renderDevoluciones,rendiciones:renderRendiciones,ingresos:renderIngresosTab,costos:renderCostos,bancos:renderBancos,mercury:renderMercury,bitgo:renderBitgo,plan:renderPlan,tc:()=>{ renderTC(); tcAvisoDudosos(); },ia:renderIA,cierre:renderCierre,calendario:renderCalendario,tareas:renderTareas};
   try{ (map[STATE.section]||renderResumen)();
     if(STATE.section==="rrhh" && nmFbActivo() && NMFB.esAdmin()){ const ap=$("#app"); if(ap){ ap.insertAdjacentHTML("afterbegin",`<div style="display:flex;justify-content:flex-end;margin:0 0 12px"><button class="btn" id="rhHistEd">✎ Registrar / editar personal</button></div>`); const b=$("#rhHistEd"); if(b) b.addEventListener("click",()=>histEditor("rrhh")); } } }
@@ -2530,6 +2539,92 @@ function desgModal(k, total, con){
       if(!NM_DESG) NM_DESG={}; if(ok.length) NM_DESG[k]=ok; else delete NM_DESG[k]; nmAjGuardar("costosDesglose",{items:NM_DESG}); ov.remove(); render(); };
   };
   draw(); document.body.appendChild(ov);
+}
+/* ============================================================
+   V191: COMPROBANTES — se guardan en Google Drive (cuenta jhonny@peso-latam.com)
+   y la IA (Gemini) lee fecha, monto, proveedor, concepto… La lista vive en Firebase
+   (config/h_comprobantes). Los de Slack llegan solos a esta misma bandeja.
+   ============================================================ */
+function compPin(){ let p=""; try{ p=localStorage.getItem("peso_pin")||""; }catch(_){} return p; }
+function compGuardarLista(){ if(!nmFbActivo()) return Promise.resolve(); STATE._compIdx=null; return NMFB.histSet("comprobantes",STATE.comps||[]).catch(e=>alert("No se pudo guardar la lista de comprobantes: "+((e&&e.message)||e))); }
+function compArchivoABase64(file){ return new Promise((ok,ko)=>{
+  const leer=b=>{ const fr=new FileReader(); fr.onload=()=>ok({nombre:file.name||"comprobante", mime:b.type||file.type, base64:String(fr.result).split(",")[1]}); fr.onerror=()=>ko(new Error("No se pudo leer el archivo")); fr.readAsDataURL(b); };
+  if(!/^image\//.test(file.type) || /gif|svg/.test(file.type)){ if(file.size>15*1024*1024) return ko(new Error("El archivo pesa más de 15 MB.")); return leer(file); }
+  const img=new Image(); const u=URL.createObjectURL(file);
+  img.onload=()=>{ const M=1800; let w=img.width,h=img.height; const k=Math.min(1,M/Math.max(w,h)); w=Math.round(w*k); h=Math.round(h*k);
+    const c=document.createElement("canvas"); c.width=w; c.height=h; const x=c.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,w,h); x.drawImage(img,0,0,w,h);
+    URL.revokeObjectURL(u); c.toBlob(b=>{ if(!b) return leer(file); const nb=new File([b],(file.name||"comprobante").replace(/\.[a-z0-9]+$/i,"")+".jpg",{type:"image/jpeg"}); leer(nb); },"image/jpeg",0.82); };
+  img.onerror=()=>{ URL.revokeObjectURL(u); leer(file); }; img.src=u; }); }
+function compSubirUno(file, leer){ return compArchivoABase64(file).then(p=>new Promise((ok,ko)=>{
+  const pin=compPin(); if(!pin||!(window.google&&google.script&&google.script.run)) return ko(new Error("Sin conexión con el servidor."));
+  p.leer=leer!==false;
+  google.script.run.withSuccessHandler(r=>{ if(!r||r.error) return ko(new Error((r&&r.error)||"No se pudo subir.")); ok(r); })
+    .withFailureHandler(e=>ko(e||new Error("Error de conexión"))).subirComprobante(pin,p); })); }
+function compNuevo(r,origen){ return {id:"C"+Date.now()+Math.random().toString(36).slice(2,6), driveId:r.driveId, url:r.url, nombre:r.nombre, mime:r.mime, origen:origen||"sistema",
+  subido:new Date().toISOString(), por:(NMFB.sesion&&NMFB.sesion.email)||"", ia:(r.ia&&!r.ia.error)?r.ia:{}, iaErr:(r.ia&&r.ia.error)||"", estado:"pendiente"}; }
+function compVer(c){ if(!c) return; const ov=document.createElement("div"); ov.className="overlay show"; ov.style.zIndex="420";
+  ov.innerHTML=`<div class="modal" style="max-width:900px;width:96vw"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2 style="margin:0">${esc(c.nombre||"Comprobante")}</h2><button class="x" id="cvX">&times;</button></div>
+    <iframe src="https://drive.google.com/file/d/${encodeURIComponent(c.driveId)}/preview" style="width:100%;height:68vh;border:0;border-radius:12px;margin-top:12px;background:var(--field)" allow="autoplay"></iframe>
+    <div class="modal-actions"><a class="btn" href="${esc(c.url)}" target="_blank" rel="noopener">Abrir en Google Drive</a><button class="btn primary" id="cvOk">Cerrar</button></div></div>`;
+  document.body.appendChild(ov); ov.querySelector("#cvX").onclick=ov.querySelector("#cvOk").onclick=()=>ov.remove(); }
+function compIdx(){ if(STATE._compIdx) return STATE._compIdx; const m={}; (STATE.comps||[]).forEach(c=>{ if(c.estado==="registrado"&&c.egreso){ m[_normTxt(c.egreso.con)+"|"+String(c.egreso.fecha||"").slice(0,10)]=c; } }); return (STATE._compIdx=m); }
+function compClipHTML(fecha,con){ const c=compIdx()[_normTxt(con)+"|"+String(fecha||"").slice(0,10)]; return c?` <button type="button" class="comp-clip" data-cid="${esc(c.id)}" title="Ver comprobante">📎</button>`:""; }
+document.addEventListener("click",ev=>{ const b=ev.target.closest&&ev.target.closest(".comp-clip"); if(!b) return; ev.preventDefault(); ev.stopPropagation(); compVer((STATE.comps||[]).find(x=>x.id===b.dataset.cid)); },true);
+function compLlenarForm(c){ const ia=(c&&c.ia)||{}; const set=(id,v)=>{ const e=$("#"+id); if(e&&v!=null&&String(v).trim()!=="") e.value=v; };
+  const f=String(ia.fecha||"").slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(f)){ set("f_fechaPago",f); set("f_fechaCont",f); }
+  set("f_concepto",ia.concepto); if(ia.monto) set("f_importe",ia.monto); set("f_moneda",String(ia.moneda||"").toUpperCase()==="BS"?"BOB":String(ia.moneda||"").toUpperCase());
+  set("f_ben",ia.proveedor); set("f_pagadopor",ia.pagado_por); set("f_pais",ia.pais); if(ia.metodo_pago) set("f_tipo",ia.metodo_pago);
+  const extra=[ia.numero_factura?"Factura N° "+ia.numero_factura:"", ia.nit?"NIT "+ia.nit:"", ia.referencia?"Ref. "+ia.referencia:"", ia.banco_origen?"Banco "+ia.banco_origen:""].filter(Boolean).join(" · ");
+  const co=$("#f_coment"); if(co && extra && !co.value.includes(extra)) co.value=(co.value?co.value+" · ":"")+extra;
+  STATE._compReg=c.id; }
+function compMarcarRegistrado(datos){ const id=STATE._compReg; if(!id) return; const c=(STATE.comps||[]).find(x=>x.id===id); if(!c) return;
+  c.estado="registrado"; c.registrado=new Date().toISOString(); c.egreso={fecha:datos.fechaPago, con:datos.concepto, imp:datos.importe, ben:datos.beneficiario};
+  STATE._compReg=null; compGuardarLista(); }
+// botón dentro del formulario "Registrar gasto"
+document.addEventListener("click",ev=>{ if(ev.target&&ev.target.id==="egCompBtn"){ const i=$("#egCompFile"); if(i) i.click(); } });
+document.addEventListener("change",ev=>{ if(!ev.target||ev.target.id!=="egCompFile") return; const file=ev.target.files[0]; ev.target.value=""; if(!file) return;
+  const m=$("#egCompMsg"); m.textContent="Subiendo y leyendo con IA…";
+  compSubirUno(file).then(r=>{ const c=compNuevo(r,"sistema"); STATE.comps=(STATE.comps||[]).concat([c]); compGuardarLista(); compLlenarForm(c);
+    m.textContent=c.iaErr?("Guardado en Drive ✓ · la IA no pudo leerlo ("+c.iaErr+"). Llena los datos a mano."):"Leído ✓ Revisa los datos y completa lo que falte."; })
+  .catch(e=>{ m.textContent="✕ "+((e&&e.message)||e); }); });
+function renderComprobantes(){
+  const app=$("#app"); if(!app) return;
+  const L=(STATE.comps||[]).slice().sort((a,b)=>String(b.subido).localeCompare(String(a.subido)));
+  const f=STATE.compFiltro||"pendiente"; const V=L.filter(c=>f==="todos"||c.estado===f);
+  const n=k=>L.filter(c=>c.estado===k).length;
+  const subiendo=STATE._compSubiendo||"";
+  const filas=V.map(c=>{ const ia=c.ia||{}; return `<tr>
+      <td><img class="comp-th" src="https://drive.google.com/thumbnail?id=${encodeURIComponent(c.driveId)}&sz=w120" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'comp-th comp-th-x',textContent:'${/pdf/.test(c.mime||"")?"PDF":"IMG"}'}))"></td>
+      <td>${esc(ia.fecha||"–")}</td><td style="text-align:left"><b>${esc(ia.proveedor||"(sin proveedor)")}</b><span class="sub2">${esc(ia.concepto||c.mensaje||c.nombre||"")}</span>${c.iaErr?`<span class="sub2" style="color:var(--error)">IA: ${esc(c.iaErr)}</span>`:""}</td>
+      <td class="num">${ia.monto!=null&&ia.monto!==""?esc((ia.moneda||"")+" "+f2(+ia.monto)):"–"}</td>
+      <td><span class="tag">${c.origen==="slack"?"Slack":"Sistema"}</span></td>
+      <td>${c.estado==="registrado"?'<span class="st activo">Registrado</span>':(c.estado==="descartado"?'<span class="st inactivo">Descartado</span>':'<span class="st bob">Pendiente</span>')}</td>
+      <td><span class="ta-acts"><button class="btn ghost cp-ver" data-id="${c.id}">Ver</button>${c.estado!=="registrado"?`<button class="btn primary cp-reg" data-id="${c.id}">Registrar</button>`:""}<button class="btn ghost cp-ia" data-id="${c.id}" title="Volver a leer con la IA">↻ IA</button>${c.estado==="pendiente"?`<button class="btn ghost cp-desc" data-id="${c.id}" title="Descartar">✕</button>`:""}</span></td></tr>`; }).join("");
+  app.innerHTML=`
+    <div class="card"><div class="head"><h3>Subir comprobantes</h3><span class="mini">se guardan en Google Drive · la IA lee los datos</span></div>
+      <label class="comp-drop" id="cpDrop"><input type="file" id="cpFiles" accept="image/*,application/pdf" multiple hidden>
+        <b>Arrastra aquí tus comprobantes o haz clic para elegirlos</b><span>Fotos (JPG, PNG) o PDF · puedes elegir varios a la vez</span></label>
+      ${subiendo?`<div class="msg" style="display:block;margin-top:10px">${esc(subiendo)}</div>`:""}
+      <p class="gcal-note">Después pulsa <b>Registrar</b>: se abre el formulario de gasto ya lleno con lo que leyó la IA. Tú completas el beneficiario, el comentario o lo que falte y guardas. Los que mandan por <b>Slack</b> también llegarán aquí.</p></div>
+    <div class="card"><div class="head"><h3>Bandeja</h3><div class="seg" id="cpFil"><button data-f="pendiente" class="${f==="pendiente"?"on":""}">Pendientes (${n("pendiente")})</button><button data-f="registrado" class="${f==="registrado"?"on":""}">Registrados (${n("registrado")})</button><button data-f="todos" class="${f==="todos"?"on":""}">Todos (${L.length})</button></div></div>
+      <div class="tbl-scroll"><table class="comp-tbl"><thead><tr><th></th><th>Fecha</th><th style="text-align:left">Proveedor / concepto</th><th>Monto</th><th>Origen</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${filas||`<tr><td colspan="7">${emptyState(f==="pendiente"?"No hay comprobantes pendientes de registrar.":"Aún no hay comprobantes.")}</td></tr>`}</tbody></table></div></div>`;
+  const subir=async files=>{ files=[...files].filter(x=>/^image\/|pdf/.test(x.type)); if(!files.length) return;
+    for(let i=0;i<files.length;i++){ STATE._compSubiendo="Subiendo y leyendo "+(i+1)+" de "+files.length+": "+files[i].name+"…"; render();
+      try{ const r=await compSubirUno(files[i]); STATE.comps=(STATE.comps||[]).concat([compNuevo(r,"sistema")]); await compGuardarLista(); }
+      catch(e){ alert("No se pudo subir «"+files[i].name+"»: "+((e&&e.message)||e)); } }
+    STATE._compSubiendo=""; STATE.compFiltro="pendiente"; render(); };
+  $("#cpFiles").addEventListener("change",ev=>{ const fs=ev.target.files; subir(fs); });
+  const dz=$("#cpDrop"); ["dragover","dragenter"].forEach(t=>dz.addEventListener(t,e=>{ e.preventDefault(); dz.classList.add("on"); })); ["dragleave","drop"].forEach(t=>dz.addEventListener(t,e=>{ e.preventDefault(); dz.classList.remove("on"); }));
+  dz.addEventListener("drop",e=>subir(e.dataTransfer.files));
+  document.querySelectorAll("#cpFil button").forEach(b=>b.addEventListener("click",()=>{ STATE.compFiltro=b.dataset.f; render(); }));
+  const C=id=>(STATE.comps||[]).find(x=>x.id===id);
+  document.querySelectorAll(".cp-ver").forEach(b=>b.addEventListener("click",()=>compVer(C(b.dataset.id))));
+  document.querySelectorAll(".cp-reg").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); abrirFormEgreso(); compLlenarForm(c); const m=$("#egCompMsg"); if(m) m.textContent="Datos leídos del comprobante · revisa y completa"; }));
+  document.querySelectorAll(".cp-desc").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); if(!c||!confirm("¿Descartar este comprobante? (queda en Drive)")) return; c.estado="descartado"; compGuardarLista().then(render); }));
+  document.querySelectorAll(".cp-ia").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); if(!c) return; b.textContent="Leyendo…"; b.disabled=true;
+    google.script.run.withSuccessHandler(r=>{ if(r&&r.ok&&r.ia&&!r.ia.error){ c.ia=r.ia; c.iaErr=""; } else { c.iaErr=(r&&(r.error||(r.ia&&r.ia.error)))||"No se pudo leer"; } compGuardarLista().then(render); })
+      .withFailureHandler(e=>{ c.iaErr=(e&&e.message)||"Error"; render(); }).leerComprobante(compPin(), c.driveId); }));
 }
 /* ============================================================
    V175: los números de los cuadritos (KPI) giran como un contador
@@ -2842,14 +2937,14 @@ function applyFilterVisibility(){
   const s=STATE.section;
   const showEstado = (s==="resumen");
   const showView = (s==="resumen");
-  const showYear = (s!=="rrhh" && s!=="bitgo" && s!=="plan" && s!=="tc" && s!=="inicio" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="cierre" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="usuarios");
-  const showCur = (s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="inicio" && s!=="rendiciones" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="usuarios");
+  const showYear = (s!=="rrhh" && s!=="bitgo" && s!=="plan" && s!=="tc" && s!=="inicio" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="cierre" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="usuarios");
+  const showCur = (s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="inicio" && s!=="rendiciones" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="usuarios");
   const gr=(id,on)=>{ const e=$("#"+id); if(e) e.style.display=on?"":"none"; };
   gr("gfYear",showYear); gr("gfEstado",showEstado); gr("gfCur",showCur); gr("gfView",showView);
   const anyG = showYear||showEstado||showCur||showView;
   const gb=$("#gFiltBtn"); if(gb) gb.style.display = anyG?"":"none";
   if(!anyG){ const gp=$("#gFilters"); if(gp) gp.hidden=true; }
-  const showEmp = (s!=="inicio" && s!=="flujo" && s!=="flujo2" && s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="usuarios");
+  const showEmp = (s!=="inicio" && s!=="flujo" && s!=="flujo2" && s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="usuarios");
   const eb=$("#empBtn"); if(eb) eb.style.display = showEmp?"":"none";
 }
 
@@ -3359,7 +3454,7 @@ function renderEgresosGeneral(){
     {label:"Sub Grupo",sortKey:"ksubgrupo",render:r=>esc(r.ksubgrupo||"–")},
     {label:"Cuenta Principal",sortKey:"cp",render:r=>`<span class="tw" style="display:inline-block;background:${catColor(r.cp)};margin-right:7px"></span>${esc(r.cp||"–")}`},
     {label:"Cuenta Analítica",sortKey:"ca",render:r=>{ if(!r.ca) return '<span class="zero">–</span>'; const cls=r.casrc==="manual"?"ca-man":(r.casrc==="auto"?"ca-auto":(r.casrc==="sheet"?"ca-sheet":"ca-none")); return `<span class="ca-cell ${cls}" style="cursor:default;pointer-events:none;max-width:200px">${esc(r.ca)}</span>`; }},
-    {label:"Concepto",sortKey:"keytext",render:r=>esc(r.keytext||r.con||"–")},
+    {label:"Concepto",sortKey:"keytext",render:r=>esc(r.keytext||r.con||"–")+compClipHTML(r.fecha,r.con)},
     {label:"Costo",sortKey:"costo",render:r=>r.costo?`<span class="tag">${esc(costoLabel(r.costo))}</span>`:'<span class="zero">–</span>'},
     {label:"Moneda",sortKey:"moneda",render:r=>`<span class="tag">${esc(r.moneda||"USD")}</span>`},
     {label:"USD",right:1,cls:"num",sortKey:"usd",render:r=>r.usd!=null?fmt(r.usd,2):'<span class="zero">–</span>'},
@@ -5934,7 +6029,7 @@ function ensureSectionPdfButton(){
   const btn=document.getElementById("topPdfBtn"); if(!btn) return;
   const app=document.getElementById("app");
   const hayContenido = !!app && (app.querySelector("table") || app.querySelector(".card.kpi") || app.querySelector(".grid.kpis"));
-  const mostrar = STATE.section!=="inicio" && STATE.section!=="tareas" && STATE.section!=="archivos" && STATE.section!=="usuarios" && hayContenido;
+  const mostrar = STATE.section!=="inicio" && STATE.section!=="tareas" && STATE.section!=="archivos" && STATE.section!=="comprobantes" && STATE.section!=="usuarios" && hayContenido;
   btn.hidden=!mostrar;
   if(!mostrar) return;
   const esCostos = (STATE.section==="costos");
@@ -8157,6 +8252,7 @@ async function nmFbAplicarDatos(res){
   catch(e){ console.error(e); STATE.fbErr="No se pudieron leer las tareas desde Firebase: "+(e&&e.message||e); }
   try{ await nmFbCargarAjustes(); }catch(e){ console.error("ajustes Firebase",e); }
   try{ tcAutoHoy(); }catch(_){}
+  try{ STATE.comps=(await NMFB.histGet("comprobantes"))||[]; STATE._compIdx=null; }catch(e){ console.error("comprobantes",e); }
   try{ setTimeout(nmWidgetPublicar,1500); }catch(_){}
 }
 /* V185: Mercury (ya no se actualiza), Inversiones, Préstamos y Devoluciones viven en Firebase.
@@ -8540,7 +8636,7 @@ function abrirFormEgreso(){
   $("#egForm").classList.add("show");
   const c=$("#f_concepto"); if(c) c.focus();
 }
-function cerrarFormEgreso(){ $("#egForm").classList.remove("show"); }
+function cerrarFormEgreso(){ $("#egForm").classList.remove("show"); STATE._compReg=null; const cm=$("#egCompMsg"); if(cm) cm.textContent=""; }
 function guardarEgreso(){
   const m=$("#egFormMsg");
   const concepto=$("#f_concepto").value.trim();
@@ -8568,6 +8664,7 @@ function guardarEgreso(){
       btn.textContent="Guardar gasto"; btn.disabled=false;
       if(!res||res.error){ m.className="msg err"; m.textContent=(res&&res.error)||"No se pudo guardar."; return; }
       m.className="msg ok"; m.textContent="Gasto guardado ✓  Actualizando…";
+      try{ compMarcarRegistrado(datos); }catch(_){}
       setTimeout(function(){ cerrarFormEgreso(); actualizarDatos(); },800);
     })
     .withFailureHandler(function(e){ btn.textContent="Guardar gasto"; btn.disabled=false; m.className="msg err"; m.textContent=(e&&e.message)||"Error al guardar."; })
@@ -8626,6 +8723,7 @@ const NAV_ICONS={
   tc:'<path d="M3 8l4-4 4 4M7 4v9a3 3 0 0 0 3 3h10"/><path d="M21 16l-4 4-4-4M17 20v-9a3 3 0 0 0-3-3H3"/>',
   calendario:'<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4M7.5 13h3M13.5 13h3M7.5 16.5h3M13.5 16.5h3"/>',
   usuarios:'<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><rect x="15" y="11" width="7" height="6" rx="1.2"/><path d="M16.5 11V9.5a2 2 0 0 1 4 0V11"/>',
+  comprobantes:'<path d="M6 3h9l3 3v15H6z"/><path d="M14 3v4h4"/><path d="M9 11h6M9 14.5h6M9 18h3.5"/>',
   archivos:'<path d="M3 7a2 2 0 0 1 2-2h4.5l2 2.5H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10.5h18"/>',
   tareas:'<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5l1.3 1.3L7.8 4M4 11.5l1.3 1.3L7.8 10M4 17.5l1.3 1.3L7.8 16"/>',
   socios:'<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="18" cy="7" r="3"/><path d="M18 5.4v3.2M16.9 6.1h1.7a.8 .8 0 0 1 0 1.6h-1.4"/>'

@@ -1484,7 +1484,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V191";
+const APP_VERSION = "V192";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2574,7 +2574,9 @@ function compLlenarForm(c){ const ia=(c&&c.ia)||{}; const set=(id,v)=>{ const e=
   const f=String(ia.fecha||"").slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(f)){ set("f_fechaPago",f); set("f_fechaCont",f); }
   set("f_concepto",ia.concepto); if(ia.monto) set("f_importe",ia.monto); set("f_moneda",String(ia.moneda||"").toUpperCase()==="BS"?"BOB":String(ia.moneda||"").toUpperCase());
   set("f_ben",ia.proveedor); set("f_pagadopor",ia.pagado_por); set("f_pais",ia.pais); if(ia.metodo_pago) set("f_tipo",ia.metodo_pago);
-  const extra=[ia.numero_factura?"Factura N° "+ia.numero_factura:"", ia.nit?"NIT "+ia.nit:"", ia.referencia?"Ref. "+ia.referencia:"", ia.banco_origen?"Banco "+ia.banco_origen:""].filter(Boolean).join(" · ");
+  const ruta=[ia.banco_origen,ia.banco_destino].filter(Boolean).join(" → ");
+  const extra=[ia.numero_factura?"Factura N° "+ia.numero_factura:"", ia.nit?"NIT "+ia.nit:"", ia.referencia?"Transf. N° "+ia.referencia:"", ruta, ia.cuenta_destino?"Cta. destino "+ia.cuenta_destino:""].filter(Boolean).join(" · ");
+  if(!ia.metodo_pago && ia.banco_origen) set("f_tipo","Transferencia "+ia.banco_origen);
   const co=$("#f_coment"); if(co && extra && !co.value.includes(extra)) co.value=(co.value?co.value+" · ":"")+extra;
   STATE._compReg=c.id; }
 function compMarcarRegistrado(datos){ const id=STATE._compReg; if(!id) return; const c=(STATE.comps||[]).find(x=>x.id===id); if(!c) return;

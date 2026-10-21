@@ -1368,7 +1368,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
     </div>
     <div class="f2">
       <div class="field"><label>Beneficiario</label><input id="f_ben" list="dl_ben" autocomplete="off" placeholder="Elige o escribe…"></div>
-      <div class="field"><label>Tipo de Pago</label><input id="f_tipo" list="dl_tipo" autocomplete="off" placeholder="Elige o escribe…"></div>
+      <div class="field"><label>Pagado desde (cuenta o socio)</label><input id="f_tipo" list="dl_tipo" autocomplete="off" placeholder="CIDRE, Tesabiz, JP Velasco…"></div>
     </div>
     <div class="f2">
       <div class="field"><label>Pagado por</label><input id="f_pagadopor" list="dl_pagadopor" autocomplete="off" placeholder="Elige o escribe…"></div>
@@ -1484,7 +1484,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V194";
+const APP_VERSION = "V195";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2573,10 +2573,10 @@ document.addEventListener("click",ev=>{ const b=ev.target.closest&&ev.target.clo
 function compLlenarForm(c){ const ia=(c&&c.ia)||{}; const set=(id,v)=>{ const e=$("#"+id); if(e&&v!=null&&String(v).trim()!=="") e.value=v; };
   const f=String(ia.fecha||"").slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(f)){ set("f_fechaPago",f); set("f_fechaCont",f); }
   set("f_concepto",ia.concepto); if(ia.monto) set("f_importe",ia.monto); set("f_moneda",String(ia.moneda||"").toUpperCase()==="BS"?"BOB":String(ia.moneda||"").toUpperCase());
-  set("f_ben",ia.proveedor); set("f_pagadopor",ia.pagado_por); set("f_pais",ia.pais); if(ia.metodo_pago) set("f_tipo",ia.metodo_pago);
+  set("f_ben",ia.proveedor); set("f_pagadopor",ia.pagado_por); set("f_pais",ia.pais);
   const ruta=[ia.banco_origen,ia.banco_destino].filter(Boolean).join(" → ");
   const extra=[ia.numero_factura?"Factura N° "+ia.numero_factura:"", ia.nit?"NIT "+ia.nit:"", ia.referencia?"Transf. N° "+ia.referencia:"", ruta, ia.cuenta_destino?"Cta. destino "+ia.cuenta_destino:""].filter(Boolean).join(" · ");
-  if(!ia.metodo_pago && ia.banco_origen) set("f_tipo","Transferencia "+ia.banco_origen);
+  if(ia.banco_origen) set("f_tipo",cuentaPagoDeBanco(ia.banco_origen));
   const co=$("#f_coment"); if(co && extra && !co.value.includes(extra)) co.value=(co.value?co.value+" · ":"")+extra;
   STATE._compReg=c.id; }
 function compMarcarRegistrado(datos){ const id=STATE._compReg; if(!id) return; const c=(STATE.comps||[]).find(x=>x.id===id); if(!c) return;
@@ -2632,8 +2632,13 @@ function renderComprobantes(){
   document.querySelectorAll(".cp-reg").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); abrirFormEgreso(); compLlenarForm(c); const m=$("#egCompMsg"); if(m) m.textContent="Datos leídos del comprobante · revisa y completa"; }));
   document.querySelectorAll(".cp-desc").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); if(!c||!confirm("¿Descartar este comprobante? (queda en Drive)")) return; c.estado="descartado"; compGuardarLista().then(render); }));
   document.querySelectorAll(".cp-ia").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); if(!c) return; b.textContent="Leyendo…"; b.disabled=true;
-    google.script.run.withSuccessHandler(r=>{ if(r&&r.ok&&r.ia&&!r.ia.error){ c.ia=r.ia; c.iaErr=""; } else { c.iaErr=(r&&(r.error||(r.ia&&r.ia.error)))||"No se pudo leer"; } compGuardarLista().then(render); })
-      .withFailureHandler(e=>{ c.iaErr=(e&&e.message)||"Error"; render(); }).leerComprobante(compPin(), c.driveId); }));
+    // V195: si Gemini está ocupado, se reintenta solo hasta 3 veces
+    const intentar=(n)=>google.script.run.withSuccessHandler(r=>{ if(r&&r.ok&&r.ia&&!r.ia.error){ c.ia=r.ia; c.iaErr=""; compGuardarLista().then(render); return; }
+        const err=(r&&(r.error||(r.ia&&r.ia.error)))||"No se pudo leer";
+        if(n<3 && /ocupad|429|503|500|intenta/i.test(err)){ b.textContent="Reintentando ("+(n+1)+"/3)…"; setTimeout(()=>intentar(n+1),6000); return; }
+        c.iaErr=err; compGuardarLista().then(render); })
+      .withFailureHandler(e=>{ c.iaErr=(e&&e.message)||"Error"; render(); }).leerComprobante(compPin(), c.driveId);
+    intentar(0); }));
 }
 /* ============================================================
    V175: los números de los cuadritos (KPI) giran como un contador
@@ -8605,13 +8610,18 @@ function showLogin(){ const c=document.querySelector(".login-card"); if(c) c.cla
 /* ---------- Registrar gasto (escribe en HistorialEgresos) ---------- */
 function distinctVals(field){ const s=new Set(); STATE.egresos.forEach(r=>{ const v=(r[field]!=null?String(r[field]).trim():""); if(v) s.add(v); }); return [...s].sort((a,b)=>a.localeCompare(b)); }
 function fillDL(id,vals){ const dl=$("#"+id); if(dl) dl.innerHTML=vals.map(v=>`<option value="${esc(v)}"></option>`).join(""); }
+/* V195: cuentas desde donde se paga (columna "Tipo de Pago"). Los socios van con su nombre para que entren en Rendiciones. */
+const CUENTAS_PAGO=["CIDRE","Tesabiz","Mercury","BitGo","JP Velasco","Alejo T.","TC JP","TC Alejo"];
+function cuentaPagoDeBanco(b){ const x=String(b||"").toLowerCase();
+  if(/cidre/.test(x)) return "CIDRE"; if(/tesabiz/.test(x)) return "Tesabiz"; if(/mercury/.test(x)) return "Mercury"; if(/bitgo/.test(x)) return "BitGo";
+  return String(b||"").trim(); }
 function poblarDatalists(){
   const plan=(STATE.plan||[]).filter(r=>String(r.tipo).toLowerCase().indexOf("egreso")>=0);
   const anal=plan.filter(r=>String(r.categoria).toLowerCase().indexOf("anal")>=0).map(r=>r.nombre).filter(Boolean);
   const ccs=new Set(anal); distinctVals("cc").forEach(v=>ccs.add(v));
   fillDL("dl_cc",[...ccs].sort((a,b)=>a.localeCompare(b)));
   fillDL("dl_ben",distinctVals("ben"));
-  fillDL("dl_tipo",distinctVals("tipo"));
+  fillDL("dl_tipo",[...new Set(CUENTAS_PAGO.concat(distinctVals("tipo")))]);
   fillDL("dl_pagadopor",distinctVals("pagadopor"));
   const pais=new Set(["Bolivia","Argentina","Brasil","Colombia"]); distinctVals("pais").forEach(v=>pais.add(v));
   fillDL("dl_pais",[...pais]);

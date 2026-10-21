@@ -1484,7 +1484,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V192";
+const APP_VERSION = "V194";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2581,7 +2581,14 @@ function compLlenarForm(c){ const ia=(c&&c.ia)||{}; const set=(id,v)=>{ const e=
   STATE._compReg=c.id; }
 function compMarcarRegistrado(datos){ const id=STATE._compReg; if(!id) return; const c=(STATE.comps||[]).find(x=>x.id===id); if(!c) return;
   c.estado="registrado"; c.registrado=new Date().toISOString(); c.egreso={fecha:datos.fechaPago, con:datos.concepto, imp:datos.importe, ben:datos.beneficiario};
-  STATE._compReg=null; compGuardarLista(); }
+  STATE._compReg=null; compGuardarLista();
+  // V194: si vino de Slack, se marca el mensaje con ✅ y se responde en el hilo
+  if(c.origen==="slack" && c.canal && (c.ts || /^SL\d+_/.test(c.id))){
+    const ts=c.ts || (()=>{ const d=c.id.slice(2).split("_")[0]; return d.slice(0,d.length-6)+"."+d.slice(-6); })();
+    const quien=(NMFB.sesion&&NMFB.sesion.nombre)||"el equipo de finanzas";
+    const texto="✅ Registrado en el sistema por "+quien+": "+(datos.moneda||"")+" "+f2(+datos.importe||0)+" · "+(datos.beneficiario||datos.concepto||"");
+    try{ google.script.run.withSuccessHandler(r=>{ if(r&&r.error) console.warn("Slack:",r.error); }).withFailureHandler(()=>{}).slackAvisarRegistrado(compPin(),{canal:c.canal,ts:ts,texto:texto}); }catch(_){}
+  } }
 // botón dentro del formulario "Registrar gasto"
 document.addEventListener("click",ev=>{ if(ev.target&&ev.target.id==="egCompBtn"){ const i=$("#egCompFile"); if(i) i.click(); } });
 document.addEventListener("change",ev=>{ if(!ev.target||ev.target.id!=="egCompFile") return; const file=ev.target.files[0]; ev.target.value=""; if(!file) return;

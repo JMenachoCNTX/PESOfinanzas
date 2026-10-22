@@ -1183,6 +1183,15 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
 .comp-th{width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:inline-grid;place-items:center;font:700 11px var(--display);color:var(--muted);background:var(--field)}
 .comp-tbl td{vertical-align:middle}
 .comp-clip{border:0;background:none;cursor:pointer;font-size:14px;padding:0 2px}
+
+/* ===== V196: respaldos ===== */
+.resp-btn{border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:3px 9px;cursor:pointer;font-size:12.5px;white-space:nowrap;color:var(--muted)}
+.resp-btn.on{border-color:var(--brand);color:var(--text);background:rgba(142,182,155,.18)}
+.resp-btn:hover{border-color:var(--brand)}
+#rpNota{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--field);color:var(--text);font:inherit}
+.resp-list{display:flex;flex-direction:column;gap:8px}
+.resp-it{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+.resp-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (prefers-reduced-motion:reduce){.nm-barra::before,.nm-retrato::after,.nm-retrato img{animation:none!important}}
 </style>
 </head>
@@ -1484,7 +1493,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V195";
+const APP_VERSION = "V196";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1571,7 +1580,7 @@ let STATE = {
   egSort:{key:"imp",dir:"desc"},
   mSearch:"", mTab:"graficos", mSort:{key:"fecha",dir:"desc"}, mStatus:"__all", mCuenta:"__all", mMes:"__all", mCanalitica:"__all", mContab:"__all", mCAest:"__all", mDesc:"__all", mSel:null,
   bgSearch:"", bgCat:"__all", bgTab:"graficos", bgSort:{key:"",dir:"desc"}, bgAsset:"__all", bgTipo:"__all", bgWallet:"__all", bgCanalitica:"__all", bgContab:"__all", bgCAest:"__all", bgComent:"__all", bgSel:null,
-  planSearch:"", planTipo:"__all", planCat:"__all", planOrigen:"__all", planEstado:"__all", rendTipo:"__all", rendSec:"__all", rendTab:"balance", rendGraphCur:"USD", rendSearch:"", rendSort:{key:"fecha",dir:"desc"}, ingSearch:"", ingTab:"general", ingSub:"lista", ingPasSort:{key:"mi",dir:"asc"}, ingGwSort:{key:"",dir:"asc"}, ingPasGw:"__all", ingPivMetric:"nUSD", egGenSearch:"", egGenSrc:"__all", egGenSort:{key:"fecha",dir:"desc"}, egGenCuenta:"__all", egGenGrupo:"__all", egGenSubg:"__all", egGenCP:"__all", egGenCA:"__all", egGenMes:"__all", egGenCosto:"__all", provTab:"matriz", provProv:"__all", provYear:null, cosSearch:"", ingresosTab:{cols:[],rows:[]}, costos:{cols:[],rows:[]}, tablaCostos:{cols:[],rows:[]}, pnl:{}, cosTab:"lista", cosProv:"", flujoTab:"uno", repTop:"reportes", socioTab:"inversiones", bancosTab:"mercury", cosPagSort:{key:"impUSD",dir:"desc"}, lcSort:{key:"mFijoM",dir:"desc"}, lcSearch:"", lcCat:"__all", lcTipo:"__all", lcEmp:"__all", lcFV:"__all", invSort:{key:"importe",dir:"desc"}, currency:"USD", empresa:"__all", resTab:"resumen", resBase:"devengado", cmpBasis:"month", cxpTab:"graficos", cxpSearch:"", cxpProv:"__all", cxpMes:"__all", cxpSort:{key:"imp",dir:"desc"}, prePrest:"__all", preSort:{key:"importe",dir:"desc"}, devPer:"__all", devCur:"USD", devSort:{key:"importe",dir:"desc"}, rhSearch:"", rhNombre:"__all", rhCargo:"__all", rhEstado:"__all", rhSort:{key:"_tot",dir:"desc"}, rhTab:"resumen", rhPagSort:{key:"fecha",dir:"desc"}, rhPlanYear:null, rhPlanMes:null, iaMsgs:[], iaBusy:false, iaKey:"", iaInput:"", cieYear:null, cieMes:null,
+  planSearch:"", planTipo:"__all", planCat:"__all", planOrigen:"__all", planEstado:"__all", rendTipo:"__all", rendSec:"__all", rendTab:"balance", rendGraphCur:"USD", rendSearch:"", rendSort:{key:"fecha",dir:"desc"}, ingSearch:"", ingTab:"general", ingSub:"lista", ingPasSort:{key:"mi",dir:"asc"}, ingGwSort:{key:"",dir:"asc"}, ingPasGw:"__all", ingPivMetric:"nUSD", egGenSearch:"", egGenSrc:"__all", egGenTP:"__all", egGenSort:{key:"fecha",dir:"desc"}, egGenCuenta:"__all", egGenGrupo:"__all", egGenSubg:"__all", egGenCP:"__all", egGenCA:"__all", egGenMes:"__all", egGenCosto:"__all", provTab:"matriz", provProv:"__all", provYear:null, cosSearch:"", ingresosTab:{cols:[],rows:[]}, costos:{cols:[],rows:[]}, tablaCostos:{cols:[],rows:[]}, pnl:{}, cosTab:"lista", cosProv:"", flujoTab:"uno", repTop:"reportes", socioTab:"inversiones", bancosTab:"mercury", cosPagSort:{key:"impUSD",dir:"desc"}, lcSort:{key:"mFijoM",dir:"desc"}, lcSearch:"", lcCat:"__all", lcTipo:"__all", lcEmp:"__all", lcFV:"__all", invSort:{key:"importe",dir:"desc"}, currency:"USD", empresa:"__all", resTab:"resumen", resBase:"devengado", cmpBasis:"month", cxpTab:"graficos", cxpSearch:"", cxpProv:"__all", cxpMes:"__all", cxpSort:{key:"imp",dir:"desc"}, prePrest:"__all", preSort:{key:"importe",dir:"desc"}, devPer:"__all", devCur:"USD", devSort:{key:"importe",dir:"desc"}, rhSearch:"", rhNombre:"__all", rhCargo:"__all", rhEstado:"__all", rhSort:{key:"_tot",dir:"desc"}, rhTab:"resumen", rhPagSort:{key:"fecha",dir:"desc"}, rhPlanYear:null, rhPlanMes:null, iaMsgs:[], iaBusy:false, iaKey:"", iaInput:"", cieYear:null, cieMes:null,
   calY:null, calM:null, calDay:null, calFuente:"__all", tareas:[], taForm:{t:"",prio:"Media",vence:""}, taFiltro:"pendientes"
 };
 
@@ -2604,11 +2613,11 @@ function renderComprobantes(){
   const subiendo=STATE._compSubiendo||"";
   const filas=V.map(c=>{ const ia=c.ia||{}; return `<tr>
       <td><img class="comp-th" src="https://drive.google.com/thumbnail?id=${encodeURIComponent(c.driveId)}&sz=w120" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'comp-th comp-th-x',textContent:'${/pdf/.test(c.mime||"")?"PDF":"IMG"}'}))"></td>
-      <td>${esc(ia.fecha||"–")}</td><td style="text-align:left"><b>${esc(ia.proveedor||"(sin proveedor)")}</b><span class="sub2">${esc(ia.concepto||c.mensaje||c.nombre||"")}</span>${c.iaErr?`<span class="sub2" style="color:var(--error)">IA: ${esc(c.iaErr)}</span>`:""}</td>
+      <td>${esc(ia.fecha||"–")}</td><td style="text-align:left">${ia.tipo_documento?`<span class="tag">${esc(ia.tipo_documento)}</span> `:""}<b>${esc(ia.proveedor||"(sin proveedor)")}</b><span class="sub2">${esc(ia.concepto||c.mensaje||c.nombre||"")}</span>${c.iaErr?`<span class="sub2" style="color:var(--error)">IA: ${esc(c.iaErr)}</span>`:""}</td>
       <td class="num">${ia.monto!=null&&ia.monto!==""?esc((ia.moneda||"")+" "+f2(+ia.monto)):"–"}</td>
       <td><span class="tag">${c.origen==="slack"?"Slack":"Sistema"}</span></td>
       <td>${c.estado==="registrado"?'<span class="st activo">Registrado</span>':(c.estado==="descartado"?'<span class="st inactivo">Descartado</span>':'<span class="st bob">Pendiente</span>')}</td>
-      <td><span class="ta-acts"><button class="btn ghost cp-ver" data-id="${c.id}">Ver</button>${c.estado!=="registrado"?`<button class="btn primary cp-reg" data-id="${c.id}">Registrar</button>`:""}<button class="btn ghost cp-ia" data-id="${c.id}" title="Volver a leer con la IA">↻ IA</button>${c.estado==="pendiente"?`<button class="btn ghost cp-desc" data-id="${c.id}" title="Descartar">✕</button>`:""}</span></td></tr>`; }).join("");
+      <td><span class="ta-acts"><button class="btn ghost cp-ver" data-id="${c.id}">Ver</button>${c.estado!=="registrado"?`<button class="btn primary cp-reg" data-id="${c.id}" title="Crear un gasto nuevo con estos datos">Registrar</button><button class="btn ghost cp-adj" data-id="${c.id}" title="Unirlo a un pago que ya existe (factura, contrato, etc.)">Adjuntar a pago</button>`:""}<button class="btn ghost cp-ia" data-id="${c.id}" title="Volver a leer con la IA">↻ IA</button>${c.estado==="pendiente"?`<button class="btn ghost cp-desc" data-id="${c.id}" title="Descartar">✕</button>`:""}</span></td></tr>`; }).join("");
   app.innerHTML=`
     <div class="card"><div class="head"><h3>Subir comprobantes</h3><span class="mini">se guardan en Google Drive · la IA lee los datos</span></div>
       <label class="comp-drop" id="cpDrop"><input type="file" id="cpFiles" accept="image/*,application/pdf" multiple hidden>
@@ -2630,6 +2639,7 @@ function renderComprobantes(){
   const C=id=>(STATE.comps||[]).find(x=>x.id===id);
   document.querySelectorAll(".cp-ver").forEach(b=>b.addEventListener("click",()=>compVer(C(b.dataset.id))));
   document.querySelectorAll(".cp-reg").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); abrirFormEgreso(); compLlenarForm(c); const m=$("#egCompMsg"); if(m) m.textContent="Datos leídos del comprobante · revisa y completa"; }));
+  document.querySelectorAll(".cp-adj").forEach(b=>b.addEventListener("click",()=>compAdjuntarAPago(C(b.dataset.id))));
   document.querySelectorAll(".cp-desc").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); if(!c||!confirm("¿Descartar este comprobante? (queda en Drive)")) return; c.estado="descartado"; compGuardarLista().then(render); }));
   document.querySelectorAll(".cp-ia").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); if(!c) return; b.textContent="Leyendo…"; b.disabled=true;
     // V195: si Gemini está ocupado, se reintenta solo hasta 3 veces
@@ -2639,6 +2649,68 @@ function renderComprobantes(){
         c.iaErr=err; compGuardarLista().then(render); })
       .withFailureHandler(e=>{ c.iaErr=(e&&e.message)||"Error"; render(); }).leerComprobante(compPin(), c.driveId);
     intentar(0); }));
+}
+/* ============================================================
+   V196: RESPALDOS Y NOTAS por movimiento (Egresos, Mercury, BitGo…)
+   Archivos en Drive (comprobante, factura, contrato, proforma, aviso…) y una nota.
+   Firebase: config/h_respaldos (lista) y config/movNotas.
+   ============================================================ */
+const RESP_TIPOS=["Comprobante","Factura","Contrato","Proforma","Aviso de cobro","Recibo","Otro"];
+let NM_NOTAS=null;
+function movKey(r){ return String(r.fuente||r.origen||"")+"|"+String(r.hu||""); }
+function respIdx(){ if(STATE._respIdx) return STATE._respIdx; const m={}; (STATE.resp||[]).forEach(x=>{ (m[x.mov]=m[x.mov]||[]).push(x); }); return (STATE._respIdx=m); }
+function respGuardar(){ STATE._respIdx=null; return NMFB.histSet("respaldos",STATE.resp||[]); }
+function notasGuardar(){ return NMFB.cfgSet("movNotas",{notas:NM_NOTAS||{}}); }
+function respBtnHTML(r){ if(!nmFbActivo()) return ""; const k=movKey(r); const n=(respIdx()[k]||[]).length; const nota=NM_NOTAS&&NM_NOTAS[k];
+  return `<button type="button" class="resp-btn${n||nota?" on":""}" data-k="${esc(k)}" data-con="${esc(r.con||r.keytext||"")}" data-imp="${esc(String(r.orig!=null?r.orig:r.usd))}" data-mon="${esc(r.moneda||"USD")}" data-f="${esc(r.fecha||"")}" title="Respaldos y nota">📎${n?" "+n:""}${nota?" ✎":""}</button>`; }
+document.addEventListener("click",ev=>{ const b=ev.target.closest&&ev.target.closest(".resp-btn"); if(!b) return; ev.preventDefault(); ev.stopPropagation();
+  respModal({k:b.dataset.k, con:b.dataset.con, imp:b.dataset.imp, mon:b.dataset.mon, fecha:b.dataset.f}); },true);
+function respModal(m){
+  const ov=document.createElement("div"); ov.className="overlay show"; ov.style.zIndex="410";
+  const draw=(msg)=>{ const L=respIdx()[m.k]||[]; const nota=(NM_NOTAS&&NM_NOTAS[m.k])||{};
+    ov.innerHTML=`<div class="modal" style="max-width:640px"><div style="display:flex;justify-content:space-between;gap:10px"><div><h2 style="margin:0">Respaldos del pago</h2><p class="lead" style="margin:6px 0 0">${esc(m.con)} · ${esc(fmtDate(m.fecha)||m.fecha||"")} · <b>${esc(m.mon)} ${f2(+m.imp||0)}</b></p></div><button class="x" id="rpX">&times;</button></div>
+      <div class="field" style="margin-top:14px"><label>Nota / comentario</label><textarea id="rpNota" rows="2" placeholder="Ej.: pago parcial, factura llega la próxima semana…">${esc(nota.texto||"")}</textarea>${nota.por?`<span class="mini">Última edición: ${esc(nota.por)} · ${esc(String(nota.fecha||"").slice(0,10))}</span>`:""}</div>
+      <h3 style="margin:14px 0 8px">Archivos (${L.length})</h3>
+      ${L.length?`<div class="resp-list">${L.map(x=>`<div class="resp-it"><span class="tag">${esc(x.tipo)}</span><span class="resp-n">${esc(x.nombre||"archivo")}</span><button class="btn ghost rp-ver" data-id="${esc(x.id)}">Ver</button><button class="btn ghost rp-del" data-id="${esc(x.id)}" title="Quitar">✕</button></div>`).join("")}</div>`:'<p class="mini">Aún no hay archivos.</p>'}
+      <div class="us-cl" style="margin-top:10px"><span class="select-wrap"><select id="rpTipo">${RESP_TIPOS.map(t=>`<option>${t}</option>`).join("")}</select></span><button class="btn" id="rpSubir">📎 Subir archivo</button><input type="file" id="rpFile" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" hidden></div>
+      <div class="msg" id="rpMsg" style="display:${msg?"block":"none"}">${esc(msg||"")}</div>
+      <div class="modal-actions"><button class="btn" id="rpCerrar">Cerrar</button><button class="btn primary" id="rpOk">Guardar nota</button></div></div>`;
+    ov.querySelector("#rpX").onclick=ov.querySelector("#rpCerrar").onclick=()=>{ ov.remove(); if(STATE.section==="egresos") render(); };
+    ov.querySelector("#rpOk").onclick=()=>{ const t=ov.querySelector("#rpNota").value.trim(); NM_NOTAS=NM_NOTAS||{};
+      if(t) NM_NOTAS[m.k]={texto:t,por:(NMFB.sesion&&NMFB.sesion.email)||"",fecha:new Date().toISOString()}; else delete NM_NOTAS[m.k];
+      notasGuardar().then(()=>draw("Nota guardada ✓")).catch(e=>draw("No se pudo guardar: "+((e&&e.message)||e))); };
+    ov.querySelector("#rpSubir").onclick=()=>ov.querySelector("#rpFile").click();
+    ov.querySelector("#rpFile").onchange=ev=>{ const f=ev.target.files[0]; if(!f) return; const tipo=ov.querySelector("#rpTipo").value; draw("Subiendo «"+f.name+"» a Google Drive…");
+      compSubirUno(f,false).then(r=>{ STATE.resp=(STATE.resp||[]).concat([{id:"R"+Date.now()+Math.random().toString(36).slice(2,5),mov:m.k,tipo,driveId:r.driveId,url:r.url,nombre:r.nombre||f.name,mime:r.mime,subido:new Date().toISOString(),por:(NMFB.sesion&&NMFB.sesion.email)||""}]);
+        return respGuardar(); }).then(()=>draw("Archivo adjuntado ✓")).catch(e=>draw("No se pudo subir: "+((e&&e.message)||e))); };
+    ov.querySelectorAll(".rp-ver").forEach(b=>b.onclick=()=>compVer((STATE.resp||[]).find(x=>x.id===b.dataset.id)));
+    ov.querySelectorAll(".rp-del").forEach(b=>b.onclick=()=>{ if(!confirm("¿Quitar este archivo del pago? (sigue en Drive)")) return; STATE.resp=(STATE.resp||[]).filter(x=>x.id!==b.dataset.id); respGuardar().then(()=>draw("Quitado ✓")); });
+  };
+  draw(""); document.body.appendChild(ov);
+}
+/* Bandeja: adjuntar un comprobante/factura a un pago que YA existe (sin registrar uno nuevo) */
+function compAdjuntarAPago(c){
+  const ia=c.ia||{}; let U=[]; const sy=STATE.year; STATE.year="__all"; try{ U=egresosUnificados(); } finally { STATE.year=sy; }
+  const monto=+ia.monto||0, f=String(ia.fecha||"").slice(0,10), prov=_normTxt(ia.proveedor||"");
+  const dias=(a,b)=>{ const x=new Date(a), y=new Date(b); return (isNaN(x)||isNaN(y))?999:Math.abs(x-y)/864e5; };
+  const score=r=>{ let s=0; const o=+r.orig||0; if(monto){ const d=Math.abs(o-monto)/Math.max(1,monto); if(d<0.005) s+=50; else if(d<0.03) s+=25; }
+    if(f){ const dd=dias(r.fecha,f); if(dd<=1) s+=25; else if(dd<=7) s+=12; else if(dd<=31) s+=4; }
+    if(prov){ const t=_normTxt((r.keytext||"")+" "+(r.con||"")); prov.split(" ").filter(w=>w.length>3).forEach(w=>{ if(t.indexOf(w)>=0) s+=8; }); } return s; };
+  const ov=document.createElement("div"); ov.className="overlay show"; ov.style.zIndex="410";
+  const draw=q=>{ const qq=_normTxt(q||""); let L=U.map(r=>({r,s:score(r)}));
+    if(qq) L=L.filter(x=>_normTxt([x.r.keytext,x.r.con,x.r.cuentaPago,x.r.ca,x.r.fecha,x.r.orig].join(" ")).indexOf(qq)>=0);
+    L.sort((a,b)=>b.s-a.s||String(b.r.fecha).localeCompare(String(a.r.fecha))); L=L.slice(0,40);
+    ov.querySelector("#apList").innerHTML=L.map((x,i)=>`<tr><td>${esc(fmtDate(x.r.fecha)||"")}</td><td style="text-align:left">${esc(x.r.keytext||x.r.con||"")}<span class="sub2">${esc(x.r.origen)} · ${esc(x.r.cuentaPago||"")} · ${esc(x.r.ca||"")}</span></td><td class="num">${esc(x.r.moneda)} ${f2(x.r.orig)}</td><td>${x.s>=50?'<span class="st activo">coincide</span>':""}</td><td><button class="btn primary ap-ok" data-k="${esc(movKey(x.r))}">Adjuntar</button></td></tr>`).join("")||`<tr><td colspan="5">${emptyState("Sin resultados")}</td></tr>`;
+    ov.querySelectorAll(".ap-ok").forEach(b=>b.onclick=()=>{ const tipo=ov.querySelector("#apTipo").value;
+      STATE.resp=(STATE.resp||[]).concat([{id:"R"+Date.now(),mov:b.dataset.k,tipo,driveId:c.driveId,url:c.url,nombre:c.nombre,mime:c.mime,subido:new Date().toISOString(),por:(NMFB.sesion&&NMFB.sesion.email)||"",comp:c.id}]);
+      c.estado="registrado"; c.adjuntadoA=b.dataset.k; c.registrado=new Date().toISOString();
+      Promise.all([respGuardar(),compGuardarLista()]).then(()=>{ ov.remove(); render(); }); }); };
+  const tipoIA=/factura/i.test(ia.tipo_documento||"")?"Factura":(/contrato/i.test(ia.tipo_documento||"")?"Contrato":(/proforma/i.test(ia.tipo_documento||"")?"Proforma":"Comprobante"));
+  ov.innerHTML=`<div class="modal" style="max-width:860px;width:96vw"><div style="display:flex;justify-content:space-between;gap:10px"><div><h2 style="margin:0">Adjuntar a un pago existente</h2><p class="lead" style="margin:6px 0 0">${esc(ia.proveedor||c.nombre||"")} · ${esc(ia.fecha||"")} · ${esc(ia.moneda||"")} ${ia.monto?f2(+ia.monto):""} — elige el pago al que pertenece (arriba los que más coinciden).</p></div><button class="x" id="apX">&times;</button></div>
+    <div class="us-cl" style="margin:12px 0"><input id="apQ" placeholder="Buscar por concepto, monto, cuenta…"><span class="select-wrap"><select id="apTipo">${RESP_TIPOS.map(t=>`<option${t===tipoIA?" selected":""}>${t}</option>`).join("")}</select></span></div>
+    <div class="tbl-scroll" style="max-height:55vh"><table><thead><tr><th>Fecha</th><th style="text-align:left">Pago</th><th>Monto original</th><th></th><th></th></tr></thead><tbody id="apList"></tbody></table></div></div>`;
+  document.body.appendChild(ov); ov.querySelector("#apX").onclick=()=>ov.remove();
+  ov.querySelector("#apQ").addEventListener("input",ev=>draw(ev.target.value)); draw("");
 }
 /* ============================================================
    V175: los números de los cuadritos (KPI) giran como un contador
@@ -3406,7 +3478,7 @@ function egresosUnificados(){
     const a=ancEgreso(e);
     out.push({ origen:"Egresos", fecha:e.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Egresos", hu:e._hu,
       keytext:e.ben||"", con:e.con||e.ben||"", moneda:e.moneda||"USD", usd:(e.impUSD!=null?+e.impUSD:(+e.imp||0)), bob:(e.impBOB!=null?+e.impBOB:null),
-      estado:e.e||"", tipo:e.tipo||"", costo:e._costo||"", m:e.m, g:e.g, mi:monthIdx(e.m) });
+      estado:e.e||"", tipo:e.tipo||"", costo:e._costo||"", m:e.m, g:e.g, mi:monthIdx(e.m), orig:(e.impOrig!=null?+e.impOrig:+e.imp||0), cuentaPago:e.tipo||"" });
   });
   const mHasContab=(STATE.mercury||[]).some(r=> String(r.contab==null?"":r.contab).trim()!=="");
   if(showLLC()){ ensureHuellasMerc(); (STATE.mercury||[]).forEach(r=>{ if(!yOk(r.g)) return; const v=+r.monto||0; const tok=r.ctok||contabTok(r.contab);
@@ -3414,7 +3486,7 @@ function egresosUnificados(){
     if(!esEgreso) return; const usd=Math.abs(v); if(!usd) return;
     const res=resolveGeneric("Mercury", r._hu, r.desc, (r.ca||r.canalitica)); const a=ancGeneric(res,{kcuenta:r.kcuenta,grupoc:r.grupoc,ksubgrupo:r.ksubgrupo,cp:r.cp});
     out.push({ origen:"Mercury", fecha:r.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Mercury", hu:r._hu,
-      keytext:r.desc||"", con:r.desc||"", moneda:"USD", usd, bob:bobOf(usd,r.fecha), estado:r.status||"", tipo:"", m:(r.mi>=0?MONTHS[r.mi]:null), g:r.g, mi:r.mi });
+      keytext:r.desc||"", con:r.desc||"", moneda:"USD", usd, bob:bobOf(usd,r.fecha), estado:r.status||"", tipo:"", m:(r.mi>=0?MONTHS[r.mi]:null), g:r.g, mi:r.mi, orig:usd, cuentaPago:"Mercury" });
   }); }
   const bg=STATE.bitgo||{cols:[],rows:[]}, bc=bg.cols||[];
   const find=(...n)=>{ for(const x of n){ const c=bc.find(k=>normHdr(k)===x); if(c)return c; } for(const x of n){ const c=bc.find(k=>normHdr(k).includes(x)); if(c)return c; } return null; };
@@ -3427,7 +3499,7 @@ function egresosUnificados(){
     const d=bDate?new Date(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const iso=bDate?gdUS(r[bDate]).iso:null;
     const res=resolveGeneric("BitGo", r._hu, (bCon&&r[bCon]), (bCA&&r[bCA])); const a=ancGeneric(res,{kcuenta:bCu&&r[bCu],grupoc:bGr&&r[bGr],ksubgrupo:bSg&&r[bSg],cp:bCP&&r[bCP]});
     out.push({ origen:"BitGo", fecha:iso, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"BitGo", hu:r._hu,
-      keytext:(bCon&&r[bCon])||"", con:(bCon&&r[bCon])||"", moneda:(bAsset&&r[bAsset])||"USD", usd, bob:bobOf(usd,iso), estado:"", tipo:"", m:(d&&!isNaN(d)?MONTHS[d.getMonth()]:null), g, mi:(d&&!isNaN(d)?d.getMonth():-1) });
+      keytext:(bCon&&r[bCon])||"", con:(bCon&&r[bCon])||"", moneda:"USD", usd, bob:bobOf(usd,iso), estado:"", tipo:"", m:(d&&!isNaN(d)?MONTHS[d.getMonth()]:null), g, mi:(d&&!isNaN(d)?d.getMonth():-1), orig:usd, cuentaPago:"BitGo - Wallet "+(r._cat||"") });
   }); }
   return out;
 }
@@ -3448,6 +3520,7 @@ function renderEgresosGeneral(){
   const fCostos=[...new Set(allU.map(r=>r.costo).filter(Boolean))].sort();
   let rows=allU;
   if(STATE.egGenSrc!=="__all") rows=rows.filter(r=>r.origen===STATE.egGenSrc);
+  if(STATE.egGenTP && STATE.egGenTP!=="__all") rows=rows.filter(r=>String(r.cuentaPago||"")===STATE.egGenTP);
   if(STATE.egGenCuenta!=="__all") rows=rows.filter(r=>String(r.kcuenta||"")===STATE.egGenCuenta);
   if(STATE.egGenGrupo!=="__all") rows=rows.filter(r=>String(r.grupoc||"")===STATE.egGenGrupo);
   if(STATE.egGenSubg!=="__all") rows=rows.filter(r=>String(r.ksubgrupo||"")===STATE.egGenSubg);
@@ -3469,8 +3542,11 @@ function renderEgresosGeneral(){
     {label:"Cuenta Principal",sortKey:"cp",render:r=>`<span class="tw" style="display:inline-block;background:${catColor(r.cp)};margin-right:7px"></span>${esc(r.cp||"–")}`},
     {label:"Cuenta Analítica",sortKey:"ca",render:r=>{ if(!r.ca) return '<span class="zero">–</span>'; const cls=r.casrc==="manual"?"ca-man":(r.casrc==="auto"?"ca-auto":(r.casrc==="sheet"?"ca-sheet":"ca-none")); return `<span class="ca-cell ${cls}" style="cursor:default;pointer-events:none;max-width:200px">${esc(r.ca)}</span>`; }},
     {label:"Concepto",sortKey:"keytext",render:r=>esc(r.keytext||r.con||"–")+compClipHTML(r.fecha,r.con)},
+    {label:"Tipo de Pago",sortKey:"cuentaPago",render:r=>r.cuentaPago?`<span class="tag">${esc(r.cuentaPago)}</span>`:'<span class="zero">–</span>'},
+    {label:"Respaldo",render:r=>respBtnHTML(r)},
     {label:"Costo",sortKey:"costo",render:r=>r.costo?`<span class="tag">${esc(costoLabel(r.costo))}</span>`:'<span class="zero">–</span>'},
-    {label:"Moneda",sortKey:"moneda",render:r=>`<span class="tag">${esc(r.moneda||"USD")}</span>`},
+    {label:"Moneda original",sortKey:"moneda",render:r=>`<span class="tag">${esc(r.moneda||"USD")}</span>`},
+    {label:"Monto original",right:1,cls:"num",sortKey:"orig",render:r=>r.orig!=null?((r.moneda==="BOB"?"Bs ":"$")+f2(r.orig)):'<span class="zero">–</span>'},
     {label:"USD",right:1,cls:"num",sortKey:"usd",render:r=>r.usd!=null?fmt(r.usd,2):'<span class="zero">–</span>'},
     {label:"BOB",right:1,cls:"num",sortKey:"bob",render:r=>r.bob!=null?("Bs "+f2(r.bob)):'<span class="zero">–</span>'},
   ];
@@ -3487,6 +3563,7 @@ function renderEgresosGeneral(){
   </div>`;
   const egGenFilterDefs=[
     {k:"egGenSrc",lbl:"Fuente",disp:v=>v,opts:srcs.map(s=>({v:s,t:s})),ph:"Todas las fuentes"},
+    {k:"egGenTP",lbl:"Tipo de Pago",disp:v=>v,opts:[...new Set(allU.map(r=>r.cuentaPago).filter(Boolean))].sort().map(v=>({v,t:v})),ph:"Todos los tipos de pago"},
     {k:"egGenMes",lbl:"Mes",disp:v=>MONTH_ES_LONG[+v],opts:fMeses.map(i=>({v:String(i),t:MONTH_ES_LONG[i]})),ph:"Todos los meses"},
     {k:"egGenCuenta",lbl:"Cuenta",disp:v=>v,opts:fCuentas.map(c=>({v:c,t:c})),ph:"Todas las cuentas"},
     {k:"egGenGrupo",lbl:"Grupo",disp:v=>v,opts:fGrupos.map(c=>({v:c,t:c})),ph:"Todos los grupos"},
@@ -3917,7 +3994,7 @@ function renderEgresos(){
   ensureHuellas();
   if(!STATE.egSel) STATE.egSel=new Set();
 
-  const all=enBanco?(STATE.egresos||[]).filter(r=>STATE.bancosTab==="tesabiz"?esPagoTesabiz(r):!esPagoTesabiz(r)):STATE.egresos;
+  const all=enBanco?(STATE.egresos||[]).filter(r=>bancoListaFiltro(r,STATE.bancosTab)):STATE.egresos;
   let rows=all.filter(r=> STATE.year==="__all"||r.g===STATE.year);
   if(STATE.egCat!=="__all")    rows=rows.filter(r=>catLabel(r.cp)===STATE.egCat);
   if(STATE.egCuenta!=="__all") rows=rows.filter(r=>String(r.cc||"")===STATE.egCuenta);
@@ -6758,7 +6835,7 @@ function renderRendiciones(){
   const Y  = r => STATE.year==="__all" || r.g===STATE.year;
   const nn = s => String(s==null?"":s).trim();
   const canonName = raw=>{ const s=nn(raw).toLowerCase().replace(/\.+$/,"").replace(/\s+/g," ").trim();
-    if(["jp velasco","jp","tc p","tc jp"].includes(s)) return "JP Velasco";
+    if(["jp velasco","jp","tc p","tc jp","tc jp velasco"].includes(s)) return "JP Velasco";
     if(["alejo t","alejo","tc alejo","tc alejo t"].includes(s)) return "Alejo";
     return null; };
   const monN = s=>{ const x=nn(s).toLowerCase(); return (x.includes("bob")||x.includes("boliv")||/(^|[^a-z])bs([^a-z]|$)/.test(x))?"BOB":"USD"; };
@@ -6903,40 +6980,42 @@ function renderRendiciones(){
 /* ---------- BANCOS (contenedor con sub-pestañas: Mercury / BitGo / Tesabiz / Otras Cuentas) ---------- */
 function renderBancos(){
   const tab=STATE.bancosTab||"mercury";
-  const subs={ mercury:renderMercury, bitgo:renderBitgo, tesabiz:renderBancosTesabiz, otras:renderOtrasCuentas };
+  const subs={ mercury:renderMercury, bitgo:renderBitgo, tesabiz:renderBancosTesabiz, altitude:()=>renderBancosLista('Pagos hechos desde la cuenta <b>Altitude</b> (Tipo de Pago = Altitude). Cuando tengamos el extracto de Altitude, aquí se verán también los abonos.'), otras:renderOtrasCuentas };
   (subs[tab]||renderMercury)();          // llena #app con el diseño existente de cada sección
   const seg=`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div class="seg" id="bancosTabs" style="flex-wrap:wrap">
         <button data-t="mercury" class="${tab==='mercury'?'on':''}">Mercury</button>
         <button data-t="bitgo" class="${tab==='bitgo'?'on':''}">BitGo</button>
-        <button data-t="tesabiz" class="${tab==='tesabiz'?'on':''}">Tesabiz</button>
+        <button data-t="tesabiz" class="${tab==='tesabiz'?'on':''}">CIDRE - Peso Liquidez</button>
+        <button data-t="altitude" class="${tab==='altitude'?'on':''}">Altitude</button>
         <button data-t="otras" class="${tab==='otras'?'on':''}">Otras Cuentas</button>
       </div>
     </div>`;
-  const app=$("#app"); if(app){ app.insertAdjacentHTML("afterbegin", seg+((tab==="tesabiz"||tab==="otras")?bancosResumenHTML(tab):""));
+  const app=$("#app"); if(app){ app.insertAdjacentHTML("afterbegin", seg+((tab==="tesabiz"||tab==="otras"||tab==="altitude")?bancosResumenHTML(tab):""));
     document.querySelectorAll("#bancosTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.bancosTab=b.dataset.t;render();})); }
 }
 /* V184: pagos hechos desde Tesabiz (se reconocen por "Tesabiz" en la columna Tipo de Pago) */
-function esPagoTesabiz(r){ return /tesabiz/i.test(String(r.tipo||"")); }   // V190: se reconoce por la columna Tipo de Pago
+function esPagoTesabiz(r){ return esCuentaCidre(r.tipo); }   // V196: (nombre antiguo) ahora = pagos desde CIDRE - Peso Liquidez
+function bancoListaFiltro(r,tab){ const t=String(r.tipo||""); if(tab==="tesabiz") return esCuentaCidre(t); if(tab==="altitude") return /altitude/i.test(t); return !esCuentaCidre(t) && !/altitude/i.test(t); }
 function renderBancosLista(intro){ renderEgresos(); const app=$("#app"); if(!app) return; const p=$("#egTabs"); if(p) p.remove();
   app.insertAdjacentHTML("afterbegin",`<p class="section-intro">${intro}</p>`); }
 function bancosResumenHTML(tab){
   let ab=0, de=0, n=0; const usd=x=>(x<0?"-$":"$")+f2(Math.abs(x)); const yOk=g=>STATE.year==="__all"||g===STATE.year;
   if(tab==="mercury"){ (STATE.mercury||[]).forEach(r=>{ if(!yOk(r.g)) return; const v=+r.monto||0; if(v>0) ab+=v; else de+=-v; n++; }); }
   else if(tab==="bitgo"){ const bc=bitgoCols(); const bg=STATE.bitgo||{rows:[]}; if(bc.amtCol) (bg.rows||[]).forEach(r=>{ const d=bc.dateCol?new Date(r[bc.dateCol]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const v=toNum(r[bc.amtCol]); if(!v) return; if(v>0) ab+=v; else de+=-v; n++; }); }
-  else { (STATE.egresos||[]).filter(r=>yOk(r.g)&&(tab==="tesabiz"?esPagoTesabiz(r):!esPagoTesabiz(r))).forEach(r=>{ de+=(r.impUSD!=null?(+r.impUSD||0):(+r.imp||0)); n++; }); }
+  else { (STATE.egresos||[]).filter(r=>yOk(r.g)&&bancoListaFiltro(r,tab)).forEach(r=>{ de+=(r.impUSD!=null?(+r.impUSD||0):(+r.imp||0)); n++; }); }
   return `<div class="caja" style="margin-bottom:16px"><div class="c"><div class="l">Abonos (+) · entradas</div><div class="v" style="color:var(--emerald)">${usd(ab)}</div></div>
     <div class="c"><div class="l">Débitos (−) · salidas</div><div class="v neg">${usd(de)}</div></div>
     <div class="c hi"><div class="l">Neto del período</div><div class="v${ab-de<0?" neg":""}">${usd(ab-de)}</div></div>
     <div class="c"><div class="l">Movimientos</div><div class="v">${n}</div></div></div>`;
 }
-function renderBancosTesabiz(){ renderBancosLista('Pagos hechos desde <b>Tesabiz</b> (de tu lista de Egresos). Todos son <b>débitos</b> (salidas). Cuando tengamos el extracto de Tesabiz, aquí también se verán los abonos.'); }
+function renderBancosTesabiz(){ renderBancosLista('Pagos hechos desde <b>CIDRE - Peso Liquidez</b> (Tipo de Pago = CIDRE). Están en <b>bolivianos</b>. Todos son <b>débitos</b> (salidas); cuando tengamos el extracto de CIDRE se verán también los abonos.'); }
 function renderBancosTesabizViejo(){
   $("#app").innerHTML=`
     <p class="section-intro">Cuenta <b>Tesabiz</b> como <b>banco</b>: aquí irá el detalle de <b>lo que ingresa</b> y <b>lo que sale</b> de esta cuenta (movimientos de la cuenta), no las ganancias. Es distinto a la pestaña <b>Ingresos → Tesabiz</b>, que solo muestra el ingreso por ganancia.</p>`+
     emptyState('Aún no está conectado el <b>extracto de la cuenta Tesabiz</b> (entradas y salidas). Dime de qué <b>hoja del Google Sheet</b> leer los movimientos de esta cuenta (y qué columnas son fecha, concepto, entrada/salida) y lo conecto con el mismo diseño de Mercury/BitGo.');
 }
-function renderOtrasCuentas(){ renderBancosLista('<b>Otras cuentas</b>: los pagos de tu lista de Egresos que no salieron de Mercury, BitGo ni Tesabiz (pagos de los CEOs con sus cuentas o tarjetas, etc.). Aquí registras y clasificas esos gastos.'); }
+function renderOtrasCuentas(){ renderBancosLista('<b>Otras cuentas</b>: los pagos de tu lista de Egresos que no salieron de CIDRE ni Altitude (tarjetas de los socios TC Alejo / TC JP Velasco, etc.). Aquí registras y clasificas esos gastos.'); }
 function renderOtrasCuentasViejo(){
   $("#app").innerHTML=`
     <p class="section-intro">Otras cuentas bancarias o de pago.</p>`+
@@ -7986,6 +8065,9 @@ const M_HIST={fechadepago:"fecha",fechadecontabilizacion:"fcont",concepto:"con",
 function mapEgresosHist(raw){
   return raw.map(r=>{ const o=pick(r,M_HIST); o.imp=toNum(o.imp); o.impOrig=o.imp;
     o.moneda=String(o.moneda||"USD").trim().toUpperCase()||"USD";
+    // V196: la moneda la decide la cuenta de pago (Tipo de Pago): CIDRE → BOB; TC de los socios → la anotada; cualquier otra cuenta → USD
+    o.monedaHoja=o.moneda; const _tp=String(r.tipodepago||"").trim();
+    if(esCuentaCidre(_tp)) o.moneda="BOB"; else if(_tp && !esCuentaTC(_tp)) o.moneda="USD";
     const d=gd(o.fecha); o.fecha=d.iso; o.g=d.year;
     o.m = d.iso? MONTHS[isoMonth(d.iso)] : null;
     // Fecha de Contabilización (devengo): su propio mes/año, para la base "Devengado".
@@ -8267,6 +8349,7 @@ async function nmFbAplicarDatos(res){
   try{ await nmFbCargarAjustes(); }catch(e){ console.error("ajustes Firebase",e); }
   try{ tcAutoHoy(); }catch(_){}
   try{ STATE.comps=(await NMFB.histGet("comprobantes"))||[]; STATE._compIdx=null; }catch(e){ console.error("comprobantes",e); }
+  try{ STATE.resp=(await NMFB.histGet("respaldos"))||[]; STATE._respIdx=null; const n=await NMFB.cfgGet("movNotas"); NM_NOTAS=(n&&n.notas)||{}; }catch(e){ console.error("respaldos",e); }
   try{ setTimeout(nmWidgetPublicar,1500); }catch(_){}
 }
 /* V185: Mercury (ya no se actualiza), Inversiones, Préstamos y Devoluciones viven en Firebase.
@@ -8611,9 +8694,14 @@ function showLogin(){ const c=document.querySelector(".login-card"); if(c) c.cla
 function distinctVals(field){ const s=new Set(); STATE.egresos.forEach(r=>{ const v=(r[field]!=null?String(r[field]).trim():""); if(v) s.add(v); }); return [...s].sort((a,b)=>a.localeCompare(b)); }
 function fillDL(id,vals){ const dl=$("#"+id); if(dl) dl.innerHTML=vals.map(v=>`<option value="${esc(v)}"></option>`).join(""); }
 /* V195: cuentas desde donde se paga (columna "Tipo de Pago"). Los socios van con su nombre para que entren en Rendiciones. */
-const CUENTAS_PAGO=["CIDRE","Tesabiz","Mercury","BitGo","JP Velasco","Alejo T.","TC JP","TC Alejo"];
+/* V196: cuentas desde donde se paga. CIDRE es en BOB; TC Alejo / TC JP Velasco (tarjetas de los socios) en la moneda anotada; el resto en USD. */
+const CUENTAS_PAGO_BASE=["CIDRE - Peso Liquidez","TC Alejo","TC JP Velasco","Mercury","Altitude","BitGo - Wallet Sueldos","BitGo - Wallet Marketing","BitGo - Wallet Refunds","BitGo - Wallet Treasury"];
+function cuentasPago(){ const set=new Set(CUENTAS_PAGO_BASE); const bg=STATE.bitgo||{rows:[]}; (bg.rows||[]).forEach(r=>{ if(r._cat) set.add("BitGo - Wallet "+r._cat); }); return [...set]; }
+const CUENTAS_PAGO=CUENTAS_PAGO_BASE;
+function esCuentaCidre(t){ return /cidre|peso liquidez/i.test(String(t||"")); }
+function esCuentaTC(t){ return /^\s*tc\b|tarjeta/i.test(String(t||"")); }
 function cuentaPagoDeBanco(b){ const x=String(b||"").toLowerCase();
-  if(/cidre/.test(x)) return "CIDRE"; if(/tesabiz/.test(x)) return "Tesabiz"; if(/mercury/.test(x)) return "Mercury"; if(/bitgo/.test(x)) return "BitGo";
+  if(/cidre/.test(x)) return "CIDRE - Peso Liquidez"; if(/mercury/.test(x)) return "Mercury"; if(/altitude/.test(x)) return "Altitude";
   return String(b||"").trim(); }
 function poblarDatalists(){
   const plan=(STATE.plan||[]).filter(r=>String(r.tipo).toLowerCase().indexOf("egreso")>=0);
@@ -8621,7 +8709,7 @@ function poblarDatalists(){
   const ccs=new Set(anal); distinctVals("cc").forEach(v=>ccs.add(v));
   fillDL("dl_cc",[...ccs].sort((a,b)=>a.localeCompare(b)));
   fillDL("dl_ben",distinctVals("ben"));
-  fillDL("dl_tipo",[...new Set(CUENTAS_PAGO.concat(distinctVals("tipo")))]);
+  fillDL("dl_tipo",[...new Set(cuentasPago().concat(distinctVals("tipo")))]);
   fillDL("dl_pagadopor",distinctVals("pagadopor"));
   const pais=new Set(["Bolivia","Argentina","Brasil","Colombia"]); distinctVals("pais").forEach(v=>pais.add(v));
   fillDL("dl_pais",[...pais]);

@@ -1493,7 +1493,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V197";
+const APP_VERSION = "V198";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -8356,9 +8356,31 @@ async function nmFbAplicarDatos(res){
    La primera vez se copian desde Google Sheets; desde entonces el sistema ignora esas hojas. */
 const NM_HIST=["mercury","inv","pre","devoluciones","rrhh"];
 STATE.histFB={};
+/* V198: CARGA RÁPIDA. Antes se pedía todo con getData() (20–40 s) y Google cortaba la respuesta.
+   Ahora se piden partes pequeñas al mismo tiempo y no se pide lo que ya vive en Firebase. */
+function nmRun(fn){ const args=Array.prototype.slice.call(arguments,1);
+  return new Promise((ok,ko)=>{ const r=google.script.run.withSuccessHandler(ok).withFailureHandler(ko); r[fn].apply(r,args); }); }
+async function nmGetDataRapido(pin){
+  const res={ok:true}, pre={}, extra=NM_HIST.concat(["tc"]);
+  if(nmFbActivo()){
+    await Promise.all(extra.map(async n=>{ try{ const rows=await NMFB.histGet(n); if(rows&&rows.length){ res[n]=rows; pre[n]=true; } }catch(_){ } }));
+  }
+  const partes=["base","tablas","pnl","bitgo"].concat(extra.filter(n=>!pre[n]));
+  const r=await Promise.all(partes.map(p=>nmRun("getDataParte",pin,p)));
+  const mal=r.find(x=>!x||x.error);
+  if(mal){
+    if(/no permitida|desconocida|getDataParte/i.test((mal&&mal.error)||"")) return await nmRun("getData",pin);   // servidor antiguo
+    return mal||{error:"No se pudo conectar."};
+  }
+  r.forEach(x=>{ delete x.ok; Object.assign(res,x); });
+  res._fbPre=pre;
+  return res;
+}
 async function nmFbHistoricos(res){
   if(!nmFbActivo()||!res) return;
+  const PRE=res._fbPre||{};
   for(const n of NM_HIST){
+    if(PRE[n]){ STATE.histFB[n]=true; continue; }   // V198: ya vino de Firebase
     try{ const rows=await NMFB.histGet(n);
       if(rows){ res[n]=rows; STATE.histFB[n]=true; }
       else if(NMFB.esAdmin() && Array.isArray(res[n]) && res[n].length){ await NMFB.histSet(n,res[n]); STATE.histFB[n]=true; }
@@ -8366,6 +8388,7 @@ async function nmFbHistoricos(res){
   }
   STATE.histRaw={inv:res.inv||[],pre:res.pre||[],devoluciones:res.devoluciones||[],rrhh:res.rrhh||[]};
   // V186: Tipo de Cambio diario (antes hojas TC2024/TC2025/TC2026) → Firebase. Se juntan por fecha.
+  if(PRE.tc){ STATE.histFB.tc=true; return; }
   try{ const fb=(await NMFB.histGet("tc"))||[]; const sh=Array.isArray(res.tc)?res.tc:[];
     const by={}; fb.forEach(r=>{ if(r&&r.fecha) by[String(r.fecha).slice(0,10)]=r; });
     let nuevos=0; sh.forEach(r=>{ const f=r&&r.fecha?String(r.fecha).slice(0,10):""; if(!f) return; const a=by[f]; if(!a || (a.venta!==r.venta && r.venta!=null)){ by[f]=r; nuevos++; } });
@@ -8673,8 +8696,8 @@ function conectar(pin){
   if(!(window.google&&google.script&&google.script.run)){
     fail("Esta versión debe abrirse desde el enlace del Apps Script, no como archivo local."); return;
   }
-  google.script.run
-    .withSuccessHandler(async function(res){
+  nmGetDataRapido(pin)
+    .then(async function(res){
       if(!res||res.error){ fail((NMFB.on?"Servidor de datos (Apps Script): ":"")+(res&&res.error?res.error:"No se pudo conectar.")); return; }
       try{ localStorage.setItem("peso_pin",pin); }catch(_){}
       await nmFbHistoricos(res);
@@ -8685,8 +8708,7 @@ function conectar(pin){
       $("#loginOverlay").classList.remove("show");
       setMode(true); buildYears(); buildEmpresas(); render();
     })
-    .withFailureHandler(function(e){ fail((NMFB.on?"Servidor de datos (Apps Script): ":"")+((e&&e.message)?e.message:"Error de conexión con el servidor.")); })
-    .getData(pin);
+    .catch(function(e){ fail((NMFB.on?"Servidor de datos (Apps Script): ":"")+((e&&e.message)?e.message:"Error de conexión con el servidor.")); });
 }
 var NM_CLASICOS = [
   { foto:"marca/clasicos/pitagoras-tablet.jpg",   nombre:"Pitágoras",  frase:"Pitágoras está contando tus ventas…" },
@@ -8710,10 +8732,9 @@ function actualizarDatos(){
   nmCargando(true);
   const start=Date.now();
   const done=(cb)=>{ const wait=Math.max(0,1400-(Date.now()-start)); setTimeout(()=>{ b.innerHTML=t; nmCargando(false); if(cb) cb(); }, wait); };
-  google.script.run
-    .withSuccessHandler(async function(res){ if(res&&!res.error){ await nmFbHistoricos(res); aplicarDatos(res); await nmFbAplicarDatos(res); } done(function(){ if(res&&!res.error){ buildYears(); buildEmpresas(); _nmOdoFirma=""; render(); } else { showLogin(); } }); })
-    .withFailureHandler(function(){ done(); })
-    .getData(pin);
+  nmGetDataRapido(pin)
+    .then(async function(res){ if(res&&!res.error){ await nmFbHistoricos(res); aplicarDatos(res); await nmFbAplicarDatos(res); } done(function(){ if(res&&!res.error){ buildYears(); buildEmpresas(); _nmOdoFirma=""; render(); } else { showLogin(); } }); })
+    .catch(function(){ done(); });
 }
 function cerrarSesion(){ try{ localStorage.removeItem("peso_pin"); }catch(_){} if(NMFB.on){ NMFB.logout(); STATE.usuarios=null; nmMostrarUsuariosNav(); const c=$("#fbClave"); if(c) c.value=""; } showLogin(); }
 function showLogin(){ const c=document.querySelector(".login-card"); if(c) c.classList.remove("loading"); $("#loginOverlay").classList.add("show"); nmLoginModo(); const i=NMFB.on?($("#fbEmail")&&$("#fbEmail").value?$("#fbClave"):$("#fbEmail")):$("#pin"); if(i){ if(!NMFB.on) i.value=""; i.focus(); } try{ iaFabShow(false); }catch(_){} }

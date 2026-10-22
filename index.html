@@ -1493,7 +1493,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V196";
+const APP_VERSION = "V197";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2592,7 +2592,7 @@ function compMarcarRegistrado(datos){ const id=STATE._compReg; if(!id) return; c
   c.estado="registrado"; c.registrado=new Date().toISOString(); c.egreso={fecha:datos.fechaPago, con:datos.concepto, imp:datos.importe, ben:datos.beneficiario};
   STATE._compReg=null; compGuardarLista();
   // V194: si vino de Slack, se marca el mensaje con ✅ y se responde en el hilo
-  if(c.origen==="slack" && c.canal && (c.ts || /^SL\d+_/.test(c.id))){
+  if((c.origen==="slack"||c.origen==="slack-chat") && c.canal && (c.ts || /^SL\d+_/.test(c.id))){
     const ts=c.ts || (()=>{ const d=c.id.slice(2).split("_")[0]; return d.slice(0,d.length-6)+"."+d.slice(-6); })();
     const quien=(NMFB.sesion&&NMFB.sesion.nombre)||"el equipo de finanzas";
     const texto="✅ Registrado en el sistema por "+quien+": "+(datos.moneda||"")+" "+f2(+datos.importe||0)+" · "+(datos.beneficiario||datos.concepto||"");
@@ -2612,12 +2612,12 @@ function renderComprobantes(){
   const n=k=>L.filter(c=>c.estado===k).length;
   const subiendo=STATE._compSubiendo||"";
   const filas=V.map(c=>{ const ia=c.ia||{}; return `<tr>
-      <td><img class="comp-th" src="https://drive.google.com/thumbnail?id=${encodeURIComponent(c.driveId)}&sz=w120" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'comp-th comp-th-x',textContent:'${/pdf/.test(c.mime||"")?"PDF":"IMG"}'}))"></td>
+      <td>${!c.driveId?'<span class="comp-th comp-th-x" title="Registrado por mensaje en Slack, sin archivo">💬</span>':`<img class="comp-th" src="https://drive.google.com/thumbnail?id=${encodeURIComponent(c.driveId)}&sz=w120" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'comp-th comp-th-x',textContent:'${/pdf/.test(c.mime||"")?"PDF":"IMG"}'}))">`}</td>
       <td>${esc(ia.fecha||"–")}</td><td style="text-align:left">${ia.tipo_documento?`<span class="tag">${esc(ia.tipo_documento)}</span> `:""}<b>${esc(ia.proveedor||"(sin proveedor)")}</b><span class="sub2">${esc(ia.concepto||c.mensaje||c.nombre||"")}</span>${c.iaErr?`<span class="sub2" style="color:var(--error)">IA: ${esc(c.iaErr)}</span>`:""}</td>
       <td class="num">${ia.monto!=null&&ia.monto!==""?esc((ia.moneda||"")+" "+f2(+ia.monto)):"–"}</td>
-      <td><span class="tag">${c.origen==="slack"?"Slack":"Sistema"}</span></td>
+      <td><span class="tag">${c.origen==="slack"?"Slack":(c.origen==="slack-chat"?"Slack (mensaje)":"Sistema")}</span></td>
       <td>${c.estado==="registrado"?'<span class="st activo">Registrado</span>':(c.estado==="descartado"?'<span class="st inactivo">Descartado</span>':'<span class="st bob">Pendiente</span>')}</td>
-      <td><span class="ta-acts"><button class="btn ghost cp-ver" data-id="${c.id}">Ver</button>${c.estado!=="registrado"?`<button class="btn primary cp-reg" data-id="${c.id}" title="Crear un gasto nuevo con estos datos">Registrar</button><button class="btn ghost cp-adj" data-id="${c.id}" title="Unirlo a un pago que ya existe (factura, contrato, etc.)">Adjuntar a pago</button>`:""}<button class="btn ghost cp-ia" data-id="${c.id}" title="Volver a leer con la IA">↻ IA</button>${c.estado==="pendiente"?`<button class="btn ghost cp-desc" data-id="${c.id}" title="Descartar">✕</button>`:""}</span></td></tr>`; }).join("");
+      <td><span class="ta-acts">${c.driveId?`<button class="btn ghost cp-ver" data-id="${c.id}">Ver</button>`:""}${c.estado!=="registrado"?`<button class="btn primary cp-reg" data-id="${c.id}" title="Crear un gasto nuevo con estos datos">Registrar</button><button class="btn ghost cp-adj" data-id="${c.id}" title="Unirlo a un pago que ya existe (factura, contrato, etc.)">Adjuntar a pago</button>`:""}${c.driveId?`<button class="btn ghost cp-ia" data-id="${c.id}" title="Volver a leer con la IA">↻ IA</button>`:""}${c.estado==="pendiente"?`<button class="btn ghost cp-desc" data-id="${c.id}" title="Descartar">✕</button>`:""}</span></td></tr>`; }).join("");
   app.innerHTML=`
     <div class="card"><div class="head"><h3>Subir comprobantes</h3><span class="mini">se guardan en Google Drive · la IA lee los datos</span></div>
       <label class="comp-drop" id="cpDrop"><input type="file" id="cpFiles" accept="image/*,application/pdf" multiple hidden>
@@ -8402,7 +8402,35 @@ function nmWidgetResumen(){
       tc:tc||null, serie:serie};
   } finally { CUR=sv.cur; STATE.empresa=sv.emp; STATE.resBase=sv.base; STATE.year=sv.yr; STATE.clasifHoja=sv.ch; }
 }
-function nmWidgetPublicar(){ if(!nmFbActivo()||!NMFB.esAdmin()) return; try{ const r=nmWidgetResumen(); NMFB.cfgSet("widget",r).catch(e=>console.error("widget",e)); }catch(e){ console.error("widget",e); } }
+function nmWidgetPublicar(){ if(!nmFbActivo()||!NMFB.esAdmin()) return; try{ const r=nmWidgetResumen(); NMFB.cfgSet("widget",r).catch(e=>console.error("widget",e)); }catch(e){ console.error("widget",e); }
+  try{ const c=nmChatContexto(); NMFB.cfgSet("chatContexto",c).catch(e=>console.error("chat",e)); }catch(e){ console.error("chat",e); } }
+/* V197: resumen de datos para el CHAT de NUMMEROS en Slack (lo lee el Apps Script). Todo en USD, devengado, 3 empresas. */
+function nmChatContexto(){
+  const sv={cur:CUR,emp:STATE.empresa,base:STATE.resBase,yr:STATE.year,ch:STATE.clasifHoja};
+  CUR="USD"; STATE.empresa="__all"; STATE.resBase="devengado"; STATE.clasifHoja=false;
+  try{
+    const hoy=new Date(), MES=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+    const meses=[]; for(let k=11;k>=0;k--){ const d=new Date(hoy.getFullYear(),hoy.getMonth()-k,1); meses.push({g:d.getFullYear(),mi:d.getMonth()}); }
+    let rows=[]; STATE.year="__all"; rows=pnlRows(true);
+    const porMes=meses.map(m=>{ const R=rows.filter(r=>r.g===m.g&&monthIdx(r.m)===m.mi); const inc=R.filter(r=>r.income&&!r.dato).reduce((a,r)=>a+r.imp,0), eg=R.filter(r=>!r.income).reduce((a,r)=>a+r.imp,0);
+      const gr={}; R.filter(r=>!r.income).forEach(r=>{ gr[r.grupo]=(gr[r.grupo]||0)+r.imp; });
+      return {mes:MES[m.mi]+" "+m.g, ingresos:Math.round(inc), egresos:Math.round(eg), resultado:Math.round(inc-eg), egresosPorGrupo:Object.fromEntries(Object.entries(gr).map(([k,v])=>[k,Math.round(v)]))}; });
+    const y=hoy.getFullYear(); const RY=rows.filter(r=>r.g===y&&!r.income);
+    const top=(f)=>{ const m={}; RY.forEach(r=>{ const k=f(r)||"(sin dato)"; m[k]=(m[k]||0)+r.imp; }); return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,25).map(([k,v])=>({nombre:k,usd:Math.round(v)})); };
+    let U=[]; try{ U=egresosUnificados(); }catch(_){}
+    const prov={}; U.filter(r=>r.g===y).forEach(r=>{ const k=r.keytext||r.con||"(sin dato)"; prov[k]=(prov[k]||0)+(+r.usd||0); });
+    const est=(e,x)=>String(e.e||"").trim().toLowerCase()===x;
+    const cxp=(STATE.egresos||[]).filter(e=>est(e,"pendiente")).map(e=>({fecha:e.fecha,concepto:e.con,beneficiario:e.ben,moneda:e.moneda,monto:e.impOrig,usd:Math.round(+e.impUSD||+e.imp||0)})).slice(0,60);
+    const ultimos=U.slice().sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha))).slice(0,40).map(r=>({fecha:r.fecha,concepto:r.keytext||r.con,cuenta:r.ca,tipoPago:r.cuentaPago,moneda:r.moneda,monto:+(+r.orig||0).toFixed(2),usd:+(+r.usd||0).toFixed(2)}));
+    const w=nmWidgetResumen();
+    return {actualizado:new Date().toISOString(), moneda:"USD", nota:"Montos en USD (los de CIDRE se pagaron en BOB y se convierten al TC del día). Base devengado. Incluye las 3 empresas (LLC, SRL, Caimán).",
+      resumen:{mesActual:w.mesNombre, ingresosMes:w.mesIng, egresosMes:w.mesEg, resultadoMes:w.mesRes, ingresosAnio:w.anioIng, egresosAnio:w.anioEg, resultadoAnio:w.anioRes, cajaEstimada:w.caja, gastoPromedioMensual:w.burn, runwayMeses:w.runway, tcVentaBs:w.tc, porPagarUSD:w.cxp, pagosPendientes:w.nCxp},
+      ultimos12Meses:porMes, egresosDelAnioPorGrupo:top(r=>r.grupo), egresosDelAnioPorCuentaPrincipal:top(r=>r.cp), egresosDelAnioPorCuentaAnalitica:top(r=>r.ca),
+      proveedoresDelAnio:Object.entries(prov).sort((a,b)=>b[1]-a[1]).slice(0,30).map(([k,v])=>({proveedor:k,usd:Math.round(v)})),
+      cuentasPorPagar:cxp, ultimosPagos:ultimos,
+      comprobantesPendientes:(STATE.comps||[]).filter(c=>c.estado==="pendiente").length};
+  } finally { CUR=sv.cur; STATE.empresa=sv.emp; STATE.resBase=sv.base; STATE.year=sv.yr; STATE.clasifHoja=sv.ch; }
+}
 /* V186: guarda la cotización de HOY (Binance P2P, vía el servidor) en Firebase */
 function tcHoyISO(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function tcGuardarHoyFB(c){ if(!nmFbActivo()||!NMFB.esAdmin()||!c||c.venta==null) return Promise.resolve(null);

@@ -1498,7 +1498,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V208";
+const APP_VERSION = "V209";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1748,6 +1748,8 @@ var PNL_ING_CFG = {
    "traspaso"      → traspaso interno / fondeo de la cuenta (FUERA del Estado de Resultados)
    "cashback"      → CashBack, se cuenta como INGRESO (solo Mercury)
    "nocorresponde" → pago o débito fallido, se IGNORA
+   "reembolso"     → V209: devolución al cliente de SU plata (wallet Refunds). FUERA del P&L: no es gasto,
+                     baja lo que PE$O le debe al cliente
    "no"            → marcado "No", se ignora
    ""              → vacío / desconocido
    Tolerante a tildes, mayúsculas y espacios ("Sí"/"SI", "Cash Back"/"CashBack", etc.). */
@@ -1756,16 +1758,17 @@ function contabTok(v){
   if(!s) return "";
   if(s.indexOf("nocorresponde")>-1) return "nocorresponde";
   if(s.indexOf("cashback")>-1) return "cashback";
+  if(s.indexOf("reembolso")>-1 || s.indexOf("refund")>-1) return "reembolso";
   if(s.indexOf("traspaso")>-1 || s.indexOf("transferenciainterna")>-1) return "traspaso";
   if(s==="si" || s.indexOf("contabiliz")>-1) return "si";
   if(s==="no") return "no";
   return "";
 }
 /* Etiqueta legible del token de "Contabilizado?". */
-function contabLabel(t){ return t==="si"?"SI":t==="traspaso"?"Traspasos Internos":t==="cashback"?"CashBack":t==="nocorresponde"?"No Corresponde":t==="no"?"No":"(otro)"; }
+function contabLabel(t){ return t==="si"?"SI":t==="traspaso"?"Traspasos Internos":t==="cashback"?"CashBack":t==="nocorresponde"?"No Corresponde":t==="reembolso"?"Reembolso a Clientes":t==="no"?"No":"(otro)"; }
 /* Insignia con color para la columna "Contabilizado?" en las listas. */
 function contabBadge(v){ const raw=String(v==null?"":v).trim(); if(!raw) return '<span class="zero">–</span>'; const t=contabTok(v);
-  const col=t==="si"?"#235347":t==="cashback"?"#6F9A7D":t==="traspaso"?"#163832":t==="nocorresponde"?"#B42318":"#8EB69B";
+  const col=t==="si"?"#235347":t==="cashback"?"#6F9A7D":t==="traspaso"?"#163832":t==="nocorresponde"?"#B42318":t==="reembolso"?"#0B2B26":"#8EB69B";
   return `<span class="tw" style="display:inline-block;background:${col};margin-right:6px;vertical-align:middle"></span><span class="tag">${esc(raw)}</span>`; }
 /* Tarjeta "Rendición de la cuenta": entradas, salidas y saldo (todos los movimientos),
    con desglose por sub-cuenta. inTot ≥ 0, outTot ≤ 0 (salidas en negativo), fondeo ≥ 0.
@@ -5377,7 +5380,7 @@ const MANUALES = {
     que:"La utilidad del negocio: Ingresos − Egresos. Se ve por mes, por cuenta y con el detalle expandible por Cuenta ▸ Grupo ▸ Sub Grupo ▸ Cuenta Principal ▸ Cuenta Analítica.",
     fuente:"Egresos (hoja <b>HistorialEgresos</b>) + salidas contabilizadas (Contabilizado?=SI) de <b>Mercury</b> y <b>BitGo</b> + <b>Ingresos</b>. Los CashBack de Mercury entran como ingreso.",
     como:"Selector <b>Devengado/Caja</b>: Devengado agrupa por Fecha de Contabilización (mes al que corresponde) y reparte los pagos con \"Meses a Distribuir\"; Caja agrupa por Fecha de Pago. El orden de las cuentas sigue el <b>Plan de Cuentas</b> (columna Código).",
-    nota:"Traspasos Internos y \"No Corresponde\" NO entran al P&L (son fondeo / pagos fallidos)." },
+    nota:"Traspasos Internos, \"Reembolso a Clientes\" y \"No Corresponde\" NO entran al P&L (son fondeo, devolución de la plata del cliente o pagos fallidos)." },
   ingresos:{ titulo:"Cómo funciona Ingresos",
     que:"Los ingresos por pasarela (Tesabiz, Manteca, Bridge, BitGo, Cta.USA, Yango, Chanchito) con sus volúmenes y comisiones.",
     fuente:"Hoja <b>Ingresos</b> y las hojas de cada pasarela del Google Sheet." },
@@ -7418,7 +7421,7 @@ function renderMercury(){
   const canaliticas=[...new Set(allM.map(r=>String(mres(r).ca||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const descs=[...new Set(allM.map(r=>String(r.desc||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const meses=[...new Set(allM.map(r=>r.mi).filter(i=>i>=0))].sort((a,b)=>a-b);
-  const _tokOrder={si:0,traspaso:1,cashback:2,nocorresponde:3,no:4};
+  const _tokOrder={si:0,traspaso:1,reembolso:2,cashback:3,nocorresponde:4,no:5};
   const contabToks=[...new Set(allM.map(r=>r.ctok||contabTok(r.contab)).filter(Boolean))].sort((a,b)=>(_tokOrder[a]==null?9:_tokOrder[a])-(_tokOrder[b]==null?9:_tokOrder[b]));
 
   const isGraf=STATE.mTab==="graficos";
@@ -7567,7 +7570,7 @@ function renderBitgo(){
   const wallets= walletCol?[...new Set(allRows.map(r=>String(r[walletCol]||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b)) : [];
   const canaliticas= caCol?[...new Set(allRows.map(r=>String(bgres(r).ca||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b)) : [];
   const comentarios= commentsCol?[...new Set(allRows.map(r=>String(r[commentsCol]||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b)) : [];
-  const _tokOrder={si:0,traspaso:1,cashback:2,nocorresponde:3,no:4};
+  const _tokOrder={si:0,traspaso:1,reembolso:2,cashback:3,nocorresponde:4,no:5};
   const contabToks= contCol? [...new Set(allRows.map(r=>contabTok(r[contCol])).filter(Boolean))].sort((a,b)=>(_tokOrder[a]==null?9:_tokOrder[a])-(_tokOrder[b]==null?9:_tokOrder[b])) : [];
 
   let rows=allRows.slice();

@@ -173,7 +173,8 @@ svg{display:block;width:100%;overflow:visible}
 @media(max-width:560px){.bd .row{grid-template-columns:110px 1fr auto}}
 
 /* P&L table */
-.tbl-scroll{overflow-x:auto;margin:0 -20px -20px;padding:0 20px}
+.tbl-scroll{overflow:auto;max-height:72vh;margin:0 -20px -20px;padding:0 20px}
+.rep-capture .tbl-scroll{max-height:none}
 .tbl-scroll.sticky-head{max-height:68vh;overflow:auto}
 .fs-overlay{position:fixed;inset:0;z-index:200;background:var(--surface);display:flex;flex-direction:column;padding:16px 22px;overflow:hidden}
 .fs-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
@@ -223,7 +224,9 @@ table.compact td .sub2{font-size:10px}
 .card.fs-card{position:fixed;inset:0;z-index:200;margin:0;border-radius:0;max-height:none;width:auto;display:flex;flex-direction:column;padding:14px 20px 16px;background:var(--surface)}
 .card.fs-card .head{margin-bottom:12px}
 .card.fs-card .toolbar{margin:0 0 12px}
-.card.fs-card .tbl-scroll{flex:1 1 auto;min-height:0;max-height:none !important}
+.card.fs-card{overflow:auto}
+.card.fs-card .tbl-block{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.card.fs-card .tbl-scroll{flex:1 1 auto;min-height:0;max-height:calc(100vh - 130px) !important}
 .fs-close{white-space:nowrap}
 /* Ventana emergente de gráficos (animada) */
 .chart-modal-back{position:fixed;inset:0;z-index:250;display:flex;align-items:center;justify-content:center;padding:26px;
@@ -243,6 +246,8 @@ table.compact td .sub2{font-size:10px}
 .chart-modal .cm-clone.bd{max-height:72vh;overflow:auto;width:100%}
 .chart-modal .cm-donut{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:10px 0}
 .chart-modal .cm-donut .cm-svg-clone{width:min(46vh,340px);height:min(46vh,340px)}
+.chart-modal .cm-donut.cm-wide{align-items:stretch}
+.chart-modal .cm-donut.cm-wide .cm-svg-clone{width:100%;height:auto;max-height:68vh}
 .chart-modal .cm-donut .legend{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;font-size:14px}
 .chart-modal .cm-donut .legend .it{display:flex;align-items:center;gap:8px}
 .chart-modal .cm-donut .legend .sw{width:12px;height:12px;border-radius:4px}
@@ -1493,7 +1498,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V199";
+const APP_VERSION = "V200";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2982,6 +2987,9 @@ function openChartModal(card){
       body.classList.add("is-chart");
       const wrap=document.createElement("div"); wrap.className="cm-donut";
       const cl=svg.cloneNode(true); cl.removeAttribute("style"); cl.classList.add("cm-svg-clone");
+      // Gráficos anchos (líneas, ej. Tipo de Cambio) usan todo el ancho; los circulares quedan cuadrados
+      const vb=(svg.getAttribute("viewBox")||"").split(/[\s,]+/).map(Number);
+      if(vb.length===4 && vb[3]>0 && vb[2]/vb[3]>1.4) wrap.classList.add("cm-wide");
       wrap.appendChild(cl);
       const leg=card.querySelector(".legend"); if(leg){ wrap.appendChild(leg.cloneNode(true)); }
       body.appendChild(wrap);
@@ -7428,8 +7436,10 @@ function renderTC(){
     {label:"Promedio",right:1,cls:"num",sortKey:"promedio",render:r=>`Bs ${f2(r.promedio)}`},
     {label:"Fuente",sortKey:"fuente",render:r=>`<span class="mini">${esc(r.fuente||"–")}</span>`},
   ];
+  // V200: el administrador corrige un día con el lápiz (se guarda en Firebase, no en Sheets)
+  if(nmFbActivo()&&NMFB.esAdmin()) cols.push({label:"",render:r=>`<button class="xbtn tc-ed" data-f="${esc(String(r.fecha).slice(0,10))}" title="Corregir este día">✎</button>`});
   $("#app").innerHTML=`
-    <p class="section-intro">Tipos de cambio <b>USDT/BOB</b> (dólar paralelo, Binance P2P). El histórico se lee de tu hoja <b>TC</b> (2024+) y de las hojas anuales <b>TC2026</b>. La <b>Venta</b> es el promedio de las mejores ofertas de venta. Con el botón de abajo (o un <b>disparador diario</b> sobre <code>registrarTCHoy_</code>) el sistema guarda la cotización de cada día en la hoja del año en curso.</p>
+    <p class="section-intro">Tipos de cambio <b>USDT/BOB</b> (dólar paralelo, Binance P2P). El histórico <b>vive en el sistema (Firebase)</b>: las hojas <b>TC</b> ya no lo cambian, solo agregan días que falten. Para corregir un día usa el lápiz ✎ de la tabla. La <b>Venta</b> es el promedio de las mejores ofertas de venta. Con el botón de abajo (o un <b>disparador diario</b> sobre <code>registrarTCHoy_</code>) el sistema guarda la cotización de cada día en la hoja del año en curso.</p>
     <div class="grid cols-3-1">
       <div class="card">${liveBox}</div>
       <div class="card" style="display:flex;flex-direction:column;justify-content:center;gap:10px">
@@ -7452,6 +7462,7 @@ function renderTC(){
   drawTCLine(H,"tcChart");
   const reg=$("#tcReg"); if(reg) reg.addEventListener("click",registrarCotizacionHoy);
   const rf=$("#tcRefresh"); if(rf) rf.addEventListener("click",()=>{STATE.tcActual=null;STATE._tcErr="";pedirCotizacion(true);});
+  document.querySelectorAll("#app .tc-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); tcEditarDia(b.dataset.f); }));
   document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
     const k=th.dataset.k;
     if(STATE.tcSort.key===k) STATE.tcSort.dir=STATE.tcSort.dir==="asc"?"desc":"asc";
@@ -8443,7 +8454,7 @@ async function nmFbHistoricos(res){
   if(PRE.tc){ STATE.histFB.tc=true; return; }
   try{ const fb=(await NMFB.histGet("tc"))||[]; const sh=Array.isArray(res.tc)?res.tc:[];
     const by={}; fb.forEach(r=>{ if(r&&r.fecha) by[String(r.fecha).slice(0,10)]=r; });
-    let nuevos=0; sh.forEach(r=>{ const f=r&&r.fecha?String(r.fecha).slice(0,10):""; if(!f) return; const a=by[f]; if(!a || (a.venta!==r.venta && r.venta!=null)){ by[f]=r; nuevos++; } });
+    let nuevos=0; sh.forEach(r=>{ const f=r&&r.fecha?String(r.fecha).slice(0,10):""; if(!f) return; const a=by[f]; if(!a){ by[f]=r; nuevos++; } });   // V200: Firebase manda; Sheets solo agregan días que falten
     const all=Object.keys(by).sort().map(k=>by[k]);
     if(nuevos && NMFB.esAdmin()) await NMFB.histSet("tc",all);
     if(all.length){ res.tc=all; STATE.histFB.tc=true; }
@@ -8512,6 +8523,27 @@ function tcGuardarHoyFB(c){ if(!nmFbActivo()||!NMFB.esAdmin()||!c||c.venta==null
   const hoy=tcHoyISO(); const fila={fecha:hoy,venta:c.venta,compra:c.compra,promedio:c.promedio,fuente:c.fuente||"Binance P2P USDT/BOB",actualizado:c.actualizado||""};
   return NMFB.histGet("tc").then(rows=>{ rows=(rows||[]).filter(r=>String(r.fecha).slice(0,10)!==hoy); rows.push(fila); rows.sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
     return NMFB.histSet("tc",rows).then(()=>{ STATE.tc=mapTC(rows); return fila; }); }); }
+/* V200: corregir la cotización de un día (Venta / Compra / Promedio) directamente en Firebase */
+async function tcEditarDia(fecha){
+  if(!nmFbActivo()||!NMFB.esAdmin()||!fecha) return;
+  try{
+    const rows=(await NMFB.histGet("tc"))||[];
+    const i=rows.findIndex(r=>String(r.fecha).slice(0,10)===fecha); if(i<0){ alert("No encontré el día "+fecha+"."); return; }
+    const r=rows[i], ver=v=>(v==null||v==="")?"":String(v).replace(".",",");
+    const pide=(et,v)=>{ const x=prompt(fmtDate(fecha)+" · "+et+" (Bs por USDT, ej. 12,60). Déjalo vacío para quitarlo:",ver(v)); return x; };
+    const ve=pide("VENTA",r.venta); if(ve===null) return;
+    const co=pide("COMPRA",r.compra); if(co===null) return;
+    const pr=pide("PROMEDIO",r.promedio); if(pr===null) return;
+    const num=x=>{ x=String(x).trim(); if(!x) return null; const n=toNum(x); return (n>0&&n<100)?n:NaN; };
+    const nv={venta:num(ve),compra:num(co),promedio:num(pr)};
+    if([nv.venta,nv.compra,nv.promedio].some(n=>Number.isNaN(n))){ alert("Algún valor no es válido (debe estar entre 0 y 100). No se guardó nada."); return; }
+    if(!confirm("Guardar "+fmtDate(fecha)+":\nVenta "+(nv.venta??"—")+" · Compra "+(nv.compra??"—")+" · Promedio "+(nv.promedio??"—")+"\n\nAntes: Venta "+(r.venta??"—")+" · Compra "+(r.compra??"—")+" · Promedio "+(r.promedio??"—"))) return;
+    const ed=(r.ediciones||[]).concat([{cuando:new Date().toISOString(),quien:(NMFB.sesion&&NMFB.sesion.email)||"",antes:{venta:r.venta??null,compra:r.compra??null,promedio:r.promedio??null}}]);
+    rows[i]=Object.assign({},r,nv,{fuente:String(r.fuente||"").replace(/( · )?corregido a mano$/,"").replace(/^$/,"Manual")+" · corregido a mano",ediciones:ed});
+    await NMFB.histSet("tc",rows);
+    STATE.tc=mapTC(rows); RATE=tcRateLatest(); render();
+  }catch(e){ alert("No se pudo guardar: "+((e&&e.message)||e)); }
+}
 function tcAutoHoy(){ if(!nmFbActivo()||!NMFB.esAdmin()||STATE._tcAutoHecho) return; STATE._tcAutoHecho=true;
   const hoy=tcHoyISO(); if((STATE.tc||[]).some(r=>String(r.fecha).slice(0,10)===hoy)) return;
   let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){} if(!pin||!(window.google&&google.script&&google.script.run)) return;

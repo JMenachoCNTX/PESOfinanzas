@@ -1493,7 +1493,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V198";
+const APP_VERSION = "V199";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -6990,9 +6990,61 @@ function renderBancos(){
         <button data-t="altitude" class="${tab==='altitude'?'on':''}">Altitude</button>
         <button data-t="otras" class="${tab==='otras'?'on':''}">Otras Cuentas</button>
       </div>
+      ${tab==='bitgo'?`<button class="btn primary" id="bgImportBtn" title="Elige el CSV tal como lo descargas de BitGo">⬆ Importar extracto BitGo</button><input type="file" id="bgImportFile" accept=".csv,text/csv" hidden>`:''}
     </div>`;
   const app=$("#app"); if(app){ app.insertAdjacentHTML("afterbegin", seg+((tab==="tesabiz"||tab==="otras"||tab==="altitude")?bancosResumenHTML(tab):""));
-    document.querySelectorAll("#bancosTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.bancosTab=b.dataset.t;render();})); }
+    document.querySelectorAll("#bancosTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.bancosTab=b.dataset.t;render();}));
+    const ib=$("#bgImportBtn"), fi=$("#bgImportFile");
+    if(ib&&fi){ ib.addEventListener("click",()=>fi.click()); fi.addEventListener("change",()=>{ const f=fi.files&&fi.files[0]; fi.value=""; if(f) bitgoImportarArchivo(f); }); } }
+}
+/* V199: IMPORTAR EXTRACTO BITGO. BitGo entrega el CSV con coma entre columnas y PUNTO decimal (4998.50).
+   Al pegarlo en la hoja (formato 1.000,00) los importes se dañaban. Aquí se lee bien y el servidor
+   agrega a cada hoja (Sueldos, Marketing, Refunds, Treasury) solo los movimientos nuevos (por TX_ID). */
+const BG_NUM_COLS=["AMOUNT","FEE","TOTAL_BALANCE","AMOUNT_USD","FEE_USD","TOTAL_BALANCE_USD"];
+function bgParseCSV(t){
+  const rows=[]; let row=[], f="", q=false;
+  for(let i=0;i<t.length;i++){ const c=t[i];
+    if(q){ if(c==='"'){ if(t[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=c; }
+    else if(c==='"') q=true; else if(c===","){ row.push(f); f=""; }
+    else if(c==="\n"||c==="\r"){ if(c==="\r"&&t[i+1]==="\n") i++; row.push(f); rows.push(row); row=[]; f=""; }
+    else f+=c; }
+  if(f!==""||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(x=>String(x).trim()!==""));
+}
+function bitgoImportarArchivo(file){
+  const rd=new FileReader();
+  rd.onerror=()=>alert("No se pudo leer el archivo.");
+  rd.onload=function(){
+    const R=bgParseCSV(String(rd.result||"").replace(/^﻿/,""));
+    const h=(R[0]||[]).map(x=>String(x).trim());
+    if(["DATETIME","TX_ID","WALLET_LABEL","AMOUNT"].some(c=>h.indexOf(c)<0)){
+      alert("Este archivo no parece un extracto de BitGo.\nDebe ser el CSV tal como lo descargas de BitGo (con las columnas DATETIME, TX_ID, WALLET_LABEL y AMOUNT)."); return; }
+    const filas=R.slice(1).map(r=>{ const o={}; h.forEach((c,i)=>{ let v=String(r[i]==null?"":r[i]).trim();
+      if(BG_NUM_COLS.indexOf(c)>=0){ v=(v===""||/^null$/i.test(v))?null:Number(v); if(v!==null&&!isFinite(v)) v=null; }
+      o[c]=v; }); return o; }).filter(o=>o.TX_ID);
+    if(!filas.length){ alert("El archivo no tiene movimientos."); return; }
+    const porW={}; filas.forEach(o=>{ const w=String(o.WALLET_LABEL||"(sin wallet)").replace(/^\s*-\s*/,""); porW[w]=(porW[w]||0)+1; });
+    const fs=filas.map(o=>String(o.DATETIME).slice(0,10)).sort(), dmy=s=>s.split("-").reverse().join("/");
+    if(!confirm(`Extracto BitGo: ${filas.length} movimientos, del ${dmy(fs[0])} al ${dmy(fs[fs.length-1])}.\n\n`+
+      Object.keys(porW).map(w=>"• "+w+": "+porW[w]).join("\n")+
+      "\n\nSe agregarán a la hoja «Extracto BitGo» solo los que todavía no están (se revisa el código TX_ID). Los importes se guardan como números correctos.\n\n¿Continuar?")) return;
+    let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
+    const b=$("#bgImportBtn"), bt=b?b.innerHTML:""; if(b){ b.disabled=true; b.innerHTML="Importando…"; }
+    const fin=()=>{ const x=$("#bgImportBtn"); if(x){ x.disabled=false; x.innerHTML=bt||"⬆ Importar extracto BitGo"; } };
+    nmRun("importarBitgo", pin, filas).then(function(res){
+      fin();
+      if(!res||res.error){ const e=(res&&res.error)||"Sin respuesta del servidor.";
+        alert(/no permitida/i.test(e)?"El servidor todavía no tiene la función para importar BitGo. Hay que actualizar Apps Script.":"No se pudo importar: "+e); return; }
+      const ag=res.agregados||{}, tot=Object.keys(ag).reduce((a,k)=>a+(ag[k]||0),0);
+      let msg=tot?`Listo ✓ Se agregaron ${tot} movimientos nuevos:\n`+Object.keys(ag).filter(k=>ag[k]).map(k=>"• "+k+": "+ag[k]).join("\n"):"No había movimientos nuevos: todos ya estaban en la hoja.";
+      if(res.repetidos) msg+=`\n\n${res.repetidos} ya estaban y no se repitieron.`;
+      if(res.sinHoja&&res.sinHoja.length) msg+="\n\n⚠ No se importaron movimientos de estas wallets porque no tienen hoja: "+res.sinHoja.join(", ");
+      if(tot) msg+="\n\nRecuerda clasificarlos (Contabilizado?, Cuenta Analítica…) en la hoja.";
+      alert(msg);
+      if(tot) actualizarDatos();
+    }).catch(function(e){ fin(); alert("No se pudo importar: "+((e&&e.message)||e)); });
+  };
+  rd.readAsText(file);
 }
 /* V184: pagos hechos desde Tesabiz (se reconocen por "Tesabiz" en la columna Tipo de Pago) */
 function esPagoTesabiz(r){ return esCuentaCidre(r.tipo); }   // V196: (nombre antiguo) ahora = pagos desde CIDRE - Peso Liquidez

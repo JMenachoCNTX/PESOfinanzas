@@ -682,7 +682,8 @@ td .pc:focus{border-color:var(--brand)}
 .ca-pop-i:hover{background:var(--surface2)}
 .ca-pop-i.on{background:rgba(55,224,160,.16);color:#235347;font-weight:700}
 .ca-pop-empty{color:var(--muted);font-size:12px;padding:8px 6px}
-.ca-pop-f{border-top:1px solid var(--border);padding-top:6px}
+.ca-pop-f{border-top:1px solid var(--border);padding-top:6px;display:flex;flex-direction:column;gap:6px}
+.ca-pop-sin{width:100%;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--error);border-radius:8px;font:inherit;font-size:12px;font-weight:650;padding:7px}
 .ca-pop-auto{width:100%;cursor:pointer;background:rgba(245,165,36,.1);border:1px solid rgba(245,165,36,.4);color:#6F9A7D;border-radius:8px;font:inherit;font-size:12px;font-weight:650;padding:7px}
 .ca-pop-auto:hover{background:rgba(245,165,36,.2)}
 td.chk,th.chk{width:32px;text-align:center;padding-left:6px;padding-right:6px}
@@ -1498,7 +1499,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V209";
+const APP_VERSION = "V210";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3566,7 +3567,7 @@ function renderEgresosGeneral(){
   if(STATE.egGenGrupo!=="__all") rows=rows.filter(r=>String(r.grupoc||"")===STATE.egGenGrupo);
   if(STATE.egGenSubg!=="__all") rows=rows.filter(r=>String(r.ksubgrupo||"")===STATE.egGenSubg);
   if(STATE.egGenCP!=="__all") rows=rows.filter(r=>String(r.cp||"")===STATE.egGenCP);
-  if(STATE.egGenCA!=="__all") rows=rows.filter(r=>String(r.ca||"")===STATE.egGenCA);
+  if(STATE.egGenCA!=="__all") rows=rows.filter(r=>STATE.egGenCA==="__sin"?!r.ca:String(r.ca||"")===STATE.egGenCA);
   if(STATE.egGenMes!=="__all") rows=rows.filter(r=>String(r.mi)===STATE.egGenMes);
   if(STATE.egGenCosto!=="__all") rows=rows.filter(r=>String(r.costo||"")===STATE.egGenCosto);
   const q=String(STATE.egGenSearch||"").trim().toLowerCase();
@@ -3584,7 +3585,7 @@ function renderEgresosGeneral(){
     {label:"Grupo",sortKey:"grupoc",render:r=>esc(r.grupoc||"–")},
     {label:"Sub Grupo",sortKey:"ksubgrupo",render:r=>esc(r.ksubgrupo||"–")},
     {label:"Cuenta Principal",sortKey:"cp",render:r=>`<span class="tw" style="display:inline-block;background:${catColor(r.cp)};margin-right:7px"></span>${esc(r.cp||"–")}`},
-    {label:"Cuenta Analítica",sortKey:"ca",render:r=>{ if(!r.ca) return '<span class="zero">–</span>'; const cls=r.casrc==="manual"?"ca-man":(r.casrc==="auto"?"ca-auto":(r.casrc==="sheet"?"ca-sheet":"ca-none")); return `<span class="ca-cell ${cls}" style="cursor:default;pointer-events:none;max-width:200px">${esc(r.ca)}</span>`; }},
+    {label:"Cuenta Analítica",sortKey:"ca",render:r=>{ if(r.fuente&&r.hu&&typeof r.hu==="string") return caCellHTMLg(r.fuente,r.hu,{ca:r.ca,src:r.casrc}); if(!r.ca) return '<span class="zero">–</span>'; const cls=r.casrc==="manual"?"ca-man":(r.casrc==="auto"?"ca-auto":(r.casrc==="sheet"?"ca-sheet":"ca-none")); return `<span class="ca-cell ${cls}" style="cursor:default;pointer-events:none;max-width:200px">${esc(r.ca)}</span>`; }},
     {label:"Concepto",sortKey:"keytext",render:r=>esc(r.keytext||r.con||"–")+compClipHTML(r.fecha,r.con)},
     {label:"Tipo de Pago",sortKey:"cuentaPago",render:r=>r.cuentaPago?`<span class="tag">${esc(r.cuentaPago)}</span>`:'<span class="zero">–</span>'},
     {label:"Respaldo",render:r=>respBtnHTML(r)},
@@ -3613,7 +3614,7 @@ function renderEgresosGeneral(){
     {k:"egGenGrupo",lbl:"Grupo",disp:v=>v,opts:fGrupos.map(c=>({v:c,t:c})),ph:"Todos los grupos"},
     {k:"egGenSubg",lbl:"Sub grupo",disp:v=>v,opts:fSubg.map(c=>({v:c,t:c})),ph:"Todos los sub grupos"},
     {k:"egGenCP",lbl:"Cuenta principal",disp:v=>v,opts:fCP.map(c=>({v:c,t:c})),ph:"Todas las cuentas principales"},
-    {k:"egGenCA",lbl:"Cuenta analítica",disp:v=>v,opts:fCA.map(c=>({v:c,t:c})),ph:"Todas las cuentas analíticas"},
+    {k:"egGenCA",lbl:"Cuenta analítica",disp:v=>v==="__sin"?"(sin cuenta analítica)":v,opts:[{v:"__sin",t:"(sin cuenta analítica)"}].concat(fCA.map(c=>({v:c,t:c}))),ph:"Todas las cuentas analíticas"},
     ...(fCostos.length?[{k:"egGenCosto",lbl:"Fijo/Variable",disp:v=>costoLabel(v),opts:fCostos.map(c=>({v:c,t:costoLabel(c)})),ph:"Fijo / Variable"}]:[])
   ];
   const egGenFB=fbHTML("eggf", egGenFilterDefs);
@@ -3625,12 +3626,12 @@ function renderEgresosGeneral(){
         <span class="ca-cell ca-auto" style="cursor:default;pointer-events:none">Automática</span>
         <span class="ca-cell ca-man" style="cursor:default;pointer-events:none">Manual</span>
         <span class="ca-cell ca-sheet" style="cursor:default;pointer-events:none">De la hoja</span>
-        <span style="color:var(--muted)">· Aquí es solo lectura; edítala en Egresos/Mercury/BitGo. La columna <b>Concepto</b> muestra Beneficiario · Description · COMMENTS según la fuente.</span></div>
+        <span style="color:var(--muted)">· Clic en la cuenta para cambiarla o dejar el gasto <b>sin cuenta</b> (filtro «sin cuenta analítica» para reasignarlos). La columna <b>Concepto</b> muestra Beneficiario · Description · COMMENTS según la fuente.</span></div>
       ${rows.length?tbl(cols,sorted.slice(0,1000),totRow,S,{sticky:true}):emptyState("No hay egresos con los filtros actuales.")}
       ${rows.length>1000?`<div class="mini" style="margin-top:10px">Mostrando 1000 de ${rows.length}. Usa la búsqueda o filtros.</div>`:""}</div>`;
   const si=$("#egGenSearch"); if(si){ si.addEventListener("input",()=>{STATE.egGenSearch=si.value;STATE._focus=true;render();}); }
   fbWire("eggf", egGenFilterDefs);
-  tarjetaWire();
+  tarjetaWire(); wireCaCells();
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
   document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
     const k=th.dataset.k;
@@ -3812,8 +3813,11 @@ function caMasterList(){
   return [...set].filter(Boolean).sort((a,b)=>a.localeCompare(b));
 }
 // Resolución genérica: manual > base (por texto) > valor de hoja > nada
+/* V210: CA_SIN en la asignación manual = "quitada a propósito": el gasto queda sin cuenta analítica
+   (no se usa la regla automática ni el valor de la hoja) hasta que se le asigne otra. */
+const CA_SIN="__SIN__";
 function resolveGeneric(fuente, huella, keyText, sheetCa){
-  const ov=manCa(fuente,huella); if(ov) return {ca:ov, src:"manual"};
+  const ov=manCa(fuente,huella); if(ov===CA_SIN) return {ca:"", src:"sin"}; if(ov) return {ca:ov, src:"manual"};
   const base=asigBaseIndex()[_normTxt(keyText)]; if(base) return {ca:base, src:"auto"};
   if(sheetCa && String(sheetCa).trim()) return {ca:String(sheetCa).trim(), src:"sheet"};
   return {ca:"", src:"none"};
@@ -3826,7 +3830,7 @@ function caCellHTMLg(fuente, huella, res){
   const cls=res.src==="manual"?"ca-man":(res.src==="auto"?"ca-auto":(res.src==="sheet"?"ca-sheet":"ca-none"));
   const label=res.ca?esc(res.ca):"Asignar";
   const title=res.src==="manual"?"Manual (tú la pusiste) · clic para cambiar":(res.src==="auto"?"Automática (base Asignación) · clic para cambiar":(res.src==="sheet"?"Valor de la hoja, aún no está en la base · clic para asignar":"Sin asignar · clic para asignar"));
-  const rev=res.src==="manual"?`<button type="button" class="ca-revert" data-fuente="${esc(fuente)}" data-hu="${esc(huella)}" title="Volver a automático">↻</button>`:"";
+  const rev=(res.src==="manual"||res.src==="sin")?`<button type="button" class="ca-revert" data-fuente="${esc(fuente)}" data-hu="${esc(huella)}" title="Volver a automático">↻</button>`:"";
   return `<span class="ca-wrap"><button type="button" class="ca-cell ${cls}" data-fuente="${esc(fuente)}" data-hu="${esc(huella)}" title="${esc(title)}">${label}</button>${rev}</span>`;
 }
 // Huellas para Mercury y BitGo (arrays persistentes)
@@ -3870,9 +3874,9 @@ function _caOutside(ev){ if(_caPopEl && !_caPopEl.contains(ev.target)) caClosePo
 function caOpenPopover(anchor, fuente, hu){
   caClosePopover();
   const list=caMasterList();
-  const cur=Array.isArray(hu)?"":(manCa(fuente,hu)||"");
+  let cur=Array.isArray(hu)?"":(manCa(fuente,hu)||""); if(cur===CA_SIN) cur="";
   const pop=document.createElement("div"); pop.className="ca-pop";
-  pop.innerHTML=`<div class="ca-pop-h"><input type="text" class="ca-pop-q" placeholder="Buscar o escribir cuenta analítica…" autocomplete="off"></div><div class="ca-pop-list"></div><div class="ca-pop-f"><button type="button" class="ca-pop-auto">↻ Volver a automático</button></div>`;
+  pop.innerHTML=`<div class="ca-pop-h"><input type="text" class="ca-pop-q" placeholder="Buscar o escribir cuenta analítica…" autocomplete="off"></div><div class="ca-pop-list"></div><div class="ca-pop-f"><button type="button" class="ca-pop-auto">↻ Volver a automático</button><button type="button" class="ca-pop-sin" title="El gasto queda sin cuenta analítica para reasignarlo">✕ Dejar sin cuenta</button></div>`;
   document.body.appendChild(pop); _caPopEl=pop;
   const r=anchor.getBoundingClientRect();
   const w=Math.min(340, window.innerWidth-20);
@@ -3887,6 +3891,7 @@ function caOpenPopover(anchor, fuente, hu){
   q.addEventListener("keydown",ev=>{ if(ev.key==="Enter"){ const v=q.value.trim(); if(v) caSetOverride(fuente,hu,v); } else if(ev.key==="Escape"){ caClosePopover(); } });
   listEl.addEventListener("click",ev=>{ const b=ev.target.closest(".ca-pop-i"); if(b) caSetOverride(fuente,hu,b.dataset.v); });
   pop.querySelector(".ca-pop-auto").addEventListener("click",()=>caSetOverride(fuente,hu,""));
+  pop.querySelector(".ca-pop-sin").addEventListener("click",()=>caSetOverride(fuente,hu,CA_SIN));
   setTimeout(()=>{ try{q.focus();}catch(_){}; document.addEventListener("mousedown",_caOutside,true); },0);
 }
 // Guardar/quitar corrección manual (ca="" = volver a automático). hu puede ser texto o arreglo (lote).
@@ -7254,13 +7259,16 @@ function _tjFecha(v){
   const s=String(v||"").trim(); let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[0];
   m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:"";
 }
+/* V210: columna "Cuenta" de HistorialEgresos (Egresos, Activo…) según el primer dígito del código contable */
+function _cuentaRaiz(cod){ const n=(STATE.plan||[]).find(r=>r.codigo===String(cod||"").slice(0,1)); if(!n) return "";
+  const t=String(n.tipo||""); return /^egreso$/i.test(t)?"Egresos":/^ingreso$/i.test(t)?"Ingresos":t; }
 /* Cuenta analítica → códigos del plan de cuentas (igual que autoFillCuenta del formulario) */
 function _tjPlanDe(cc){
   const plan=STATE.plan||[], an=r=>String(r.categoria).toLowerCase().indexOf("anal")>=0;
   const node=plan.find(r=>String(r.tipo).toLowerCase().indexOf("egreso")>=0&&an(r)&&r.nombre===cc)||plan.find(r=>an(r)&&r.nombre===cc);
-  if(!node||!node.codigo) return {codc:"",grupo:"",sc:"",cp:""};
+  if(!node||!node.codigo) return {codc:"",grupo:"",sc:"",cp:"",cuenta:""};
   const at=len=>{ const n=plan.find(r=>r.codigo===node.codigo.slice(0,len)); return n?n.nombre:""; };
-  return {codc:node.codigo,grupo:at(2),sc:at(3),cp:at(6)};
+  return {codc:node.codigo,grupo:at(2),sc:at(3),cp:at(6),cuenta:_cuentaRaiz(node.codigo)};
 }
 function tarjetaWire(){ const tjB=$("#egTjBtn"), tjF=$("#egTjFile");
   if(tjB&&tjF){ tjB.addEventListener("click",()=>tjF.click()); tjF.addEventListener("change",()=>{ const f=tjF.files&&tjF.files[0]; tjF.value=""; if(f) tarjetaImportarArchivo(f); }); } }
@@ -7348,10 +7356,10 @@ function tarjetaRevisar(movs, nombreArchivo){
       (pe?`\n\n⚠ ${pe} están marcados como consumo personal.`:"")+(ya?`\n⚠ ${ya} parecen ya registrados (podrían duplicarse).`:"")+"\n\n¿Guardar?")) return;
     let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
     const lista=s.map(m=>{ let p=m.cc?_tjPlanDe(m.cc):{};
-      if(m.cc&&!p.codc&&m.sug&&m.sug.cc===m.cc){ const e=m.sug.e; p={codc:e.codc||"",grupo:e.grupoc||"",sc:e.sc||"",cp:e.cp||""}; }
+      if(m.cc&&!p.codc&&m.sug&&m.sug.cc===m.cc){ const e=m.sug.e; p={codc:e.codc||"",grupo:e.grupoc||"",sc:e.ksubgrupo||"",cp:e.cp||"",cuenta:e.kcuenta||""}; }
       const com=["Tarjeta "+(m.tar||st.cuenta), m.desc&&m.desc!==m.prov?m.desc:"", m.mon&&m.mon!=="USD"&&m.orig?`Original: ${m.orig} ${m.mon}`:"", m.pend?"Pendiente de liquidar":""].filter(Boolean).join(" · ");
       return {fechaPago:m.f,fechaCont:m.f,concepto:m.prov,importe:m.usd,moneda:"USD",estado:"Pagado",pais:m.paisSug||"",
-        cuentaPrincipal:p.cp||"",subCuenta:p.sc||"",cuentaContable:m.cc||"",grupo:p.grupo||"",codigoContable:p.codc||"",
+        cuentaPrincipal:p.cp||"",subCuenta:p.sc||"",cuentaContable:m.cc||"",grupo:p.grupo||"",codigoContable:p.codc||"",cuenta:p.cuenta||"",
         comentarios:com,beneficiario:m.prov,tipoPago:st.cuenta,pagadoPor:st.por}; });
     const b=ov.querySelector("#tjGuardar"); b.disabled=true; b.textContent="Guardando…"; ov._msg("");
     try{ const res=await nmRun("registrarEgresosLote",pin,lista);
@@ -8019,6 +8027,8 @@ function renderPlanCuentas(){
     {label:"Origen",sortKey:"origen",render:r=> String(r.origen).toUpperCase()==="PESO"?'<span class="st presupuestado">PESO</span>':`<span class="tag">${esc(r.origen||"–")}</span>`},
     {label:"Estado",sortKey:"estado",render:r=> String(r.estado||"").toLowerCase().startsWith("activ")?`<span class="st pagado">${esc(r.estado)}</span>`:`<span class="tag">${esc(r.estado||"–")}</span>`},
   ];
+  // V210: eliminar una Cuenta Analítica (solo administrador; se guarda en el sistema)
+  if(nmFbActivo()&&NMFB.esAdmin()) cols.push({label:"",render:r=>_pnorm(r.categoria)==="cuentaanalitica"?`<button class="btn ghost pl-del" data-c="${esc(r.codigo)}" title="Eliminar esta cuenta analítica">🗑</button>`:""});
   $("#app").innerHTML=`
     <p class="section-intro">Plan de cuentas de PE$O (5 niveles: Cuenta → Grupo → Sub Grupo → Cuenta Principal → Cuenta Analítica). Se lee directamente de la hoja <b>PlanCuentas</b> de tu archivo principal (rango A:F). <b>Para editarlo, hazlo en Google Sheets</b> y pulsa <b>Actualizar</b> aquí. Las Cuentas Analíticas de Egreso alimentan los desplegables al registrar gastos.</p>
     <div class="grid kpis">
@@ -8036,6 +8046,7 @@ function renderPlanCuentas(){
       ${tbl(cols,view.slice(0,CAP),null,S)}
     </div>`;
   const ps=$("#planSearch"); if(ps) ps.addEventListener("input",()=>{STATE.planSearch=ps.value;STATE._focus=true;render();});
+  document.querySelectorAll("#app .pl-del").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); planEliminarCA(b.dataset.c); }));
   fbWire("planf", planFilterDefs);
   document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
     const k=th.dataset.k;
@@ -8044,6 +8055,29 @@ function renderPlanCuentas(){
     render();
   }));
   if(STATE._focus){const el=$("#planSearch"); if(el){el.focus(); el.setSelectionRange(el.value.length,el.value.length);} STATE._focus=false;}
+}
+/* V210: elimina una Cuenta Analítica del Plan. Los gastos que la usaban quedan SIN cuenta analítica
+   (marca CA_SIN en la asignación manual) para reasignarlos, y se borran las reglas automáticas que la ponían. */
+async function planEliminarCA(codigo){
+  const P=STATE.plan||[], node=P.find(r=>String(r.codigo)===String(codigo)); if(!node) return;
+  const k=_normTxt(node.nombre);
+  let U=[]; try{ const sy=STATE.year; STATE.year="__all"; try{ U=egresosUnificados(); } finally { STATE.year=sy; } }catch(_){}
+  const movs=U.filter(r=>_normTxt(r.ca)===k&&r.fuente&&typeof r.hu==="string"&&r.hu);
+  const reglas=(STATE.asignacion||[]).filter(r=>_normTxt(r.ca)===k);
+  const tot=movs.reduce((a,r)=>a+(+r.usd||0),0);
+  if(!confirm(`¿Eliminar la cuenta analítica «${node.codigo} ${node.nombre}» del Plan de Cuentas?\n\n`+
+    (movs.length?`• ${movs.length} movimientos ($${f2(tot)}) quedarán SIN cuenta analítica, para que los reasignes (Egresos › General › filtro «sin cuenta analítica»).\n`:"• Ningún movimiento la usa.\n")+
+    (reglas.length?`• Se borrarán ${reglas.length} reglas de asignación automática que ponían esta cuenta.\n`:"")+"\nEsto se puede deshacer volviendo a agregar la cuenta y usando ↻ en cada gasto.")) return;
+  const m=$("#pcMsg"); if(m){ m.className="msg"; m.textContent="Eliminando…"; }
+  try{
+    if(movs.length) await NMFB.asigGuardar(movs.map(r=>({fuente:r.fuente,huella:r.hu,ca:CA_SIN})));
+    const set=new Set(movs.map(r=>r.fuente+"\u0000"+r.hu));
+    STATE.asigManual=(STATE.asigManual||[]).filter(a=>!set.has(a.fuente+"\u0000"+a.huella)).concat(movs.map(r=>({fuente:r.fuente,huella:r.hu,ca:CA_SIN})));
+    STATE._amSrc=null; STATE._amIdx=null;
+    if(reglas.length){ STATE.asignacion=(STATE.asignacion||[]).filter(r=>_normTxt(r.ca)!==k); await asigGuardarReglas(null); }
+    STATE.plan=P.filter(r=>r!==node); await guardarPlanCuentas();
+    render(); const mm=$("#pcMsg"); if(mm){ mm.className="msg ok"; mm.textContent=`Cuenta eliminada ✓ ${node.codigo} ${node.nombre}`+(movs.length?` · ${movs.length} movimientos quedaron sin cuenta analítica`:""); }
+  }catch(e){ const mm=$("#pcMsg"); if(mm){ mm.className="msg err"; mm.textContent="No se pudo eliminar: "+((e&&e.message)||e); } }
 }
 function guardarPlanCuentas(){
   const m=$("#pcMsg");
@@ -9444,7 +9478,7 @@ function guardarEgreso(){
     moneda:($("#f_moneda").value.trim().toUpperCase()||"USD"),
     estado:$("#f_estado").value, pais:$("#f_pais").value.trim(),
     cuentaPrincipal:$("#f_cp").value.trim(), subCuenta:$("#f_sc").value.trim(), cuentaContable:$("#f_cc").value.trim(),
-    grupo:$("#f_grupo").value.trim(), codigoContable:$("#f_codc").value.trim(),
+    grupo:$("#f_grupo").value.trim(), codigoContable:$("#f_codc").value.trim(), cuenta:_cuentaRaiz($("#f_codc").value.trim()),
     comentarios:$("#f_coment").value.trim(), beneficiario:$("#f_ben").value.trim(),
     tipoPago:$("#f_tipo").value.trim(), pagadoPor:$("#f_pagadopor").value.trim()
   };

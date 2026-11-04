@@ -1498,7 +1498,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V203";
+const APP_VERSION = "V204";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -8655,7 +8655,7 @@ const HIST_CAMPOS={
 };
 const HIST_TIT={inv:"Inversiones",pre:"Préstamos",devoluciones:"Devoluciones",rrhh:"Personal (RRHH)"};
 /* V190: RRHH en Firebase. Los campos del editor salen de las columnas que ya tenía tu hoja RRHH. */
-const RH_ETIQ={nombretrabajador:"Nombre del trabajador",cargo:"Cargo",sueldofijo:"Sueldo fijo",bonosextras:"Bonos extras",bonosporkpis:"Bonos por KPIs",estado:"Estado",fechadeingreso:"Fecha de ingreso",fechaderetiro:"Fecha de retiro",fechadenacimiento:"Fecha de nacimiento",correocorporativo:"Correo corporativo",ci:"CI",sexo:"Sexo",edad:"Edad",moneda:"Moneda",empresa:"Empresa"};
+const RH_ETIQ={nombretrabajador:"Nombre del trabajador",contrato:"Contrato",area:"Área",walletid:"Wallet ID",telefonoreferenciacasodeemergencia:"Teléfono de emergencia (referencia)",comentarios:"Comentarios",anodeingreso:"Año de ingreso",mesdeingreso:"Mes de ingreso",whatsapppersonal:"WhatsApp personal",novedades:"Novedades (texto antiguo)",correopersonal:"Correo personal",direccion:"Dirección",cargo:"Cargo",sueldofijo:"Sueldo fijo",bonosextras:"Bonos extras",bonosporkpis:"Bonos por KPIs",estado:"Estado",fechadeingreso:"Fecha de ingreso",fechaderetiro:"Fecha de retiro",fechadenacimiento:"Fecha de nacimiento",correocorporativo:"Correo corporativo",ci:"CI",sexo:"Sexo",edad:"Edad",moneda:"Moneda",empresa:"Empresa"};
 function histCampos(n){ if(n!=="rrhh") return HIST_CAMPOS[n];
   const orden=Object.keys(RH_ETIQ); const keys=new Set(orden.filter(k=>k!=="edad")); ((STATE.histRaw&&STATE.histRaw.rrhh)||[]).forEach(r=>Object.keys(r).forEach(k=>{ if(k&&k!=="edad"&&!k.startsWith("_")) keys.add(k); }));
   return [...keys].map(k=>[k, RH_ETIQ[k]||k, /fecha/.test(k)?"date":(/sueldo|bono|monto|importe|salario/.test(k)?"num":"")]); }

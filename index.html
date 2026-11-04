@@ -1498,7 +1498,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V200";
+const APP_VERSION = "V201";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4201,15 +4201,66 @@ function bitgoSueldos(){
   const dateCol=find("mmddyyyy","fecha","date","datetime"), amountCol=find("amount","monto","importe"),
         walletCol=find("walletlabel","wallet"), typeCol=find("txtype","tipo","type"),
         caCol=find("cuentaanalitica"), commentsCol=find("comments","comentarios","concepto","memo"),
-        assetCol=find("asset","moneda","coin");
+        assetCol=find("asset","moneda","coin"), txCol=find("txid");
   const isSueldo=r=>{ const cat=String(r._cat||"").toLowerCase(); const w=walletCol?String(r[walletCol]||"").toLowerCase():""; return cat.includes("sueldo")||w.includes("sueldo"); };
   return (data.rows||[]).filter(isSueldo).map(r=>{
     const d=dateCol?new Date(r[dateCol]):null; const ok=d&&!isNaN(d);
     const v=amountCol?toNum(r[amountCol]):0;
     return { fecha: dateCol? r[dateCol]:"", y: ok?d.getFullYear():null, mi: ok?d.getMonth():-1,
       monto: Math.abs(v), tipo: typeCol?String(r[typeCol]||""):"", asset: assetCol?String(r[assetCol]||""):"",
-      quien: String((caCol&&r[caCol])||(commentsCol&&r[commentsCol])||"—"), wallet: walletCol?String(r[walletCol]||""):"" };
-  });
+      quien: String((caCol&&r[caCol])||(commentsCol&&r[commentsCol])||"—"), wallet: walletCol?String(r[walletCol]||""):"",
+      tx: txCol?String(r[txCol]||"").trim():"", com: commentsCol?String(r[commentsCol]||""):"" };
+  }).map(rhPagoInfo);
+}
+/* V201: planillas de sueldos. Cada pago de la wallet Sueldos tiene un "mes de planilla" (el mes al que corresponde,
+   ej. pagado en noviembre = sueldo de octubre) y un colaborador. Se deducen del comentario ("Sueldo Septiembre - Ana")
+   y se pueden cambiar a mano. Cambios y cierres se guardan en Firebase config/rhPlanillas (un solo documento). */
+let NM_RHPL=null;
+function rhPlCargar(){ if(NM_RHPL||!nmFbActivo()) return; NM_RHPL={asig:{},cierres:{},_cargando:true};
+  NMFB.cfgGet("rhPlanillas").then(d=>{ NM_RHPL={asig:(d&&d.asig)||{},cierres:(d&&d.cierres)||{}}; if(STATE.section==="rrhh") render(); })
+    .catch(e=>{ console.error("rhPlanillas",e); NM_RHPL={asig:{},cierres:{}}; }); }
+function rhPlGuardar(){ if(!nmFbActivo()||!NM_RHPL) return Promise.resolve();
+  return NMFB.cfgSet("rhPlanillas",{asig:NM_RHPL.asig,cierres:NM_RHPL.cierres}).catch(e=>alert("No se pudo guardar en Firebase: "+((e&&e.message)||e))); }
+function rhPer(y,mi){ return y+"-"+String(mi+1).padStart(2,"0"); }
+function rhPerTxt(per){ const [y,m]=String(per||"").split("-").map(Number); return (y&&m)?MONTH_ES_LONG[m-1]+" "+y:"–"; }
+const _rhNorm=t=>String(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+function rhPagoInfo(p){
+  p.salida = !/deposit|receive|entrada/i.test(p.tipo);
+  const c=_rhNorm(p.com||p.quien);
+  p.concepto = /bono/.test(c)?"Bono":(/sueldo|salario|haber/.test(c)?"Sueldo":"");
+  // mes escrito en el comentario → mes de planilla (si es mayor al mes de pago, es del año anterior)
+  let mi=-1; MONTH_ES_LONG.forEach((n,i)=>{ if(mi<0 && new RegExp("\\b"+_rhNorm(n)+"\\b").test(c)) mi=i; });
+  if(mi<0 && /\bsetiembre\b/.test(c)) mi=8;
+  p.perAuto = (mi>=0 && p.y!=null) ? rhPer(mi>p.mi?p.y-1:p.y, mi) : (p.y!=null&&p.mi>=0?rhPer(p.y,p.mi):"");
+  const a=(NM_RHPL&&NM_RHPL.asig&&p.tx&&NM_RHPL.asig[p.tx])||{};
+  p.per = a.p || p.perAuto; p.perManual=!!a.p;
+  p.persona = String(p.com||p.quien).split(/\s+-\s+/).slice(1).join(" - ").trim();
+  p.colab = a.c || rhColabDe(p.persona); p.colabManual=!!a.c;
+  return p;
+}
+// colaborador cuyo nombre comparte más palabras con el texto del pago (empate = sin asignar)
+function rhColabDe(txt){ const w=_rhNorm(txt).split(/[^a-z]+/).filter(x=>x.length>=3); if(!w.length) return "";
+  let best="",bs=0,tie=false;
+  (STATE.rrhh||[]).forEach(r=>{ const nw=_rhNorm(r.nombre).split(/[^a-z]+/).filter(x=>x.length>=3);
+    let sc=0; w.forEach(x=>{ if(nw.some(n=>n===x||(x.length>=4&&n.startsWith(x)))) sc+=(x===w[0]?1:1.1); });
+    if(sc>bs){ bs=sc; best=r.nombre; tie=false; } else if(sc===bs&&sc>0) tie=true; });
+  return (bs>0&&!tie)?best:""; }
+function rhPerCelda(p){
+  const adm=nmFbActivo()&&NMFB.esAdmin()&&p.tx&&NM_RHPL&&!NM_RHPL._cargando;
+  if(!adm) return esc(rhPerTxt(p.per))+(p.perManual?' <span class="mini">✎</span>':'');
+  const opts=[]; if(p.y!=null&&p.mi>=0) for(let k=-3;k<=1;k++){ const d=new Date(p.y,p.mi+k,1); opts.push(rhPer(d.getFullYear(),d.getMonth())); }
+  if(p.per&&!opts.includes(p.per)) opts.unshift(p.per);
+  return `<div class="select-wrap"><select class="rh-persel" data-tx="${esc(p.tx)}" title="Mes al que corresponde este pago">${opts.map(o=>`<option value="${o}"${o===p.per?" selected":""}>${rhPerTxt(o)}${o===p.perAuto?" (auto)":""}</option>`).join("")}</select></div>`;
+}
+function rhPerWire(pagos){
+  document.querySelectorAll("#app .rh-persel").forEach(se=>{ se.addEventListener("click",e=>e.stopPropagation()); se.addEventListener("change",()=>{
+    const p=pagos.find(x=>x.tx===se.dataset.tx); if(!p||!NM_RHPL) return;
+    const per=se.value, cerr=c=>NM_RHPL.cierres[c]&&NM_RHPL.cierres[c].cerrado;
+    if(cerr(per)||cerr(p.per)){ alert("La planilla de "+rhPerTxt(cerr(per)?per:p.per)+" está cerrada. Reábrela primero en Planillas."); se.value=p.per; return; }
+    const a=NM_RHPL.asig[p.tx]=NM_RHPL.asig[p.tx]||{};
+    if(per===p.perAuto) delete a.p; else a.p=per;
+    if(!Object.keys(a).length) delete NM_RHPL.asig[p.tx];
+    rhPlGuardar().then(render); }); });
 }
 let RRHH_CHARTS=null;
 function renderRRHH(){
@@ -4276,7 +4327,8 @@ function renderRRHH(){
 
   // ---- PAGOS (BitGo wallet Sueldos) ----
   if(tab==="pagos"){
-    const pagos=bitgoSueldos();
+    rhPlCargar();
+    const pagos=bitgoSueldos().filter(p=>p.salida);
     const totalPag=pagos.reduce((s,p)=>s+p.monto,0);
     const years=[...new Set(pagos.map(p=>p.y).filter(v=>v!=null))].sort((a,b)=>a-b);
     const meses=new Set(pagos.filter(p=>p.mi>=0).map(p=>p.y+"-"+p.mi));
@@ -4289,6 +4341,8 @@ function renderRRHH(){
       {label:"Wallet",sortKey:"wallet",render:p=>p.wallet?`<span class="mini">${esc(p.wallet)}</span>`:'<span class="zero">–</span>'},
       {label:"Movimiento",sortKey:"tipo",render:p=>p.tipo?`<span class="tag">${esc(p.tipo)}</span>`:'<span class="zero">–</span>'},
       {label:"Beneficiario / detalle",sortKey:"quien",render:p=>esc(p.quien||"–")},
+      {label:"Mes de planilla",sortKey:"per",render:p=>rhPerCelda(p)},
+      {label:"Colaborador",sortKey:"colab",render:p=>p.colab?esc(p.colab)+(p.colabManual?' <span class="mini">✎</span>':''):'<span class="zero">sin asignar</span>'},
       {label:"Asset",sortKey:"asset",render:p=>p.asset?`<span class="tag">${esc(p.asset)}</span>`:'<span class="zero">–</span>'},
       {label:"Monto",right:1,cls:"num",sortKey:"monto",render:p=>money(p.monto)},
     ];
@@ -4302,9 +4356,10 @@ function renderRRHH(){
       </div>`;
     app.innerHTML=intro+seg+(pagos.length?pagosKpis:"")+(pagos.length?`
       <div class="card"><div class="head"><h3>Pagos por mes ${yrForChart?("· "+yrForChart):""}</h3><span class="mini">Wallet Sueldos · BitGo</span></div><div id="rhPagChart"></div></div>
-      <div class="card"><div class="head"><h3>Detalle de pagos de sueldos</h3><span class="mini">${money(totalPag)} · clic en un encabezado para ordenar</span></div>${tbl(cols,ordered,["Total","","","","",money(totalPag)],S,{sticky:true})}</div>`
+      <div class="card"><div class="head"><h3>Detalle de pagos de sueldos</h3><span class="mini">${money(totalPag)} · clic en un encabezado para ordenar</span></div>${tbl(cols,ordered,["Total","","","","","","",money(totalPag)],S,{sticky:true})}</div>`
       : emptyState('No hay pagos de sueldos. Se extraen automáticamente de la wallet <b>Sueldos</b> de BitGo. Registra pagos en esa wallet y presiona Actualizar.'));
     if(pagos.length){ drawMonthlyInto("#rhPagChart", monthTot, "rhPag", "#8EB69B", "#235347", 124); }
+    rhPerWire(pagos);
     document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
       const k=th.dataset.k;
       if(S.key===k) STATE.rhPagSort={key:k,dir:S.dir==="asc"?"desc":"asc"};
@@ -4316,10 +4371,11 @@ function renderRRHH(){
 
   // ---- PLANILLAS (genera planilla mensual de activos y compara con lo pagado) ----
   if(tab==="planillas"){
-    const pagos=bitgoSueldos();
+    rhPlCargar();
+    const pagos=bitgoSueldos().filter(p=>p.salida);
     const empYear=r=>{ if(r.ingreso){const d=parseLocalDate(r.ingreso); if(d) return {y:d.getFullYear(),mi:d.getMonth()};} return null; };
     const yearsSet=new Set();
-    pagos.forEach(p=>{ if(p.y!=null) yearsSet.add(p.y); });
+    pagos.forEach(p=>{ const y=+String(p.per).slice(0,4); if(y) yearsSet.add(y); });
     act.forEach(r=>{ const e=empYear(r); if(e) yearsSet.add(e.y); });
     const nowY=(pagos[0]&&pagos[0].y)|| (act.map(empYear).filter(Boolean)[0]||{}).y || null;
     const years=[...yearsSet].sort((a,b)=>a-b);
@@ -4332,8 +4388,10 @@ function renderRRHH(){
     for(let mi=0;mi<12;mi++){
       const emps=act.filter(r=>activeInMonth(r,mi));
       const plan=emps.reduce((s,r)=>s+r._tot,0);
-      const pag=pagos.filter(p=>p.y===planYear&&p.mi===mi).reduce((s,p)=>s+p.monto,0);
-      monthRows.push({mi,nEmp:emps.length,plan,pag,dif:plan-pag,emps});
+      const per=rhPer(planYear,mi);
+      const pag=pagos.filter(p=>p.per===per).reduce((s,p)=>s+p.monto,0);
+      const ci=(NM_RHPL&&NM_RHPL.cierres&&NM_RHPL.cierres[per])||{};
+      monthRows.push({mi,per,nEmp:emps.length,plan,pag,dif:plan-pag,emps,cerrado:!!ci.cerrado});
       tPlan+=plan; tPag+=pag;
     }
     const yearSeg = years.length>1? `<div class="seg" id="rhPlanYear" style="margin-bottom:14px">${years.map(y=>`<button data-y="${y}" class="${y===planYear?'on':''}">${y}</button>`).join("")}</div>` : "";
@@ -4343,12 +4401,20 @@ function renderRRHH(){
       {label:"Planilla (a pagar)",right:1,cls:"num",render:m=>money(m.plan)},
       {label:"Pagado (BitGo)",right:1,cls:"num",render:m=>m.pag?money(m.pag):'<span class="zero">–</span>'},
       {label:"Diferencia",right:1,cls:"num",render:m=>{const d=m.dif; return `<span style="${d>0?'color:var(--rose)':(d<0?'color:var(--emerald)':'')}">${money(d)}</span>`;}},
+      {label:"Estado",render:m=>m.cerrado?'<span class="tag" style="background:#DAF1DE;color:#0B2B26">Cerrada ✓</span>':(m.pag?'<span class="tag">Abierta</span>':'<span class="zero">–</span>')},
     ];
-    const summaryTbl=tbl(scols,monthRows,["Total "+planYear,"",money(tPlan),money(tPag),money(tPlan-tPag)],null,{sticky:true});
+    const summaryTbl=tbl(scols,monthRows,["Total "+planYear,"",money(tPlan),money(tPag),money(tPlan-tPag),""],null,{sticky:true});
     // detalle del mes seleccionado
     let selMi=STATE.rhPlanMes;
     if(selMi==null){ const withEmp=monthRows.filter(m=>m.nEmp>0); selMi = withEmp.length? withEmp[withEmp.length-1].mi : 0; }
     const selRow=monthRows[selMi]||monthRows[0];
+    const perSel=selRow.per, cie=(NM_RHPL&&NM_RHPL.cierres&&NM_RHPL.cierres[perSel])||{}, okMan=cie.ok||{};
+    const pagMes=pagos.filter(p=>p.per===perSel);
+    const pagDe=n=>pagMes.filter(p=>p.colab===n).reduce((s,p)=>s+p.monto,0);
+    selRow.emps.forEach(r=>{ r._pag=pagDe(r.nombre); r._ok=!!okMan[r.nombre] || (r._tot>0 && r._pag>=r._tot-0.5); r._okMan=!!okMan[r.nombre]; });
+    const nPend=selRow.emps.filter(r=>!r._ok).length;
+    const sinColab=pagMes.filter(p=>!p.colab || !selRow.emps.some(r=>r.nombre===p.colab));
+    const adm=nmFbActivo()&&NMFB.esAdmin();
     const mesSeg=`<div class="toolbar" style="margin-bottom:12px"><span class="rchips-lbl" style="min-width:auto">Ver mes</span>
         ${selHTML("rhPlanMesSel","",String(selMi),MONTH_ES_LONG.map((n,i)=>({v:String(i),t:n})))}</div>`;
     const dcols=[
@@ -4357,14 +4423,39 @@ function renderRRHH(){
       {label:"Bonos extra",right:1,cls:"num",render:r=>r.be?money(r.be):'<span class="zero">–</span>'},
       {label:"Bonos KPI",right:1,cls:"num",render:r=>r.bk?money(r.bk):'<span class="zero">–</span>'},
       {label:"Total mes",right:1,cls:"num",render:r=>`<b>${money(r._tot)}</b>`},
+      {label:"Pagado (BitGo)",right:1,cls:"num",render:r=>r._pag?money(r._pag):'<span class="zero">–</span>'},
+      {label:"Estado",render:r=>r._ok?`<span class="tag" style="background:#DAF1DE;color:#0B2B26">Pagado ✓</span>${r._okMan?' <span class="mini">confirmado a mano</span>':''}`:'<span class="tag" style="background:#FDE7E7;color:#B42318">Pendiente</span>'},
+      {label:"",render:r=>(adm&&!cie.cerrado)?`<label class="mini" style="cursor:pointer;white-space:nowrap"><input type="checkbox" class="rh-okchk" data-n="${esc(r.nombre)}"${r._okMan?" checked":""}> confirmar pagado</label>`:""},
     ];
-    const detalle = selRow.emps.length? tbl(dcols,selRow.emps,["Planilla "+MONTH_ES_LONG[selMi],"","","",money(selRow.plan)],null,{sticky:true})
+    const tPagSel=selRow.emps.reduce((s,r)=>s+r._pag,0);
+    const cierreBox = !selRow.emps.length ? "" : (cie.cerrado
+      ? `<div class="msg ok" style="display:block;margin-bottom:12px"><b>Planilla de ${rhPerTxt(perSel)} cerrada ✓</b> · ${esc(fmtDate(String(cie.cerrado.cuando||"").slice(0,10))||"")} ${cie.cerrado.por?("por "+esc(cie.cerrado.por)):""}${adm?` <button class="xbtn" id="rhReabrir" style="margin-left:8px">Reabrir</button>`:""}</div>`
+      : `<div class="msg ${nPend?"err":"ok"}" style="display:block;margin-bottom:12px">${nPend?`<b>${nPend} colaborador(es) pendiente(s)</b> en ${rhPerTxt(perSel)}. Si ya se les pagó (otro medio, otra wallet o con otro comentario), marca <b>confirmar pagado</b>.`:`Todos pagados en ${rhPerTxt(perSel)}.`}${adm?` <button class="btn primary" id="rhCerrar" style="margin-left:8px"${nPend?" disabled":""}>Cerrar planilla de ${rhPerTxt(perSel)}</button>`:""}</div>`);
+    const sinTbl = sinColab.length ? `<div class="card"><div class="head"><h3>Pagos de ${rhPerTxt(perSel)} sin colaborador de la planilla</h3><span class="mini">elige a quién corresponde o cámbialo de mes</span></div>
+      ${tbl([{label:"Fecha",render:p=>`<span class="mini">${esc(fmtDate(p.fecha)||"–")}</span>`},{label:"Detalle",render:p=>esc(p.quien||"–")},
+        {label:"Mes de planilla",render:p=>rhPerCelda(p)},
+        {label:"Colaborador",render:p=>adm?`<div class="select-wrap"><select class="rh-colsel" data-tx="${esc(p.tx)}"><option value="">(sin asignar)</option>${selRow.emps.map(r=>`<option${p.colab===r.nombre?" selected":""}>${esc(r.nombre)}</option>`).join("")}</select></div>`:esc(p.colab||"–")},
+        {label:"Monto",right:1,cls:"num",render:p=>money(p.monto)}],sinColab,null,null)}</div>` : "";
+    const detalle = selRow.emps.length? cierreBox+tbl(dcols,selRow.emps,["Planilla "+MONTH_ES_LONG[selMi],"","","",money(selRow.plan),money(tPagSel),"",""],null,{sticky:true})
       : emptyState("Sin colaboradores activos ese mes.");
     app.innerHTML=intro+seg+`
-      <p class="section-intro" style="margin-top:-4px">La planilla se genera cada mes con los colaboradores activos (desde su fecha de ingreso). "Pagado" viene de la wallet <b>Sueldos</b> de BitGo, para comparar lo planificado con lo efectivamente pagado.</p>
+      <p class="section-intro" style="margin-top:-4px">La planilla se genera cada mes con los colaboradores activos (desde su fecha de ingreso). "Pagado" viene de la wallet <b>Sueldos</b> de BitGo y se cuenta en el <b>mes de planilla</b> al que corresponde (ej.: lo pagado en noviembre como "Sueldo Octubre" va a <b>Octubre</b>). El mes se lee del comentario del pago y se puede cambiar en <b>Pagos</b>. Cuando todos están pagados, <b>cierra la planilla</b> del mes.</p>
       ${yearSeg}
       <div class="card"><div class="head"><h3>Planillas ${planYear} · resumen mensual</h3><span class="mini">a pagar vs pagado</span></div>${summaryTbl}</div>
-      <div class="card"><div class="head"><h3>Detalle de planilla</h3><span class="mini">${MONTH_ES_LONG[selMi]} ${planYear} · ${money(selRow.plan)}</span></div>${mesSeg}${detalle}</div>`;
+      <div class="card"><div class="head"><h3>Detalle de planilla</h3><span class="mini">${MONTH_ES_LONG[selMi]} ${planYear} · ${money(selRow.plan)}</span></div>${mesSeg}${detalle}</div>${sinTbl}`;
+    rhPerWire(pagMes);
+    const quien=()=>(NMFB.sesion&&NMFB.sesion.email)||"";
+    const cieDe=()=>{ NM_RHPL.cierres[perSel]=NM_RHPL.cierres[perSel]||{}; return NM_RHPL.cierres[perSel]; };
+    document.querySelectorAll("#app .rh-okchk").forEach(ch=>ch.addEventListener("change",()=>{ if(!NM_RHPL) return; const c=cieDe(); c.ok=c.ok||{};
+      if(ch.checked) c.ok[ch.dataset.n]={por:quien(),cuando:new Date().toISOString()}; else delete c.ok[ch.dataset.n];
+      rhPlGuardar().then(render); }));
+    document.querySelectorAll("#app .rh-colsel").forEach(se=>se.addEventListener("change",()=>{ if(!NM_RHPL||!se.dataset.tx) return; const a=NM_RHPL.asig[se.dataset.tx]=NM_RHPL.asig[se.dataset.tx]||{};
+      if(se.value) a.c=se.value; else delete a.c; rhPlGuardar().then(render); }));
+    const bc=$("#rhCerrar"); if(bc) bc.addEventListener("click",()=>{ if(!NM_RHPL) return;
+      if(!confirm("¿Cerrar la planilla de "+rhPerTxt(perSel)+"?\nPlanilla: "+money(selRow.plan)+" · Pagado: "+money(tPagSel)+"\nQuedará como cerrada, sin pendientes.")) return;
+      cieDe().cerrado={por:quien(),cuando:new Date().toISOString(),plan:selRow.plan,pagado:tPagSel}; rhPlGuardar().then(render); });
+    const br=$("#rhReabrir"); if(br) br.addEventListener("click",()=>{ if(!NM_RHPL||!confirm("¿Reabrir la planilla de "+rhPerTxt(perSel)+"?")) return;
+      const c=cieDe(); c.reabierta=(c.reabierta||[]).concat([{por:quien(),cuando:new Date().toISOString()}]); delete c.cerrado; rhPlGuardar().then(render); });
     document.querySelectorAll("#rhPlanYear button").forEach(b=>b.addEventListener("click",()=>{STATE.rhPlanYear=+b.dataset.y;STATE.rhPlanMes=null;render();}));
     const ms=$("#rhPlanMesSel"); if(ms) ms.addEventListener("change",e=>{STATE.rhPlanMes=+e.target.value;render();});
     wire(); return;

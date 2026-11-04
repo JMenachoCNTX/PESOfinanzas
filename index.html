@@ -1498,7 +1498,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V201";
+const APP_VERSION = "V202";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2388,7 +2388,7 @@ function render(){
   const map={usuarios:renderUsuarios,archivos:renderArchivos,comprobantes:renderComprobantes,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
     socios:renderSociosCapital,inversiones:renderInversiones,prestamos:renderPrestamos,devoluciones:renderDevoluciones,rendiciones:renderRendiciones,ingresos:renderIngresosTab,costos:renderCostos,bancos:renderBancos,mercury:renderMercury,bitgo:renderBitgo,plan:renderPlan,tc:()=>{ renderTC(); tcAvisoDudosos(); },ia:renderIA,cierre:renderCierre,calendario:renderCalendario,tareas:renderTareas};
   try{ (map[STATE.section]||renderResumen)();
-    if(STATE.section==="rrhh" && nmFbActivo() && NMFB.esAdmin()){ const ap=$("#app"); if(ap){ ap.insertAdjacentHTML("afterbegin",`<div style="display:flex;justify-content:flex-end;margin:0 0 12px"><button class="btn" id="rhHistEd">✎ Registrar / editar personal</button></div>`); const b=$("#rhHistEd"); if(b) b.addEventListener("click",()=>histEditor("rrhh")); } } }
+    if(STATE.section==="rrhh" && nmFbActivo() && NMFB.esAdmin()){ const ap=$("#app"); if(ap){ ap.insertAdjacentHTML("afterbegin",`<div style="display:flex;justify-content:flex-end;margin:0 0 12px"><button class="btn primary" id="rhHistEd">+ Nuevo trabajador</button></div>`); const b=$("#rhHistEd"); if(b) b.addEventListener("click",()=>rhFichaAbrir(null)); } } }
   catch(err){
     console.error("Error al dibujar la sección",STATE.section,err);
     const _a=$("#app"); if(_a) _a.innerHTML=`<div class="card"><div class="head"><h3>No se pudo mostrar esta pestaña</h3></div><p class="mini">Ocurrió un error al dibujar <b>${esc(STATE.section)}</b>. Prueba con otra subpestaña o pulsa <b>Actualizar</b>.<br><span style="color:var(--muted)">${esc(String(err&&err.message||err))}</span></p></div>`;
@@ -4488,7 +4488,8 @@ function renderRRHH(){
     {label:"Estado",sortKey:"estado",render:r=>stBadge(r.estado)},
     {label:"Ingreso",sortKey:"ingreso",render:r=>`<span class="mini">${fmtDate(r.ingreso)}</span>`},
   ];
-  const totRow=["Total mostrados","",`<b>${money(sfSum)}</b>`, beSum?`<b>${money(beSum)}</b>`:'<span class="zero">–</span>', bkSum?`<b>${money(bkSum)}</b>`:'<span class="zero">–</span>', `<b>${money(nominaFr)}</b>`,"",""];
+  if(nmFbActivo()) cols.push({label:"Ficha",render:r=>`<button class="xbtn rh-ficha" data-n="${esc(r.nombre)}" title="Datos, historial, documentos y cambios">Ficha ›</button>`});
+  const totRow=["Total mostrados","",`<b>${money(sfSum)}</b>`, beSum?`<b>${money(beSum)}</b>`:'<span class="zero">–</span>', bkSum?`<b>${money(bkSum)}</b>`:'<span class="zero">–</span>', `<b>${money(nominaFr)}</b>`,"",""].concat(nmFbActivo()?[""]:[]);
   const tableHTML=tbl(cols,ordered,totRow,S,{sticky:true,compact:true,rowClass:r=>rrhhIsAct(r)?"":"row-inactivo"});
   const rhFilterDefs=[
     {k:"rhNombre",lbl:"Nombre",disp:v=>v,opts:nombres.map(n=>({v:n,t:n})),ph:"Todos los nombres"},
@@ -4518,7 +4519,7 @@ function renderRRHH(){
       ${tableHTML}
     </div>`;
   } else {
-    app.innerHTML=intro+seg+toolbarHTML+`
+    app.innerHTML=intro+seg+(nmFbActivo()?`<p class="section-intro" style="margin-top:-4px">Los datos del personal viven en el sistema (Firebase). Para editar, dar de baja, ver el historial (vacaciones, bajas médicas, licencias, horas extra, aumentos) o subir su CI y contratos, abre su <b>Ficha ›</b>. Todo cambio queda registrado.</p>`:"")+toolbarHTML+`
       <div class="card"><div class="head"><h3>Costo de nómina · detalle</h3>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <span class="mini">${fr.length} de ${rows.length} · clic en un encabezado para ordenar</span>
@@ -4538,6 +4539,7 @@ function renderRRHH(){
   const fbtn=$("#rhFull"); if(fbtn) fbtn.addEventListener("click",()=>{STATE.rhFull=true;render();});
   const fcls=$("#rhFsClose"); if(fcls) fcls.addEventListener("click",()=>{STATE.rhFull=false;render();});
   const pbtn=$("#rhPdf"); if(pbtn) pbtn.addEventListener("click",exportRRHHPDF);
+  document.querySelectorAll("#app .rh-ficha").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); rhFichaAbrir(b.dataset.n); }));
   if(!STATE.rhFull) wire();
   if(STATE._focus){const el=$("#rhSearch"); if(el){el.focus(); el.setSelectionRange(el.value.length,el.value.length);} STATE._focus=false;}
 }
@@ -8679,6 +8681,164 @@ function histEditor(n){
     catch(e){ const mm=ov.querySelector("#heMsg"); if(mm) mm.textContent="No se pudo guardar: "+((e&&e.message)||e); } };
   draw(); document.body.appendChild(ov);
 }
+/* ============================================================
+   V202: FICHA DEL TRABAJADOR (RRHH → Datos Personales)
+   - Los datos del trabajador siguen en Firebase config/h_rrhh (como desde V190).
+   - Cada trabajador tiene su ficha en config/rhFicha_<id>: historial de eventos (vacaciones, bajas médicas,
+     licencias, horas extra, aumentos…), adjuntos (CI, contratos: el archivo va a Google Drive, aquí solo el enlace)
+     y el registro de todos los cambios (quién, cuándo, antes → después).
+   - La ficha se lee solo al abrirla (1 lectura) para cuidar el límite gratis de Firebase.
+   ============================================================ */
+const RH_EV_TIPOS=["Vacaciones","Baja médica","Licencia de estudio","Permiso","Horas extra","Aumento de sueldo","Cambio de cargo","Llamada de atención","Capacitación","Otro"];
+const RH_ADJ_TIPOS=["CI","Contrato","Adenda","Certificado","Título / CV","Otro"];
+function rhQuien(){ return (NMFB.sesion&&NMFB.sesion.email)||""; }
+function rhFid(nombre){ return _rhNorm(nombre).replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"").slice(0,60)||("t"+Date.now()); }
+function rhRawDe(r){ const L=(STATE.histRaw&&STATE.histRaw.rrhh)||[]; if(r&&r._raw&&L.includes(r._raw)) return r._raw;
+  return L.find(x=>String(x.nombretrabajador||"").trim()===String((r&&r.nombre)||"").trim())||null; }
+async function rhGuardarRaw(){ const rows=STATE.histRaw.rrhh; await NMFB.histSet("rrhh",rows); STATE.histFB.rrhh=true; STATE.rrhh=mapRRHH(rows); }
+function rhFichaAbrir(nombre){
+  if(!nmFbActivo()){ alert("La ficha necesita la conexión con Firebase."); return; }
+  const adm=NMFB.esAdmin(); const C=histCampos("rrhh");
+  let raw=nombre?rhRawDe((STATE.rrhh||[]).find(x=>x.nombre===nombre)||{nombre}):null;
+  const nuevo=!raw; let F={eventos:[],adjuntos:[],cambios:[]}; let tab=rhFichaAbrir._tab||(nuevo?"datos":"historial"), cargando=!nuevo; rhFichaAbrir._tab="";
+  const fid=()=>raw&&raw._fid;
+  const ov=document.createElement("div"); ov.className="overlay show"; ov.style.zIndex="400";
+  const fval=(o,k,t)=>{ const v=o&&o[k]; if(v==null) return ""; return t==="date"?String(gd(v).iso||v).slice(0,10):String(v); };
+  const guardarFicha=()=>NMFB.cfgSet("rhFicha_"+fid(),{nombre:raw.nombretrabajador||"",eventos:F.eventos,adjuntos:F.adjuntos,cambios:F.cambios});
+  const msg=(t,ok)=>{ const m=ov.querySelector("#rfMsg"); if(m){ m.className="msg "+(ok?"ok":"err"); m.style.display=t?"block":"none"; m.textContent=t; } };
+  const asegurarId=async()=>{ if(raw._fid) return; let id=rhFid(raw.nombretrabajador); const usados=new Set((STATE.histRaw.rrhh||[]).map(x=>x._fid).filter(Boolean)); while(usados.has(id)) id+="_2"; raw._fid=id; await rhGuardarRaw(); };
+  const fechaTxt=s=>s?fmtDate(String(s).slice(0,10)):"–";
+  const draw=()=>{
+    const r=raw||{}; const est=String(r.estado||"");
+    const segB=(k,t)=>`<button data-t="${k}" class="${tab===k?"on":""}">${t}</button>`;
+    let body="";
+    if(tab==="datos"){
+      body=`<div class="us-form" style="grid-template-columns:repeat(3,minmax(0,1fr))">${C.map(([k,l,t])=>`<div><label>${esc(l)}</label><input class="rf-in" data-k="${k}" ${t==="date"?'type="date"':""} ${t==="num"?'inputmode="decimal"':""} value="${esc(fval(r,k,t))}"${adm?"":" disabled"}></div>`).join("")}</div>
+        ${adm?`<div class="us-form" style="grid-template-columns:1fr;margin-top:10px"><div><label>Motivo del cambio (queda en el registro)</label><input id="rfMotivo" placeholder="Ej.: corrección de CI, renovación de contrato…"></div></div>
+        <div class="modal-actions" style="justify-content:flex-start"><button class="btn primary" id="rfSave">${nuevo?"Registrar trabajador":"Guardar cambios"}</button>${!nuevo&&rrhhIsAct(mapRRHH([r])[0]||{})?'<button class="btn" id="rfBaja" style="color:var(--rose)">Dar de baja</button>':""}${!nuevo&&!rrhhIsAct(mapRRHH([r])[0]||{})?'<button class="btn" id="rfAlta">Reactivar</button>':""}</div>`:""}`;
+    } else if(tab==="historial"){
+      const evs=[...F.eventos].sort((a,b)=>String(b.desde||b.cuando).localeCompare(String(a.desde||a.cuando)));
+      body=(adm?`<div class="card" style="margin:0 0 12px;padding:12px"><div class="us-form" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+          <div><label>Tipo</label><div class="select-wrap"><select id="evTipo">${RH_EV_TIPOS.map(t=>`<option>${t}</option>`).join("")}</select></div></div>
+          <div><label>Desde</label><input type="date" id="evDesde"></div><div><label>Hasta</label><input type="date" id="evHasta"></div>
+          <div><label id="evCantL">Días / horas</label><input id="evCant" inputmode="decimal"></div>
+          <div id="evMontoW"><label id="evMontoL">Monto</label><input id="evMonto" inputmode="decimal"></div>
+          <div style="grid-column:span 2"><label>Detalle</label><input id="evNota" placeholder="Ej.: certificado médico, aprobado por…"></div>
+          <div><label>Respaldo (opcional)</label><input type="file" id="evFile"></div></div>
+          <label class="mini" id="evAplW" style="display:none;margin-top:8px;cursor:pointer"><input type="checkbox" id="evApl" checked> Actualizar el <b>sueldo fijo</b> en sus datos con este monto</label>
+          <div class="modal-actions" style="justify-content:flex-start;margin-top:8px"><button class="btn primary" id="evAdd">Agregar al historial</button></div></div>`:"")+
+        (evs.length?`<div class="tbl-scroll" style="max-height:44vh;margin:0;padding:0"><table style="min-width:640px"><thead><tr><th>Tipo</th><th style="text-align:left">Fechas</th><th>Días/horas</th><th>Monto</th><th style="text-align:left">Detalle</th><th style="text-align:left">Registró</th>${adm?"<th></th>":""}</tr></thead><tbody>
+          ${evs.map(e=>`<tr><td><span class="tag">${esc(e.tipo)}</span></td><td style="text-align:left" class="mini">${fechaTxt(e.desde)}${e.hasta&&e.hasta!==e.desde?" → "+fechaTxt(e.hasta):""}</td><td>${e.cant!=null&&e.cant!==""?esc(String(e.cant)):'<span class="zero">–</span>'}</td><td>${e.monto?money(e.monto):'<span class="zero">–</span>'}</td>
+          <td style="text-align:left;white-space:normal">${esc(e.nota||"")}${e.adj&&e.adj.url?` · <a href="${esc(e.adj.url)}" target="_blank" rel="noopener">📎 ${esc(e.adj.nombre||"respaldo")}</a>`:""}</td><td style="text-align:left" class="mini">${esc(e.por||"")}<br>${fechaTxt(e.cuando)}</td>${adm?`<td><button class="btn ghost ev-del" data-id="${esc(e.id)}" title="Quitar">✕</button></td>`:""}</tr>`).join("")}</tbody></table></div>`
+          : emptyState("Todavía no hay eventos en el historial."));
+    } else if(tab==="adjuntos"){
+      body=(adm?`<div class="card" style="margin:0 0 12px;padding:12px"><div class="us-form" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+          <div><label>Tipo de documento</label><div class="select-wrap"><select id="adTipo">${RH_ADJ_TIPOS.map(t=>`<option>${t}</option>`).join("")}</select></div></div>
+          <div><label>Archivo (PDF o foto)</label><input type="file" id="adFile"></div>
+          <div><label>…o pega un enlace de Drive</label><input id="adUrl" placeholder="https://drive.google.com/…"></div></div>
+          <div class="modal-actions" style="justify-content:flex-start;margin-top:8px"><button class="btn primary" id="adAdd">Agregar documento</button><span class="mini">El archivo se guarda en Google Drive (carpeta privada de RRHH); aquí queda solo el enlace.</span></div></div>`:"")+
+        (F.adjuntos.length?`<div class="tbl-scroll" style="max-height:44vh;margin:0;padding:0"><table style="min-width:560px"><thead><tr><th>Tipo</th><th style="text-align:left">Documento</th><th style="text-align:left">Subido</th>${adm?"<th></th>":""}</tr></thead><tbody>
+          ${F.adjuntos.map(a=>`<tr><td><span class="tag">${esc(a.tipo)}</span></td><td style="text-align:left"><a href="${esc(a.url)}" target="_blank" rel="noopener">📎 ${esc(a.nombre||"documento")}</a></td><td style="text-align:left" class="mini">${fechaTxt(a.cuando)} · ${esc(a.por||"")}</td>${adm?`<td><button class="btn ghost ad-del" data-id="${esc(a.id)}" title="Quitar de la ficha">✕</button></td>`:""}</tr>`).join("")}</tbody></table></div>`
+          : emptyState("Sin documentos. Sube aquí su CI, contrato y otros respaldos."));
+    } else {
+      const cs=[...F.cambios].reverse();
+      body=cs.length?`<div class="tbl-scroll" style="max-height:52vh;margin:0;padding:0"><table style="min-width:620px"><thead><tr><th style="text-align:left">Cuándo</th><th style="text-align:left">Quién</th><th style="text-align:left">Qué cambió</th><th style="text-align:left">Antes</th><th style="text-align:left">Después</th></tr></thead><tbody>
+        ${cs.map(c=>`<tr><td style="text-align:left" class="mini">${esc(fmtDate(String(c.cuando).slice(0,10)))} ${esc(String(c.cuando).slice(11,16))}</td><td style="text-align:left" class="mini">${esc(c.por||"")}</td><td style="text-align:left;white-space:normal"><b>${esc(c.campo)}</b>${c.motivo?`<span class="sub2">${esc(c.motivo)}</span>`:""}</td><td style="text-align:left;white-space:normal">${esc(c.antes==null?"":String(c.antes))}</td><td style="text-align:left;white-space:normal">${esc(c.despues==null?"":String(c.despues))}</td></tr>`).join("")}</tbody></table></div>`
+        : emptyState("Aún no hay cambios registrados. Desde ahora, cada cambio queda anotado aquí.");
+    }
+    ov.innerHTML=`<div class="modal" style="max-width:1020px;width:96vw;max-height:92vh;overflow:auto">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><div><h2 style="margin:0">${nuevo?"Nuevo trabajador":esc(r.nombretrabajador||"")}</h2>
+        ${nuevo?"":`<div class="mini" style="margin-top:4px">${esc(r.cargo||"")} ${est?" · "+stBadge(est):""}</div>`}</div><button class="x" id="rfX">&times;</button></div>
+      ${nuevo?"":`<div class="seg" id="rfTabs" style="margin:14px 0">${segB("historial","Historial")}${segB("datos","Datos")}${segB("adjuntos","Documentos ("+F.adjuntos.length+")")}${segB("cambios","Registro de cambios")}</div>`}
+      <div class="msg" id="rfMsg" style="margin-bottom:10px"></div>
+      ${cargando?'<div class="mini" style="padding:20px">Cargando ficha…</div>':body}</div>`;
+    wire();
+  };
+  const wire=()=>{
+    ov.querySelector("#rfX").onclick=()=>{ ov.remove(); render(); };
+    ov.querySelectorAll("#rfTabs button").forEach(b=>b.onclick=()=>{ tab=b.dataset.t; draw(); });
+    const bs=ov.querySelector("#rfSave"); if(bs) bs.onclick=async()=>{
+      const o=raw?Object.assign({},raw):{}; const cambios=[];
+      ov.querySelectorAll(".rf-in").forEach(i=>{ const k=i.dataset.k; const t=(C.find(c=>c[0]===k)||[])[2]; const lbl=(C.find(c=>c[0]===k)||[])[1]||k;
+        const nv=t==="num"?(i.value.trim()===""?"":(toNum(i.value)||0)):i.value.trim(); const av=raw?fval(raw,k,t):"";
+        if(String(nv)!==String(t==="num"&&av!==""?toNum(av):av)){ cambios.push({campo:lbl,antes:av,despues:nv}); o[k]=nv; } });
+      if(!String(o.nombretrabajador||"").trim()){ msg("Escribe el nombre del trabajador."); return; }
+      if(!cambios.length){ msg("No hay cambios para guardar.",true); return; }
+      if(nuevo && !String(o.estado||"").trim()) o.estado="ACTIVO";
+      const mot=(ov.querySelector("#rfMotivo")||{}).value||"";
+      bs.disabled=true; msg("Guardando…",true);
+      try{
+        if(nuevo){ STATE.histRaw.rrhh=(STATE.histRaw.rrhh||[]).concat([o]); raw=o; } else Object.assign(raw,o);
+        await asegurarId(); if(!nuevo) await rhGuardarRaw();
+        const ahora=new Date().toISOString();
+        if(nuevo) F.cambios.push({cuando:ahora,por:rhQuien(),campo:"Alta del trabajador",antes:"",despues:o.nombretrabajador,motivo:mot});
+        else cambios.forEach(c=>F.cambios.push(Object.assign({cuando:ahora,por:rhQuien(),motivo:mot},c)));
+        await guardarFicha();
+        rhFichaAbrir._cerrarYabrir(raw.nombretrabajador, nuevo?"historial":"datos", nuevo?"Trabajador registrado ✓":"Cambios guardados ✓ ("+cambios.length+")");
+      }catch(e){ bs.disabled=false; msg("No se pudo guardar: "+((e&&e.message)||e)); } };
+    const bb=ov.querySelector("#rfBaja"); if(bb) bb.onclick=async()=>{
+      const f=prompt("Fecha de retiro (día/mes/año):",new Date().toLocaleDateString("es-BO")); if(f===null) return;
+      const iso=gd(f).iso; if(!iso){ alert("Fecha no válida."); return; }
+      const mot=prompt("Motivo de la baja (renuncia, fin de contrato, despido…):",""); if(mot===null) return;
+      const kRet=(C.find(c=>/retiro/.test(c[0]))||["fechaderetiro"])[0];
+      const ahora=new Date().toISOString();
+      F.cambios.push({cuando:ahora,por:rhQuien(),campo:"Estado",antes:raw.estado||"",despues:"INACTIVO",motivo:"Baja: "+mot});
+      F.cambios.push({cuando:ahora,por:rhQuien(),campo:"Fecha de retiro",antes:raw[kRet]||"",despues:iso,motivo:"Baja: "+mot});
+      F.eventos.push({id:"E"+Date.now(),tipo:"Baja (retiro)",desde:iso,hasta:"",cant:"",monto:0,nota:mot,cuando:ahora,por:rhQuien()});
+      raw.estado="INACTIVO"; raw[kRet]=iso;
+      try{ msg("Guardando…",true); await rhGuardarRaw(); await guardarFicha(); rhFichaAbrir._cerrarYabrir(raw.nombretrabajador,"historial","Baja registrada ✓"); }
+      catch(e){ msg("No se pudo guardar: "+((e&&e.message)||e)); } };
+    const ba=ov.querySelector("#rfAlta"); if(ba) ba.onclick=async()=>{ if(!confirm("¿Reactivar a "+raw.nombretrabajador+"?")) return;
+      const ahora=new Date().toISOString(); F.cambios.push({cuando:ahora,por:rhQuien(),campo:"Estado",antes:raw.estado||"",despues:"ACTIVO",motivo:"Reactivado"});
+      raw.estado="ACTIVO"; try{ await rhGuardarRaw(); await guardarFicha(); rhFichaAbrir._cerrarYabrir(raw.nombretrabajador,"datos","Reactivado ✓"); }catch(e){ msg("No se pudo guardar: "+((e&&e.message)||e)); } };
+    // historial
+    const et=ov.querySelector("#evTipo"); if(et){ const upd=()=>{ const t=et.value; ov.querySelector("#evAplW").style.display=t==="Aumento de sueldo"?"block":"none";
+        ov.querySelector("#evCantL").textContent=t==="Horas extra"?"Horas":(/Vacaciones|Baja|Licencia|Permiso/.test(t)?"Días":"Cantidad");
+        ov.querySelector("#evMontoL").textContent=t==="Aumento de sueldo"?"Nuevo sueldo fijo":"Monto (opcional)"; }; et.onchange=upd; upd(); }
+    const ea=ov.querySelector("#evAdd"); if(ea) ea.onclick=async()=>{
+      const t=et.value, desde=ov.querySelector("#evDesde").value, hasta=ov.querySelector("#evHasta").value;
+      const cant=ov.querySelector("#evCant").value.trim(), monto=toNum(ov.querySelector("#evMonto").value)||0, nota=ov.querySelector("#evNota").value.trim();
+      if(!desde){ msg("Indica la fecha (Desde)."); return; }
+      if(t==="Aumento de sueldo"&&!monto){ msg("Escribe el nuevo sueldo fijo."); return; }
+      ea.disabled=true; msg("Guardando…",true);
+      try{
+        const ev={id:"E"+Date.now(),tipo:t,desde,hasta,cant,monto,nota,cuando:new Date().toISOString(),por:rhQuien()};
+        const fl=ov.querySelector("#evFile").files[0]; if(fl){ msg("Subiendo respaldo a Drive…",true); ev.adj=await rhSubirArchivo(fl,raw.nombretrabajador); }
+        F.eventos.push(ev);
+        if(t==="Aumento de sueldo" && ov.querySelector("#evApl").checked){ const k=(C.find(c=>c[0]==="sueldofijo")||["sueldofijo"])[0];
+          F.cambios.push({cuando:ev.cuando,por:rhQuien(),campo:"Sueldo fijo",antes:raw[k]==null?"":raw[k],despues:monto,motivo:"Aumento de sueldo desde "+fechaTxt(desde)+(nota?" · "+nota:"")});
+          raw[k]=monto; await rhGuardarRaw(); }
+        await guardarFicha(); rhFichaAbrir._cerrarYabrir(raw.nombretrabajador,"historial",t+" agregado al historial ✓");
+      }catch(e){ ea.disabled=false; msg("No se pudo guardar: "+((e&&e.message)||e)); } };
+    ov.querySelectorAll(".ev-del").forEach(b=>b.onclick=async()=>{ const e=F.eventos.find(x=>x.id===b.dataset.id); if(!e||!confirm("¿Quitar este evento del historial? (queda anotado en el registro de cambios)")) return;
+      F.eventos=F.eventos.filter(x=>x!==e); F.cambios.push({cuando:new Date().toISOString(),por:rhQuien(),campo:"Historial: se quitó "+e.tipo,antes:fechaTxt(e.desde)+" "+(e.nota||""),despues:""});
+      try{ await guardarFicha(); draw(); }catch(er){ msg("No se pudo guardar: "+((er&&er.message)||er)); } });
+    // adjuntos
+    const aa=ov.querySelector("#adAdd"); if(aa) aa.onclick=async()=>{
+      const tipo=ov.querySelector("#adTipo").value, fl=ov.querySelector("#adFile").files[0], url=ov.querySelector("#adUrl").value.trim();
+      if(!fl&&!/^https?:\/\//.test(url)){ msg("Elige un archivo o pega un enlace."); return; }
+      aa.disabled=true; msg(fl?"Subiendo a Drive…":"Guardando…",true);
+      try{ const a=fl?await rhSubirArchivo(fl,raw.nombretrabajador):{url,nombre:tipo+" (enlace)"};
+        Object.assign(a,{id:"A"+Date.now(),tipo,cuando:new Date().toISOString(),por:rhQuien()}); F.adjuntos.push(a);
+        F.cambios.push({cuando:a.cuando,por:rhQuien(),campo:"Documento agregado: "+tipo,antes:"",despues:a.nombre});
+        await guardarFicha(); rhFichaAbrir._cerrarYabrir(raw.nombretrabajador,"adjuntos","Documento agregado ✓");
+      }catch(e){ aa.disabled=false; msg("No se pudo subir: "+((e&&e.message)||e)); } };
+    ov.querySelectorAll(".ad-del").forEach(b=>b.onclick=async()=>{ const a=F.adjuntos.find(x=>x.id===b.dataset.id); if(!a||!confirm("¿Quitar este documento de la ficha? (el archivo sigue en Drive)")) return;
+      F.adjuntos=F.adjuntos.filter(x=>x!==a); F.cambios.push({cuando:new Date().toISOString(),por:rhQuien(),campo:"Documento quitado: "+a.tipo,antes:a.nombre,despues:""});
+      try{ await guardarFicha(); draw(); }catch(er){ msg("No se pudo guardar: "+((er&&er.message)||er)); } });
+  };
+  document.body.appendChild(ov); draw();
+  if(!nuevo){ (async()=>{ try{ if(fid()){ const d=await NMFB.cfgGet("rhFicha_"+fid()); if(d) F={eventos:d.eventos||[],adjuntos:d.adjuntos||[],cambios:d.cambios||[]}; } }
+    catch(e){ console.error("ficha",e); } cargando=false; draw(); if(rhFichaAbrir._aviso){ msg(rhFichaAbrir._aviso,true); rhFichaAbrir._aviso=""; } })(); }
+}
+rhFichaAbrir._cerrarYabrir=(nombre,tab,aviso)=>{ document.querySelectorAll(".overlay.show").forEach(o=>{ if(o.querySelector("#rfX")) o.remove(); });
+  render(); rhFichaAbrir._aviso=aviso||""; rhFichaAbrir._tab=tab; rhFichaAbrir(nombre); };
+/* Sube un archivo de RRHH a Drive (carpeta privada) por el servidor de Apps Script */
+function rhSubirArchivo(file,nombre){ return compArchivoABase64(file).then(p=>new Promise((ok,ko)=>{
+  const pin=compPin(); if(!pin||!(window.google&&google.script&&google.script.run)) return ko(new Error("Sin conexión con el servidor."));
+  p.trabajador=nombre||"";
+  google.script.run.withSuccessHandler(r=>{ if(!r||r.error) return ko(new Error((r&&r.error)||"No se pudo subir.")); ok({url:r.url,driveId:r.driveId,nombre:r.nombre||file.name}); })
+    .withFailureHandler(e=>ko(e||new Error("Error de conexión"))).subirArchivoRRHH(pin,p); })); }
 /* V177: Archivos, datos extra de RRHH, datos de la empresa (RRHH) y calendarios de Google se guardan en Firebase.
    La primera vez se copian solos desde este navegador / la hoja "Archivos". */
 const NM_AJ={archivos:null,rhExtra:null,rhEmpresa:null,gcal:null};

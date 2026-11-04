@@ -1498,7 +1498,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V204";
+const APP_VERSION = "V205";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2596,13 +2596,18 @@ function compLlenarForm(c){ const ia=(c&&c.ia)||{}; const set=(id,v)=>{ const e=
 function compMarcarRegistrado(datos){ const id=STATE._compReg; if(!id) return; const c=(STATE.comps||[]).find(x=>x.id===id); if(!c) return;
   c.estado="registrado"; c.registrado=new Date().toISOString(); c.egreso={fecha:datos.fechaPago, con:datos.concepto, imp:datos.importe, ben:datos.beneficiario};
   STATE._compReg=null; compGuardarLista();
-  // V194: si vino de Slack, se marca el mensaje con ✅ y se responde en el hilo
-  if((c.origen==="slack"||c.origen==="slack-chat") && c.canal && (c.ts || /^SL\d+_/.test(c.id))){
-    const ts=c.ts || (()=>{ const d=c.id.slice(2).split("_")[0]; return d.slice(0,d.length-6)+"."+d.slice(-6); })();
-    const quien=(NMFB.sesion&&NMFB.sesion.nombre)||"el equipo de finanzas";
-    const texto="✅ Registrado en el sistema por "+quien+": "+(datos.moneda||"")+" "+f2(+datos.importe||0)+" · "+(datos.beneficiario||datos.concepto||"");
-    try{ google.script.run.withSuccessHandler(r=>{ if(r&&r.error) console.warn("Slack:",r.error); }).withFailureHandler(()=>{}).slackAvisarRegistrado(compPin(),{canal:c.canal,ts:ts,texto:texto}); }catch(_){}
-  } }
+  compAvisarSlack(c,"Registrado en el sistema",(datos.moneda||"")+" "+f2(+datos.importe||0)+" · "+(datos.beneficiario||datos.concepto||"")); }
+/* V194/V205: si el comprobante vino de Slack, pone ✅ al mensaje y responde en el hilo (también al adjuntarlo a un pago).
+   Si Slack no responde bien, ahora se avisa en pantalla (antes el error quedaba escondido). */
+function compAvisarSlack(c,accion,detalle){
+  if(!c || !(c.origen==="slack"||c.origen==="slack-chat") || !c.canal || !(c.ts || /^SL\d+_/.test(c.id))) return;
+  const ts=c.ts || (()=>{ const d=c.id.slice(2).split("_")[0]; return d.slice(0,d.length-6)+"."+d.slice(-6); })();
+  const quien=(NMFB.sesion&&NMFB.sesion.nombre)||"el equipo de finanzas";
+  const texto="✅ "+accion+" por "+quien+(detalle?": "+detalle:"");
+  const falla=m=>{ c.slackErr=m; compGuardarLista(); alert("Se guardó en el sistema, pero no se pudo avisar en Slack: "+m); };
+  try{ google.script.run.withSuccessHandler(r=>{ if(r&&r.error) falla(r.error); else { c.slackAvisado=new Date().toISOString(); delete c.slackErr; compGuardarLista(); } })
+    .withFailureHandler(e=>falla((e&&e.message)||"sin conexión")).slackAvisarRegistrado(compPin(),{canal:c.canal,ts:ts,texto:texto}); }catch(e){ falla(String(e&&e.message||e)); }
+}
 // botón dentro del formulario "Registrar gasto"
 document.addEventListener("click",ev=>{ if(ev.target&&ev.target.id==="egCompBtn"){ const i=$("#egCompFile"); if(i) i.click(); } });
 document.addEventListener("change",ev=>{ if(!ev.target||ev.target.id!=="egCompFile") return; const file=ev.target.files[0]; ev.target.value=""; if(!file) return;
@@ -2610,8 +2615,19 @@ document.addEventListener("change",ev=>{ if(!ev.target||ev.target.id!=="egCompFi
   compSubirUno(file).then(r=>{ const c=compNuevo(r,"sistema"); STATE.comps=(STATE.comps||[]).concat([c]); compGuardarLista(); compLlenarForm(c);
     m.textContent=c.iaErr?("Guardado en Drive ✓ · la IA no pudo leerlo ("+c.iaErr+"). Llena los datos a mano."):"Leído ✓ Revisa los datos y completa lo que falte."; })
   .catch(e=>{ m.textContent="✕ "+((e&&e.message)||e); }); });
+/* V205: al abrir la bandeja se pide al servidor revisar Slack en ese momento (no esperar los 15 min del activador)
+   y se vuelve a leer la bandeja de Firebase (2-3 lecturas). Máximo una vez cada 2 minutos. */
+function compRevisarSlack(forzar){
+  if(!nmFbActivo()) return; const ahora=Date.now(); if(!forzar && STATE._slackChk && ahora-STATE._slackChk<120000) return; STATE._slackChk=ahora;
+  STATE._slackMsg="Revisando Slack…"; if(STATE.section==="comprobantes") render();
+  const releer=(txt)=>NMFB.histGet("comprobantes").then(L=>{ STATE.comps=L||[]; STATE._compIdx=null; STATE._slackMsg=txt; if(STATE.section==="comprobantes") render(); }).catch(()=>{ STATE._slackMsg=txt; });
+  let pin=compPin(); if(!pin||!(window.google&&google.script&&google.script.run)){ releer(""); return; }
+  google.script.run.withSuccessHandler(r=>{ const hora=new Date().toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit"});
+      releer(r&&r.ok?("Slack revisado a las "+hora+(r.nuevos?" · "+r.nuevos+" comprobante(s) nuevo(s)":" · sin novedades")+(r.ignorados?" · "+r.ignorados+" archivo(s) que la IA no consideró comprobante":"")):(r&&/no permitida/i.test(r.error||"")?"":"Slack: "+((r&&r.error)||"sin respuesta"))); })
+    .withFailureHandler(()=>releer("")).slackRevisarAhora(pin); }
 function renderComprobantes(){
   const app=$("#app"); if(!app) return;
+  compRevisarSlack(false);
   const L=(STATE.comps||[]).slice().sort((a,b)=>String(b.subido).localeCompare(String(a.subido)));
   const f=STATE.compFiltro||"pendiente"; const V=L.filter(c=>f==="todos"||c.estado===f);
   const n=k=>L.filter(c=>c.estado===k).length;
@@ -2629,7 +2645,7 @@ function renderComprobantes(){
         <b>Arrastra aquí tus comprobantes o haz clic para elegirlos</b><span>Fotos (JPG, PNG) o PDF · puedes elegir varios a la vez</span></label>
       ${subiendo?`<div class="msg" style="display:block;margin-top:10px">${esc(subiendo)}</div>`:""}
       <p class="gcal-note">Después pulsa <b>Registrar</b>: se abre el formulario de gasto ya lleno con lo que leyó la IA. Tú completas el beneficiario, el comentario o lo que falte y guardas. Los que mandan por <b>Slack</b> también llegarán aquí.</p></div>
-    <div class="card"><div class="head"><h3>Bandeja</h3><div class="seg" id="cpFil"><button data-f="pendiente" class="${f==="pendiente"?"on":""}">Pendientes (${n("pendiente")})</button><button data-f="registrado" class="${f==="registrado"?"on":""}">Registrados (${n("registrado")})</button><button data-f="todos" class="${f==="todos"?"on":""}">Todos (${L.length})</button></div></div>
+    <div class="card"><div class="head"><h3>Bandeja</h3><button class="btn" id="cpSlack" title="Trae ahora los comprobantes nuevos del canal de Slack">↻ Revisar Slack ahora</button>${STATE._slackMsg?`<span class="mini">${esc(STATE._slackMsg)}</span>`:""}<div class="seg" id="cpFil"><button data-f="pendiente" class="${f==="pendiente"?"on":""}">Pendientes (${n("pendiente")})</button><button data-f="registrado" class="${f==="registrado"?"on":""}">Registrados (${n("registrado")})</button><button data-f="todos" class="${f==="todos"?"on":""}">Todos (${L.length})</button></div></div>
       <div class="tbl-scroll"><table class="comp-tbl"><thead><tr><th></th><th>Fecha</th><th style="text-align:left">Proveedor / concepto</th><th>Monto</th><th>Origen</th><th>Estado</th><th></th></tr></thead>
       <tbody>${filas||`<tr><td colspan="7">${emptyState(f==="pendiente"?"No hay comprobantes pendientes de registrar.":"Aún no hay comprobantes.")}</td></tr>`}</tbody></table></div></div>`;
   const subir=async files=>{ files=[...files].filter(x=>/^image\/|pdf/.test(x.type)); if(!files.length) return;
@@ -2641,6 +2657,7 @@ function renderComprobantes(){
   const dz=$("#cpDrop"); ["dragover","dragenter"].forEach(t=>dz.addEventListener(t,e=>{ e.preventDefault(); dz.classList.add("on"); })); ["dragleave","drop"].forEach(t=>dz.addEventListener(t,e=>{ e.preventDefault(); dz.classList.remove("on"); }));
   dz.addEventListener("drop",e=>subir(e.dataTransfer.files));
   document.querySelectorAll("#cpFil button").forEach(b=>b.addEventListener("click",()=>{ STATE.compFiltro=b.dataset.f; render(); }));
+  const bsl=$("#cpSlack"); if(bsl) bsl.addEventListener("click",()=>compRevisarSlack(true));
   const C=id=>(STATE.comps||[]).find(x=>x.id===id);
   document.querySelectorAll(".cp-ver").forEach(b=>b.addEventListener("click",()=>compVer(C(b.dataset.id))));
   document.querySelectorAll(".cp-reg").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); abrirFormEgreso(); compLlenarForm(c); const m=$("#egCompMsg"); if(m) m.textContent="Datos leídos del comprobante · revisa y completa"; }));
@@ -2709,7 +2726,9 @@ function compAdjuntarAPago(c){
     ov.querySelectorAll(".ap-ok").forEach(b=>b.onclick=()=>{ const tipo=ov.querySelector("#apTipo").value;
       STATE.resp=(STATE.resp||[]).concat([{id:"R"+Date.now(),mov:b.dataset.k,tipo,driveId:c.driveId,url:c.url,nombre:c.nombre,mime:c.mime,subido:new Date().toISOString(),por:(NMFB.sesion&&NMFB.sesion.email)||"",comp:c.id}]);
       c.estado="registrado"; c.adjuntadoA=b.dataset.k; c.registrado=new Date().toISOString();
-      Promise.all([respGuardar(),compGuardarLista()]).then(()=>{ ov.remove(); render(); }); }); };
+      const pg=U.find(r=>movKey(r)===b.dataset.k)||{};
+      Promise.all([respGuardar(),compGuardarLista()]).then(()=>{ ov.remove(); render();
+        compAvisarSlack(c,"Adjuntado en el sistema como "+tipo,[pg.keytext||pg.con,pg.moneda&&pg.orig!=null?pg.moneda+" "+f2(pg.orig):"",pg.fecha?fmtDate(pg.fecha):""].filter(Boolean).join(" · ")); }); }); };
   const tipoIA=/factura/i.test(ia.tipo_documento||"")?"Factura":(/contrato/i.test(ia.tipo_documento||"")?"Contrato":(/proforma/i.test(ia.tipo_documento||"")?"Proforma":"Comprobante"));
   ov.innerHTML=`<div class="modal" style="max-width:860px;width:96vw"><div style="display:flex;justify-content:space-between;gap:10px"><div><h2 style="margin:0">Adjuntar a un pago existente</h2><p class="lead" style="margin:6px 0 0">${esc(ia.proveedor||c.nombre||"")} · ${esc(ia.fecha||"")} · ${esc(ia.moneda||"")} ${ia.monto?f2(+ia.monto):""} — elige el pago al que pertenece (arriba los que más coinciden).</p></div><button class="x" id="apX">&times;</button></div>
     <div class="us-cl" style="margin:12px 0"><input id="apQ" placeholder="Buscar por concepto, monto, cuenta…"><span class="select-wrap"><select id="apTipo">${RESP_TIPOS.map(t=>`<option${t===tipoIA?" selected":""}>${t}</option>`).join("")}</select></span></div>
@@ -3486,7 +3505,8 @@ function egresosUnificados(){
     const a=ancEgreso(e);
     out.push({ origen:"Egresos", fecha:e.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Egresos", hu:e._hu,
       keytext:e.ben||"", con:e.con||e.ben||"", moneda:e.moneda||"USD", usd:(e.impUSD!=null?+e.impUSD:(+e.imp||0)), bob:(e.impBOB!=null?+e.impBOB:null),
-      estado:e.e||"", tipo:e.tipo||"", costo:e._costo||"", m:e.m, g:e.g, mi:monthIdx(e.m), orig:(e.impOrig!=null?+e.impOrig:+e.imp||0), cuentaPago:e.tipo||"" });
+      estado:e.e||"", tipo:e.tipo||"", costo:e._costo||"", m:e.m, g:e.g, mi:monthIdx(e.m), orig:(e.impOrig!=null?+e.impOrig:+e.imp||0), cuentaPago:e.tipo||"",
+      extra:[e.ben,e.coment,e.pagadopor,e.pais,e.codc].filter(Boolean).join(" ") });
   });
   const mHasContab=(STATE.mercury||[]).some(r=> String(r.contab==null?"":r.contab).trim()!=="");
   if(showLLC()){ ensureHuellasMerc(); (STATE.mercury||[]).forEach(r=>{ if(!yOk(r.g)) return; const v=+r.monto||0; const tok=r.ctok||contabTok(r.contab);
@@ -3494,7 +3514,7 @@ function egresosUnificados(){
     if(!esEgreso) return; const usd=Math.abs(v); if(!usd) return;
     const res=resolveGeneric("Mercury", r._hu, r.desc, (r.ca||r.canalitica)); const a=ancGeneric(res,{kcuenta:r.kcuenta,grupoc:r.grupoc,ksubgrupo:r.ksubgrupo,cp:r.cp});
     out.push({ origen:"Mercury", fecha:r.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Mercury", hu:r._hu,
-      keytext:r.desc||"", con:r.desc||"", moneda:"USD", usd, bob:bobOf(usd,r.fecha), estado:r.status||"", tipo:"", m:(r.mi>=0?MONTHS[r.mi]:null), g:r.g, mi:r.mi, orig:usd, cuentaPago:"Mercury" });
+      keytext:r.desc||"", con:r.desc||"", moneda:"USD", usd, bob:bobOf(usd,r.fecha), estado:r.status||"", tipo:"", m:(r.mi>=0?MONTHS[r.mi]:null), g:r.g, mi:r.mi, orig:usd, cuentaPago:"Mercury", extra:r.bankdesc||"" });
   }); }
   const bg=STATE.bitgo||{cols:[],rows:[]}, bc=bg.cols||[];
   const find=(...n)=>{ for(const x of n){ const c=bc.find(k=>normHdr(k)===x); if(c)return c; } for(const x of n){ const c=bc.find(k=>normHdr(k).includes(x)); if(c)return c; } return null; };
@@ -3513,6 +3533,15 @@ function egresosUnificados(){
 }
 /* Agrupa cuadritos en una columna (para emparejar USD arriba / BOB abajo, etc.) */
 function kpiCol(){ var cards=[].slice.call(arguments).filter(Boolean); return '<div class="kpi-col">'+cards.join("")+'</div>'; }
+/* Búsqueda por importe: "1645", "1645,94", "1.645,94" o "1,645.94" → número (null si no es un importe) */
+function egNumQuery(q){ let t=String(q).replace(/[\s$]|bs\.?|usd/gi,""); if(!/^-?[\d.,]+$/.test(t)||!/\d/.test(t)) return null;
+  const lc=Math.max(t.lastIndexOf(","),t.lastIndexOf(".")); let dec=0;
+  if(lc>=0 && t.length-lc-1<=2 && !(t.length-lc-1===0)){ dec=t.length-lc-1; t=t.slice(0,lc).replace(/[.,]/g,"")+"."+t.slice(lc+1); }
+  else t=t.replace(/[.,]/g,"");
+  const n=Math.abs(parseFloat(t)); return isFinite(n)?{n,dec}:null; }
+function egNumMatch(nq,x){ if(x==null||!isFinite(+x)) return false; x=Math.abs(+x);
+  if(nq.dec) return Math.abs(x-nq.n)<(nq.dec===1?0.05:0.005);
+  return Math.floor(x+1e-9)===nq.n || Math.round(x)===nq.n; }
 function renderEgresosGeneral(){
   const pills=`<div class="seg" id="egTabs" style="margin-bottom:16px;flex-wrap:wrap">
       <button data-t="lista">Lista</button>
@@ -3537,7 +3566,10 @@ function renderEgresosGeneral(){
   if(STATE.egGenMes!=="__all") rows=rows.filter(r=>String(r.mi)===STATE.egGenMes);
   if(STATE.egGenCosto!=="__all") rows=rows.filter(r=>String(r.costo||"")===STATE.egGenCosto);
   const q=String(STATE.egGenSearch||"").trim().toLowerCase();
-  if(q) rows=rows.filter(r=>(String(r.con||"")+" "+(r.keytext||"")+" "+(r.kcuenta||"")+" "+(r.grupoc||"")+" "+(r.cp||"")+" "+(r.ca||"")+" "+r.origen+" "+(r.m||"")).toLowerCase().includes(q));
+  // V205: también busca por beneficiario, comentario (N° de transferencia, cuenta destino), pagado por, tipo de pago e IMPORTE
+  if(q){ const nq=egNumQuery(q); const qn=_rhNorm(q);
+    rows=rows.filter(r=>{ if(nq && [r.orig,r.usd,r.bob].some(x=>egNumMatch(nq,x))) return true;
+      return _rhNorm([r.con,r.keytext,r.extra,r.cuentaPago,r.kcuenta,r.grupoc,r.ksubgrupo,r.cp,r.ca,r.origen,r.m,r.estado].filter(Boolean).join(" ")).includes(qn); }); }
   const totUSD=rows.reduce((s,r)=>s+(+r.usd||0),0), totBOB=rows.reduce((s,r)=>s+(r.bob!=null?+r.bob:0),0);
   const S=STATE.egGenSort||{key:"fecha",dir:"desc"};
   const sorted=[...rows].sort(mkCmp(S.key,S.dir,["usd","bob"],["fecha"]));
@@ -3581,7 +3613,7 @@ function renderEgresosGeneral(){
     ...(fCostos.length?[{k:"egGenCosto",lbl:"Fijo/Variable",disp:v=>costoLabel(v),opts:fCostos.map(c=>({v:c,t:costoLabel(c)})),ph:"Fijo / Variable"}]:[])
   ];
   const egGenFB=fbHTML("eggf", egGenFilterDefs);
-  const toolbar=`<div class="toolbar" style="align-items:center">${esearch("egGenSearch","Buscar concepto, cuenta, cuenta contable…",STATE.egGenSearch)}${egGenFB.bar}</div>${egGenFB.panel}`;
+  const toolbar=`<div class="toolbar" style="align-items:center">${esearch("egGenSearch","Buscar concepto, beneficiario, importe, cuenta…",STATE.egGenSearch)}${egGenFB.bar}</div>${egGenFB.panel}`;
   $("#app").innerHTML=`<p class="section-intro">Todos los egresos en <b>una sola lista</b>: los de <b>Egresos</b> + las <b>salidas</b> de <b>Mercury</b> y <b>BitGo</b>, con las mismas cuentas contables. <span class="mini">(No modifica la pestaña Bancos.)</span></p>
     ${kpis}${toolbar}${pills}
     <div class="card"><div class="head"><h3>Todos los egresos</h3><span class="mini">${fmt(totUSD)} · Bs ${f2(totBOB)} · clic en un encabezado para ordenar</span></div>

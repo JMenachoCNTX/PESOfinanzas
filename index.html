@@ -3614,7 +3614,7 @@ function renderEgresosGeneral(){
     ...(fCostos.length?[{k:"egGenCosto",lbl:"Fijo/Variable",disp:v=>costoLabel(v),opts:fCostos.map(c=>({v:c,t:costoLabel(c)})),ph:"Fijo / Variable"}]:[])
   ];
   const egGenFB=fbHTML("eggf", egGenFilterDefs);
-  const toolbar=`<div class="toolbar" style="align-items:center">${esearch("egGenSearch","Buscar concepto, beneficiario, importe, cuenta…",STATE.egGenSearch)}${egGenFB.bar}</div>${egGenFB.panel}`;
+  const toolbar=`<div class="toolbar" style="align-items:center">${esearch("egGenSearch","Buscar concepto, beneficiario, importe, cuenta…",STATE.egGenSearch)}${egGenFB.bar}<div class="spacer"></div><button class="btn" id="egTjBtn" title="Carga varios gastos de una vez desde el Excel de la tarjeta corporativa">⬆ Importar tarjeta (Excel)</button><input type="file" id="egTjFile" accept=".xlsx,.xls" hidden></div>${egGenFB.panel}`;
   $("#app").innerHTML=`<p class="section-intro">Todos los egresos en <b>una sola lista</b>: los de <b>Egresos</b> + las <b>salidas</b> de <b>Mercury</b> y <b>BitGo</b>, con las mismas cuentas contables. <span class="mini">(No modifica la pestaña Bancos.)</span></p>
     ${kpis}${toolbar}${pills}
     <div class="card"><div class="head"><h3>Todos los egresos</h3><span class="mini">${fmt(totUSD)} · Bs ${f2(totBOB)} · clic en un encabezado para ordenar</span></div>
@@ -3627,6 +3627,7 @@ function renderEgresosGeneral(){
       ${rows.length>1000?`<div class="mini" style="margin-top:10px">Mostrando 1000 de ${rows.length}. Usa la búsqueda o filtros.</div>`:""}</div>`;
   const si=$("#egGenSearch"); if(si){ si.addEventListener("input",()=>{STATE.egGenSearch=si.value;STATE._focus=true;render();}); }
   fbWire("eggf", egGenFilterDefs);
+  tarjetaWire();
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
   document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
     const k=th.dataset.k;
@@ -4206,8 +4207,7 @@ function renderEgresos(){
   si.addEventListener("input",()=>{STATE.egSearch=si.value;STATE._focus=true;render();});
   fbWire("egf", egFilterDefs);
   const egAdd=$("#egAdd"); if(egAdd) egAdd.addEventListener("click",abrirFormEgreso);
-  const tjB=$("#egTjBtn"), tjF=$("#egTjFile");
-  if(tjB&&tjF){ tjB.addEventListener("click",()=>tjF.click()); tjF.addEventListener("change",()=>{ const f=tjF.files&&tjF.files[0]; tjF.value=""; if(f) tarjetaImportarArchivo(f); }); }
+  tarjetaWire();
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
   if(!isGraf){
     document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
@@ -7259,6 +7259,8 @@ function _tjPlanDe(cc){
   const at=len=>{ const n=plan.find(r=>r.codigo===node.codigo.slice(0,len)); return n?n.nombre:""; };
   return {codc:node.codigo,grupo:at(2),sc:at(3),cp:at(6)};
 }
+function tarjetaWire(){ const tjB=$("#egTjBtn"), tjF=$("#egTjFile");
+  if(tjB&&tjF){ tjB.addEventListener("click",()=>tjF.click()); tjF.addEventListener("change",()=>{ const f=tjF.files&&tjF.files[0]; tjF.value=""; if(f) tarjetaImportarArchivo(f); }); } }
 function tarjetaImportarArchivo(file){
   const rd=new FileReader();
   rd.onerror=()=>alert("No se pudo leer el archivo.");

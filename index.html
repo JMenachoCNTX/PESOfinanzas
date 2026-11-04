@@ -1498,7 +1498,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V205";
+const APP_VERSION = "V206";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3540,7 +3540,8 @@ function egNumQuery(q){ let t=String(q).replace(/[\s$]|bs\.?|usd/gi,""); if(!/^-
   else t=t.replace(/[.,]/g,"");
   const n=Math.abs(parseFloat(t)); return isFinite(n)?{n,dec}:null; }
 function egNumMatch(nq,x){ if(x==null||!isFinite(+x)) return false; x=Math.abs(+x);
-  if(nq.dec) return Math.abs(x-nq.n)<(nq.dec===1?0.05:0.005);
+  if(nq.dec===1) return Math.abs(x-nq.n)<0.05;
+  if(nq.dec) return Math.abs(Math.round(x*100)/100-nq.n)<0.001 || Math.abs(Math.floor(x*100+1e-6)/100-nq.n)<0.001;
   return Math.floor(x+1e-9)===nq.n || Math.round(x)===nq.n; }
 function renderEgresosGeneral(){
   const pills=`<div class="seg" id="egTabs" style="margin-bottom:16px;flex-wrap:wrap">
@@ -4622,6 +4623,52 @@ function renderInversiones(){
 }
 
 /* ---------- PRÉSTAMOS ---------- */
+/* V206: EGRESOS DE SOCIOS — gastos de la empresa pagados por un socio (columna "Pagado por" de Egresos,
+   ej. con su tarjeta "TC Alejo"). Es plata que el socio puso por PE$O: se compara con Préstamos y Devoluciones. */
+function egSocioDe(e){ const p=String(e.pagadopor||"").trim(); if(!p || /pe\$?s?o\b|s\.?r\.?l|llc/i.test(p)) return ""; return p; }
+function renderEgresosSocios(){
+  const all=yearFilter(STATE.egresos||[]).filter(e=>egSocioDe(e));
+  const usd=e=>(e.impUSD!=null?+e.impUSD:(+e.imp||0))||0;
+  const socios=[...new Set(all.map(egSocioDe))].sort((a,b)=>a.localeCompare(b));
+  const sel=STATE.egsSocio||"__all";
+  let rows=sel==="__all"?all:all.filter(e=>egSocioDe(e)===sel);
+  const q=String(STATE.egsSearch||"").trim(); if(q){ const nq=egNumQuery(q), qn=_rhNorm(q);
+    rows=rows.filter(e=>(nq&&[e.impOrig,e.imp,e.impUSD,e.impBOB].some(x=>egNumMatch(nq,x)))||_rhNorm([e.con,e.ben,e.coment,e.tipo,e.ca,e.cp,egSocioDe(e)].join(" ")).includes(qn)); }
+  const tot=rows.reduce((a,e)=>a+usd(e),0), totBOB=rows.reduce((a,e)=>a+(+e.impBOB||0),0);
+  const por=n=>all.filter(e=>egSocioDe(e)===n).reduce((a,e)=>a+usd(e),0);
+  const prest=n=>yearFilter(STATE.pre||[]).filter(r=>_rhNorm(r.nombre)===_rhNorm(n)).reduce((a,r)=>a+(+r.importe||0),0);
+  const pend=rows.filter(e=>/pendiente/i.test(e.e||"")).reduce((a,e)=>a+usd(e),0);
+  const S=STATE.egsSort||(STATE.egsSort={key:"fecha",dir:"desc"});
+  rows=rows.map(e=>Object.assign({},e,{_socio:egSocioDe(e),_usd:usd(e)}));
+  const sorted=[...rows].sort(mkCmp(S.key,S.dir,["_usd","impBOB","impOrig"],["fecha"]));
+  const cols=[
+    {label:"Fecha",sortKey:"fecha",render:r=>`<span class="mini">${fmtDate(r.fecha)}</span>`},
+    {label:"Pagado por",sortKey:"_socio",render:r=>`<b>${esc(r._socio)}</b>`},
+    {label:"Concepto",sortKey:"con",render:r=>esc(r.con||"–")},
+    {label:"Beneficiario",sortKey:"ben",render:r=>r.ben?esc(r.ben):'<span class="zero">–</span>'},
+    {label:"Tipo de pago",sortKey:"tipo",render:r=>r.tipo?`<span class="tag">${esc(r.tipo)}</span>`:'<span class="zero">–</span>'},
+    {label:"Cuenta analítica",sortKey:"ca",render:r=>r.ca?esc(r.ca):'<span class="zero">–</span>'},
+    {label:"Estado",sortKey:"e",render:r=>stBadge(r.e)},
+    {label:"Monto original",right:1,cls:"num",sortKey:"impOrig",render:r=>(r.moneda==="BOB"?"Bs ":"$")+f2(r.impOrig!=null?r.impOrig:r.imp)},
+    {label:"USD",right:1,cls:"num",sortKey:"_usd",render:r=>fmt(r._usd,2)},
+  ];
+  const chip=(k,l,on)=>`<button class="rchip${on?' on':''}" data-k="${esc(k)}">${esc(l)}</button>`;
+  $("#app").innerHTML=`
+    <p class="section-intro">Gastos de PE$O que <b>pagó un socio</b> con su propio dinero o tarjeta (columna <b>Pagado por</b> de Egresos). Es plata que el socio puso por la empresa: compárala con lo registrado en <b>Préstamos</b> y <b>Devoluciones</b>.</p>
+    <div class="grid kpis">
+      ${kpi("Total pagado por socios",money(all.reduce((a,e)=>a+usd(e),0)),all.length+" gastos","#235347","◆")}
+      ${socios.slice(0,2).map(n=>kpi(n,money(por(n)),"en Préstamos: "+money(prest(n)),"#6F9A7D","≈")).join("")}
+      ${kpi("Pendientes de pago",money(pend),"de lo filtrado","#B42318","◷")}
+    </div>
+    <div class="rchips" id="egsChips"><span class="rchips-lbl">Socio</span>${chip("__all","Todos",sel==="__all")}${socios.map(n=>chip(n,n,sel===n)).join("")}</div>
+    <div class="toolbar" style="align-items:center">${esearch("egsSearch","Buscar concepto, beneficiario, importe…",STATE.egsSearch)}</div>
+    <div class="card"><div class="head"><h3>Egresos pagados por socios</h3><span class="mini">${rows.length} · ${money(tot)} · Bs ${f2(totBOB)} · clic en un encabezado para ordenar</span></div>
+      ${tbl(cols,sorted,["Total ("+rows.length+")","","","","","","","",fmt(tot,2)],S,{sticky:true})}</div>`;
+  document.querySelectorAll("#egsChips .rchip").forEach(b=>b.addEventListener("click",()=>{ STATE.egsSocio=b.dataset.k; render(); }));
+  const si=$("#egsSearch"); if(si){ si.addEventListener("input",()=>{ STATE.egsSearch=si.value; STATE._focus=true; render(); }); if(STATE._focus){ si.focus(); si.setSelectionRange(si.value.length,si.value.length); STATE._focus=false; } }
+  document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{ const k=th.dataset.k;
+    STATE.egsSort = S.key===k?{key:k,dir:S.dir==="asc"?"desc":"asc"}:{key:k,dir:(k==="fecha"||k==="_usd")?"desc":"asc"}; render(); }));
+}
 function renderPrestamos(){
   const allYear=yearFilter(STATE.pre);
   const total=allYear.reduce((s,e)=>s+(+e.importe||0),0);
@@ -5819,6 +5866,7 @@ function renderCalendario(){
   const Y=STATE.calY, M=STATE.calM;
   const ev=calEventos();
   const taD=_tareasPorDia();
+  rhCalCargar(); const rhD=_rhCalPorDia();
   const isoOf=d=>Y+"-"+_p2(M+1)+"-"+_p2(d);
   const isoToday=_isoHoy();
   const first=new Date(Y,M,1); const startDow=(first.getDay()+6)%7;
@@ -5832,6 +5880,7 @@ function renderCalendario(){
       <div class="cal-d">${d}</div>
       ${c?`<div class="cal-tot">${c.ing?`<span class="cal-in">+${_kfmt(c.ing)}</span>`:""}${c.egr?`<span class="cal-out">-${_kfmt(c.egr)}</span>`:""}</div>`:""}
       ${ta?`<span class="cal-ta${iso<isoToday?" vencida":""}" title="${esc(ta.map(t=>t.tarea).join(" · "))}">✓ ${ta.length} ${ta.length===1?"tarea":"tareas"}</span>`:""}
+      ${rhD[iso]?`<span class="cal-ta" style="background:#DAF1DE;color:#0B2B26" title="${esc(rhD[iso].map(e=>e.tipo+" · "+e.nombre).join(" | "))}">👤 ${rhD[iso].length===1?esc(rhD[iso][0].tipo):rhD[iso].length+" RRHH"}</span>`:""}
     </div>`;
   }
   const dow=["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"].map(d=>`<div class="cal-dow">${d}</div>`).join("");
@@ -5849,6 +5898,7 @@ function renderCalendario(){
     det=`<div class="card"><div class="head"><h3>${esc(fmtDate(dia)||dia)}</h3>
         <div class="cal-acc"><button class="btn" id="calNuevaTarea">+ Tarea este día</button><a class="btn" target="_blank" rel="noopener" href="${esc(gcalLink("",dia,""))}">${_icoCal} Evento en Google Calendar</a></div></div>
       <h4 class="rend-sec-title" style="margin:4px 0 8px">Tareas que vencen</h4>${taHTML}
+      ${(rhD[dia]||[]).length?`<h4 class="rend-sec-title" style="margin:18px 0 8px">RRHH · solicitudes y novedades</h4><div class="ta-list">${rhD[dia].map(e=>`<div class="ta-mini"><div class="tx"><b>${esc(e.tipo)} · ${esc(e.nombre)}</b><span>${esc(fmtDate(e.desde))}${e.hasta&&e.hasta!==e.desde?" → "+esc(fmtDate(e.hasta)):""}${e.cant?" · "+esc(String(e.cant))+(e.tipo==="Horas extra"?" h":" día(s)"):""}${e.estado?" · "+esc(e.estado):""}${e.nota?" · "+esc(e.nota):""}</span></div><button class="btn ghost rhcal-f" data-n="${esc(e.nombre)}" data-k="${esc(e.k)}">Ver ficha ›</button></div>`).join("")}</div>`:""}
       <h4 class="rend-sec-title" style="margin:18px 0 8px">Movimientos <span class="mini" style="font-weight:400">${c?`+${fmt(c.ing)} · −${fmt(c.egr)} · neto ${fmt(c.ing-c.egr)}`:"sin movimientos"}</span></h4>
       ${items.length?`<div class="tbl-scroll"><table><thead><tr><th style="text-align:left">Origen</th><th style="text-align:left">Tipo</th><th style="text-align:left">Detalle</th><th class="tot">USD</th></tr></thead><tbody>${rows}</tbody></table></div>`:`<p class="mini">No hubo movimientos ese día.</p>`}</div>`;
   } else {
@@ -5878,6 +5928,7 @@ function renderCalendario(){
   $("#calNext").addEventListener("click",()=>{ let m=STATE.calM+1,y=STATE.calY; if(m>11){m=0;y++;} STATE.calM=m;STATE.calY=y;STATE.calDay=null;render(); });
   $("#calHoy").addEventListener("click",()=>{ const n=new Date(); STATE.calY=n.getFullYear();STATE.calM=n.getMonth();STATE.calDay=_isoHoy();render(); });
   document.querySelectorAll("#calGrid .cal-cell[data-iso]").forEach(cell=>cell.addEventListener("click",()=>{ STATE.calDay=(STATE.calDay===cell.dataset.iso)?null:cell.dataset.iso; render(); }));
+  document.querySelectorAll("#app .rhcal-f").forEach(b=>b.addEventListener("click",()=>{ STATE.section="rrhh"; STATE.rhTab="datos"; STATE.rhFicha=b.dataset.n; STATE.rhFichaTab=b.dataset.k; document.querySelectorAll("#sidenav button").forEach(x=>x.classList.toggle("on",x.dataset.s==="rrhh")); render(); try{window.scrollTo(0,0);}catch(_){} }));
   const nt=$("#calNuevaTarea"); if(nt) nt.addEventListener("click",()=>{ STATE.taForm={t:"",prio:"Media",vence:STATE.calDay,notas:""}; STATE.taEdit=null; const b=document.querySelector('#sidenav button[data-s="tareas"]'); if(b) b.click(); setTimeout(()=>{ const i=$("#taT"); if(i) i.focus(); },60); });
 }
 function renderGoogleCal(app,segV){
@@ -6104,12 +6155,13 @@ function tareaBorrar(id){
 }
 function renderSociosCapital(){
   if(!STATE.socioTab) STATE.socioTab="inversiones";
-  const map={inversiones:renderInversiones,prestamos:renderPrestamos,devoluciones:renderDevoluciones,rendiciones:renderRendiciones};
+  const map={inversiones:renderInversiones,prestamos:renderPrestamos,egsocios:renderEgresosSocios,devoluciones:renderDevoluciones,rendiciones:renderRendiciones};
   (map[STATE.socioTab]||renderInversiones)();
   const t=STATE.socioTab;
   const seg=`<div class="seg" id="socioTabs" style="margin-bottom:16px;flex-wrap:wrap">
      <button data-t="inversiones" class="${t==='inversiones'?'on':''}">Inversiones</button>
      <button data-t="prestamos" class="${t==='prestamos'?'on':''}">Préstamos</button>
+     <button data-t="egsocios" class="${t==='egsocios'?'on':''}">Egresos de socios</button>
      <button data-t="devoluciones" class="${t==='devoluciones'?'on':''}">Devoluciones</button>
      <button data-t="rendiciones" class="${t==='rendiciones'?'on':''}">Rendiciones</button>
    </div>`;
@@ -8750,7 +8802,23 @@ async function rhFichaGet(raw){
   return (NM_FICHAS[raw._fid]=F);
 }
 async function rhFichaSet(raw,F){ await rhAsegurarId(raw); NM_FICHAS[raw._fid]=F;
-  await NMFB.cfgSet("rhFicha_"+raw._fid,{nombre:raw.nombretrabajador||"",solicitudes:F.solicitudes,novedades:F.novedades,adjuntos:F.adjuntos,cambios:F.cambios}); }
+  await NMFB.cfgSet("rhFicha_"+raw._fid,{nombre:raw.nombretrabajador||"",solicitudes:F.solicitudes,novedades:F.novedades,adjuntos:F.adjuntos,cambios:F.cambios});
+  try{ await rhCalActualizar(raw,F); }catch(e){ console.error("calendario RRHH",e); } }
+/* V206: las solicitudes y novedades de RRHH también salen en el Calendario. Se guarda un resumen en
+   config/rhCalendario (1 documento: el calendario lo lee una sola vez) y solo se reescribe si cambió. */
+let NM_RHCAL=null;
+function rhCalCargar(){ if(NM_RHCAL||!nmFbActivo()) return; NM_RHCAL={items:[],_cargando:true};
+  NMFB.cfgGet("rhCalendario").then(d=>{ NM_RHCAL={items:(d&&d.items)||[]}; if(STATE.section==="calendario") render(); }).catch(()=>{ NM_RHCAL={items:[]}; }); }
+async function rhCalActualizar(raw,F){
+  if(!NM_RHCAL||NM_RHCAL._cargando){ const d=await NMFB.cfgGet("rhCalendario"); NM_RHCAL={items:(d&&d.items)||[]}; }
+  const mios=[].concat(F.solicitudes.map(e=>Object.assign({k:"sol"},e)),F.novedades.map(e=>Object.assign({k:"nov"},e)))
+    .filter(e=>e.desde&&e.estado!=="Rechazada").map(e=>({fid:raw._fid,nombre:raw.nombretrabajador||"",k:e.k,tipo:e.tipo,desde:String(e.desde).slice(0,10),hasta:String(e.hasta||"").slice(0,10),estado:e.estado||"",cant:e.cant||"",nota:String(e.nota||"").slice(0,120)}));
+  const otros=NM_RHCAL.items.filter(x=>x.fid!==raw._fid);
+  const antes=JSON.stringify(NM_RHCAL.items.filter(x=>x.fid===raw._fid)); if(antes===JSON.stringify(mios)) return;
+  NM_RHCAL.items=otros.concat(mios); await NMFB.cfgSet("rhCalendario",{items:NM_RHCAL.items}); }
+function _rhCalPorDia(){ const m={}; ((NM_RHCAL&&NM_RHCAL.items)||[]).forEach(e=>{
+  let d=new Date(e.desde+"T12:00:00"); const h=e.hasta&&e.hasta>e.desde?new Date(e.hasta+"T12:00:00"):d; if(isNaN(d)) return;
+  for(let i=0;i<93&&d<=h;i++){ const iso=d.toISOString().slice(0,10); (m[iso]=m[iso]||[]).push(e); d=new Date(d.getTime()+864e5); } }); return m; }
 function rhLog(F,sec,campo,antes,despues,motivo){ F.cambios.push({cuando:new Date().toISOString(),por:rhQuien(),sec,campo,antes:antes==null?"":antes,despues:despues==null?"":despues,motivo:motivo||""}); }
 const _rhFTxt=s=>s?fmtDate(String(s).slice(0,10)):"–";
 function _rhCampoLbl(k){ return ((histCampos("rrhh")||[]).find(c=>c[0]===k)||[k,k])[1]; }

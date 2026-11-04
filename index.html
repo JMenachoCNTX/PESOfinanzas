@@ -1498,7 +1498,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V207";
+const APP_VERSION = "V208";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4112,6 +4112,7 @@ function renderEgresos(){
         ${esearch("egSearch","Buscar…",STATE.egSearch)}
         ${egFB.bar}
         <div class="spacer"></div>
+        <button class="btn" id="egTjBtn" title="Carga varios gastos de una vez desde el Excel de la tarjeta corporativa">⬆ Importar tarjeta (Excel)</button><input type="file" id="egTjFile" accept=".xlsx,.xls" hidden>
         <button class="btn primary btn-icon" id="egAdd">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
           Registrar gasto
@@ -4205,6 +4206,8 @@ function renderEgresos(){
   si.addEventListener("input",()=>{STATE.egSearch=si.value;STATE._focus=true;render();});
   fbWire("egf", egFilterDefs);
   const egAdd=$("#egAdd"); if(egAdd) egAdd.addEventListener("click",abrirFormEgreso);
+  const tjB=$("#egTjBtn"), tjF=$("#egTjFile");
+  if(tjB&&tjF){ tjB.addEventListener("click",()=>tjF.click()); tjF.addEventListener("change",()=>{ const f=tjF.files&&tjF.files[0]; tjF.value=""; if(f) tarjetaImportarArchivo(f); }); }
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
   if(!isGraf){
     document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
@@ -7236,6 +7239,124 @@ function bitgoImportarArchivo(file){
     }).catch(function(e){ fin(); alert("No se pudo importar: "+((e&&e.message)||e)); });
   };
   rd.readAsText(file);
+}
+/* V208: IMPORTAR MOVIMIENTOS DE TARJETA (Excel de PesoCard). Lee la hoja «Movimientos», marca los que ya
+   están en Egresos (misma cuenta, mismo importe y fecha ±4 días) y deja fuera los consumos personales
+   («Consumo a clasificar») y los pendientes. Se revisa en una lista y se guardan todos juntos. */
+const TJ_MESES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const TJ_PERSONAL=/consumo a clasificar|personal/i;
+function _tjNorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]/g,""); }
+function _tjFecha(v){
+  if(typeof v==="number"&&isFinite(v)){ const d=new Date(Math.round((Math.floor(v)-25569)*864e5)); return d.toISOString().slice(0,10); }
+  const s=String(v||"").trim(); let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[0];
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:"";
+}
+/* Cuenta analítica → códigos del plan de cuentas (igual que autoFillCuenta del formulario) */
+function _tjPlanDe(cc){
+  const plan=STATE.plan||[], an=r=>String(r.categoria).toLowerCase().indexOf("anal")>=0;
+  const node=plan.find(r=>String(r.tipo).toLowerCase().indexOf("egreso")>=0&&an(r)&&r.nombre===cc)||plan.find(r=>an(r)&&r.nombre===cc);
+  if(!node||!node.codigo) return {codc:"",grupo:"",sc:"",cp:""};
+  const at=len=>{ const n=plan.find(r=>r.codigo===node.codigo.slice(0,len)); return n?n.nombre:""; };
+  return {codc:node.codigo,grupo:at(2),sc:at(3),cp:at(6)};
+}
+function tarjetaImportarArchivo(file){
+  const rd=new FileReader();
+  rd.onerror=()=>alert("No se pudo leer el archivo.");
+  rd.onload=function(){
+    let R;
+    try{ const wb=XLSX.read(rd.result,{type:"array"});
+      const hn=wb.SheetNames.find(n=>/movimiento/i.test(n))||wb.SheetNames[0];
+      R=XLSX.utils.sheet_to_json(wb.Sheets[hn],{header:1,defval:"",raw:true}); }
+    catch(e){ alert("No se pudo abrir el Excel: "+((e&&e.message)||e)); return; }
+    const hi=R.findIndex(r=>r.some(c=>/proveedor/i.test(c))&&r.some(c=>/monto/i.test(c)));
+    if(hi<0){ alert("Este Excel no parece un extracto de tarjeta.\nDebe tener una hoja «Movimientos» con columnas Fecha, Proveedor y Monto USD."); return; }
+    const h=R[hi].map(x=>String(x).trim()), col=re=>h.findIndex(x=>re.test(x));
+    const c={f:col(/^fecha/i),prov:col(/proveedor/i),desc:col(/descriptor/i),tipo:col(/^tipo/i),usd:col(/monto.*usd/i),
+      orig:col(/monto original/i),mon:col(/moneda original/i),pais:col(/pa[ií]s/i),est:col(/estado/i),tar:col(/tarjeta/i)};
+    if(c.f<0||c.prov<0||c.usd<0){ alert("Faltan columnas: se necesitan Fecha, Proveedor y Monto USD."); return; }
+    const g=(r,k)=>c[k]>=0?r[c[k]]:"";
+    const movs=R.slice(hi+1).map(r=>({f:_tjFecha(g(r,"f")),prov:String(g(r,"prov")).trim(),desc:String(g(r,"desc")).trim(),
+      tipo:String(g(r,"tipo")).trim(),usd:Math.round(toNum(g(r,"usd"))*100)/100,orig:toNum(g(r,"orig")),mon:String(g(r,"mon")).trim().toUpperCase(),
+      pais:String(g(r,"pais")).trim(),est:String(g(r,"est")).trim(),tar:String(g(r,"tar")).trim()})).filter(m=>m.f&&m.prov&&m.usd);
+    if(!movs.length){ alert("El Excel no tiene movimientos."); return; }
+    tarjetaRevisar(movs, file.name);
+  };
+  rd.readAsArrayBuffer(file);
+}
+function tarjetaRevisar(movs, nombreArchivo){
+  poblarDatalists();
+  const st={cuenta:/jp|velasco/i.test(nombreArchivo)?"TC JP Velasco":"TC Alejo", por:/jp|velasco/i.test(nombreArchivo)?"JP Velasco":"Alejo T.", mes:"__all"};
+  const dms=s=>new Date(s+"T12:00").getTime();
+  // Marca cuáles ya están en Egresos (cada egreso se usa una sola vez)
+  function marcar(){
+    const usados=new Set(), E=(STATE.egresos||[]).filter(e=>String(e.tipo||"").trim()===st.cuenta);
+    movs.forEach(m=>{ m.ya=null;
+      const i=E.findIndex((e,k)=>!usados.has(k)&&Math.abs((+e.impOrig||+e.imp||0)-m.usd)<=0.05&&Math.abs(dms(String(e.fecha).slice(0,10))-dms(m.f))<=4*864e5);
+      if(i>=0){ usados.add(i); m.ya=E[i]; } });
+    movs.forEach(m=>{ m.personal=TJ_PERSONAL.test(m.tipo); m.pend=/pendiente/i.test(m.est);
+      m.sel=!m.ya&&!m.personal&&!m.pend; });
+  }
+  // Cuenta analítica sugerida: la última usada para ese proveedor
+  const porBen={}; (STATE.egresos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(e=>{
+    const k=_tjNorm(e.ben||e.con); if(k&&e.cc) porBen[k]={cc:e.cc,pais:e.pais}; });
+  movs.forEach(m=>{ const s=porBen[_tjNorm(m.prov)]||porBen[_tjNorm(m.desc)]; m.cc=s?s.cc:""; m.paisSug=s?s.pais:""; });
+  marcar();
+  const meses=[...new Set(movs.map(m=>m.f.slice(0,7)))].sort();
+  const cuentas=cuentasPago().filter(esCuentaTC);
+  const ov=rhModal("Importar movimientos de tarjeta",`
+    <p class="section-intro" style="margin:0 0 10px">Archivo <b>${esc(nombreArchivo)}</b> · ${movs.length} movimientos. Revisa la lista: solo se guardan los marcados ☑.
+      Ya vienen <b>sin marcar</b> los consumos personales, los pendientes y los que ya están registrados.</p>
+    <div class="us-form" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:10px">
+      <div><label>Cuenta de pago</label><select id="tjCuenta">${_rhOpts(cuentas.length?cuentas:["TC Alejo"],st.cuenta)}</select></div>
+      <div><label>Pagado por</label><input id="tjPor" list="dl_pagadopor" value="${esc(st.por)}"></div>
+      <div><label>Mes</label><select id="tjMes"><option value="__all">Todos los meses</option>${meses.map(m=>`<option value="${m}">${TJ_MESES[+m.slice(5)-1]} ${m.slice(0,4)}</option>`).join("")}</select></div>
+    </div>
+    <div class="toolbar" style="align-items:center;margin-bottom:8px"><span id="tjRes" style="font-weight:600"></span><div class="spacer"></div>
+      <button class="btn" id="tjNada">Desmarcar todo</button><button class="btn primary" id="tjGuardar">Guardar marcados en Egresos</button></div>
+    <div class="tbl-scroll" style="max-height:58vh"><table class="tbl"><thead><tr><th></th><th>Fecha</th><th>Proveedor</th><th>Tipo (Excel)</th><th class="num">USD</th><th>Original</th><th>Cuenta analítica</th><th>Situación</th></tr></thead><tbody id="tjBody"></tbody></table></div>`,1100);
+  const body=ov.querySelector("#tjBody");
+  const vis=()=>movs.filter(m=>st.mes==="__all"||m.f.startsWith(st.mes));
+  function resumen(){ const s=movs.filter(m=>m.sel), t=s.reduce((a,m)=>a+m.usd,0);
+    ov.querySelector("#tjRes").textContent=`${s.length} marcados · $${f2(t)}`; ov.querySelector("#tjGuardar").disabled=!s.length; }
+  function pintar(){
+    body.innerHTML=vis().map(m=>{ const i=movs.indexOf(m);
+      const sit=m.ya?`<span class="tag">Ya registrado (${esc(String(m.ya.fecha).slice(0,10).split("-").reverse().join("/"))})</span>`
+        :m.personal?`<span class="tag" style="color:var(--error)">Personal</span>`
+        :m.pend?`<span class="tag">Pendiente</span>`:`<span class="tag" style="color:var(--brand);font-weight:700">Nuevo</span>`;
+      const orig=m.mon&&m.mon!=="USD"&&m.orig?`${f2(m.orig)} ${esc(m.mon)}`:"";
+      return `<tr style="${m.sel?"":"opacity:.55"}"><td><input type="checkbox" class="tjSel" data-i="${i}"${m.sel?" checked":""}></td>
+        <td>${m.f.split("-").reverse().join("/")}</td><td>${esc(m.prov)}</td><td>${esc(m.tipo)}</td><td class="num">${f2(m.usd)}</td><td>${orig}</td>
+        <td><input class="tjCC" data-i="${i}" list="dl_cc" value="${esc(m.cc)}" placeholder="(clasificar después)" style="min-width:180px"></td><td>${sit}</td></tr>`; }).join("")
+      || `<tr><td colspan="8">${emptyState("No hay movimientos en este mes.")}</td></tr>`;
+    body.querySelectorAll(".tjSel").forEach(x=>x.addEventListener("change",()=>{ movs[+x.dataset.i].sel=x.checked; x.closest("tr").style.opacity=x.checked?"":".55"; resumen(); }));
+    body.querySelectorAll(".tjCC").forEach(x=>x.addEventListener("change",()=>{ movs[+x.dataset.i].cc=x.value.trim(); }));
+    resumen();
+  }
+  ov.querySelector("#tjCuenta").addEventListener("change",e=>{ st.cuenta=e.target.value; marcar(); pintar(); });
+  ov.querySelector("#tjPor").addEventListener("change",e=>{ st.por=e.target.value.trim(); });
+  ov.querySelector("#tjMes").addEventListener("change",e=>{ st.mes=e.target.value; pintar(); });
+  ov.querySelector("#tjNada").addEventListener("click",()=>{ vis().forEach(m=>m.sel=false); pintar(); });
+  ov.querySelector("#tjGuardar").addEventListener("click",async()=>{
+    const s=movs.filter(m=>m.sel); if(!s.length) return;
+    const ya=s.filter(m=>m.ya).length, pe=s.filter(m=>m.personal).length;
+    if(!confirm(`Se agregarán ${s.length} gastos a Egresos ($${f2(s.reduce((a,m)=>a+m.usd,0))}), pagados con «${st.cuenta}» por «${st.por}».`+
+      (pe?`\n\n⚠ ${pe} están marcados como consumo personal.`:"")+(ya?`\n⚠ ${ya} parecen ya registrados (podrían duplicarse).`:"")+"\n\n¿Guardar?")) return;
+    let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
+    const lista=s.map(m=>{ const p=m.cc?_tjPlanDe(m.cc):{};
+      const com=["Tarjeta "+(m.tar||st.cuenta), m.desc&&m.desc!==m.prov?m.desc:"", m.mon&&m.mon!=="USD"&&m.orig?`Original: ${m.orig} ${m.mon}`:"", m.pend?"Pendiente de liquidar":""].filter(Boolean).join(" · ");
+      return {fechaPago:m.f,fechaCont:m.f,concepto:m.prov,importe:m.usd,moneda:"USD",estado:"Pagado",pais:m.paisSug||"",
+        cuentaPrincipal:p.cp||"",subCuenta:p.sc||"",cuentaContable:m.cc||"",grupo:p.grupo||"",codigoContable:p.codc||"",
+        comentarios:com,beneficiario:m.prov,tipoPago:st.cuenta,pagadoPor:st.por}; });
+    const b=ov.querySelector("#tjGuardar"); b.disabled=true; b.textContent="Guardando…"; ov._msg("");
+    try{ const res=await nmRun("registrarEgresosLote",pin,lista);
+      if(!res||res.error){ const e=(res&&res.error)||"Sin respuesta del servidor.";
+        ov._msg(/no permitida/i.test(e)?"El servidor todavía no tiene la función para guardar varios gastos. Hay que actualizar Apps Script (Deploy).":"No se pudo guardar: "+e);
+        b.disabled=false; b.textContent="Guardar marcados en Egresos"; return; }
+      ov._msg(`Listo ✓ Se agregaron ${res.agregados} gastos a Egresos. Actualizando…`,true);
+      setTimeout(()=>{ ov.remove(); actualizarDatos(); },1200);
+    }catch(e){ ov._msg("No se pudo guardar: "+((e&&e.message)||e)); b.disabled=false; b.textContent="Guardar marcados en Egresos"; }
+  });
+  pintar();
 }
 /* V184: pagos hechos desde Tesabiz (se reconocen por "Tesabiz" en la columna Tipo de Pago) */
 function esPagoTesabiz(r){ return esCuentaCidre(r.tipo); }   // V196: (nombre antiguo) ahora = pagos desde CIDRE - Peso Liquidez

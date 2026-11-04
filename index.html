@@ -1499,7 +1499,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V211";
+const APP_VERSION = "V212";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1740,7 +1740,11 @@ var PNL_ING_CFG = {
           {label:"Volumen (USD)", cur:"USD", match:n=>n.includes("total")&&n.includes("usd")} ],
     ing:[ {label:"Ingreso Comisión 1%", cur:"BOB", match:n=>n.includes("comision")} ]
   },
-  Chanchito:{ vol:[], ing:[] }
+  Chanchito:{ vol:[], ing:[ {label:"Recibe Peso (USD)", cur:"USD", match:n=>n.includes("recibepeso")} ] },
+  "Daimo-Rhino":{
+    vol:[ {label:"Volumen (USD)", cur:"USD", match:n=>n.includes("volumen")} ],
+    ing:[ {label:"Ingresos (USD)", cur:"USD", match:n=>n.includes("ingreso")} ]
+  }
 };
 
 /* ---------- aggregation ---------- */
@@ -5041,7 +5045,7 @@ function tablaCostosRows(){
 }
 
 /* Sub-pestañas de P&L por proveedor dentro de Costos (se alimentan de hojas del mismo Google Sheet) */
-const PNL_TABS=["Tesabiz","Manteca","Bridge","BitGo","Didit","Cta.USA","Yango","Chanchito"];
+const PNL_TABS=["Tesabiz","Manteca","Bridge","BitGo","Didit","Cta.USA","Yango","Daimo-Rhino","Chanchito"];
 /* Convierte un número mostrado en cualquier formato (1,000.00 ó 1.000,00) al formato boliviano 1.000,00.
    Conserva signo, símbolo (Bs/$) y % ; deja intacto el texto y los enteros sin separador (años, ids). */
 function fmtBO(d){
@@ -6576,7 +6580,7 @@ function pasarelaIngresos(){
   });
   return out;
 }
-const ING_GW=["Tesabiz","Manteca","Bridge","BitGo","Cta.USA","Yango","Chanchito"];
+const ING_GW=["Tesabiz","Manteca","Bridge","BitGo","Cta.USA","Yango","Daimo-Rhino","Chanchito"];
 /* Cuadro comparativo: ingresos por MES (columnas) × pasarela (filas) */
 function ingresosPivot(all, metric, byMonth){
   const pm=new Map();
@@ -6762,6 +6766,13 @@ var ING_EXTRA_CFG = {
   Yango:[
     {key:"tusd", label:"Total (USD)",          cur:"USD", color:"#235347", icon:"\u25c6", sub:"ingreso total",  grp:"g1",  chart:true,  match:n=>n.includes("total")&&n.includes("usd")},
     {key:"tbob", label:"Total (BOB)",          cur:"BOB", color:"#235347", icon:"\u25c6", sub:"ingreso total",  grp:"g1",  chart:true,  match:n=>n.includes("total")&&n.includes("bob")},
+  ],
+  "Daimo-Rhino":[
+    {key:"ing",  label:"Ingresos (USD)",       cur:"USD", color:"#235347", icon:"\u25c6", sub:"ingreso",        grp:"g1",  chart:true,  match:n=>n.includes("ingreso")},
+    {key:"vol",  label:"Volumen (USD)",        cur:"USD", color:"#6F9A7D", icon:"\u25a6", sub:"transaccionado", grp:"g2",  chart:true,  match:n=>n.includes("volumen")},
+  ],
+  Chanchito:[
+    {key:"ing",  label:"Recibe Peso (USD)",    cur:"USD", color:"#235347", icon:"\u25c6", sub:"ingreso",        grp:"g1",  chart:true,  match:n=>n.includes("recibepeso")},
   ],
 };
 /* Formatea un valor seg\u00fan la moneda de la m\u00e9trica */
@@ -7399,9 +7410,71 @@ function cidreCargar(forzar){
     STATE._cidreCargando=false;
     if(!res||res.error){ const e=(res&&res.error)||"Sin respuesta del servidor.";
       STATE.cidreErr=/no permitida/i.test(e)?"El servidor todavía no tiene la función para leer la hoja de CIDRE. Hay que actualizar Apps Script (Deploy).":e; }
-    else STATE.cidre={pagos:cidreParsePagos(res.pagos), treasury:res.treasury||[], costos:res.costos||[], actualizado:res.actualizado};
-    if(STATE.section==="bancos"&&STATE.bancosTab==="cidre") render();
+    else { STATE.cidre={pagos:cidreParsePagos(res.pagos), treasury:res.treasury||[], costos:res.costos||[], actualizado:res.actualizado};
+      try{ pnlAplicarTreasury(); }catch(e){ console.error("Treasury",e); } }
+    if((STATE.section==="bancos"&&STATE.bancosTab==="cidre") || ["inicio","resumen","reportes","ingresos","costos","flujo"].indexOf(STATE.section)>=0) render();
   }).catch(e=>{ STATE._cidreCargando=false; STATE.cidreErr=(e&&e.message)||String(e); if(STATE.section==="bancos"&&STATE.bancosTab==="cidre") render(); });
+}
+/* V212: INGRESOS desde la pestaña «Treasury» de la hoja de CIDRE (Peso - Costos).
+   Esa pestaña tiene las mismas tablas por pasarela que la hoja principal, pero al día.
+   Cada bloque (título → fila «Mes | …» → meses) reemplaza la tabla de su pasarela; los meses que
+   Treasury no tiene se conservan de la hoja principal. STATE.pnlBase guarda la versión original. */
+const TREASURY_GW=[[/TESORER/,"Tesabiz"],[/MANTECA/,"Manteca"],[/BRIDGE/,"Bridge"],[/BITGO/,"BitGo"],
+  [/YANGO/,"Yango"],[/DAIMO|RHINO/,"Daimo-Rhino"],[/CHANCHITO/,"Chanchito"]];
+// Nombres de columna que se ajustan para que el sistema reconozca el ingreso
+const TREASURY_REN={Yango:{"comision1bob":"Ingreso Comisión 1% (BOB)"},Chanchito:{"recibepeso":"Ingreso Recibe Peso (USD)"},
+  "Daimo-Rhino":{"ingresos":"Ingresos (USD)","volumen":"Volumen (USD)","costo":"Costo (USD)","ganacia":"Ganancia (USD)"}};
+function treasuryBloques(V){
+  const nk=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]/g,"");
+  const out={}; let gw=null, hdr=null;
+  (V||[]).forEach(r=>{
+    const c=(r||[]).map(x=>String(x==null?"":x).trim()), lleno=c.filter(x=>x!=="");
+    if(!lleno.length){ hdr=null; return; }
+    if(lleno.length===1 && !/\d/.test(c[0]) && c[0]){
+      const t=c[0].toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+      const m=TREASURY_GW.find(([re])=>re.test(t)); gw=m?m[1]:null; hdr=null; return; }
+    if(!gw) return;
+    if(nk(c[0])==="mes"){ let n=c.length; while(n>1&&!c[n-1]) n--;
+      const ren=TREASURY_REN[gw]||{};
+      hdr=c.slice(0,n).map(h=>ren[nk(h)]||h); out[gw]={hdr:hdr.slice(1),filas:[]}; return; }
+    if(!hdr) return;
+    const mm=c[0].match(/^([A-Za-zÁÉÍÓÚáéíóú]+)\s+(20\d\d)$/); if(!mm || monthIdx(mm[1])<0) return;
+    const mes=MONTH_ES_LONG[monthIdx(mm[1])];
+    out[gw].filas.push({g:+mm[2], mes, vals:c.slice(1,hdr.length)});
+  });
+  return out;
+}
+function pnlAplicarTreasury(){
+  if(!STATE.pnlBase) STATE.pnlBase=STATE.pnl||{};
+  const base=STATE.pnlBase, T=STATE.cidre&&STATE.cidre.treasury;
+  if(!T||!T.length){ STATE.pnl=base; return; }
+  const nk=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]/g,"");
+  const B=treasuryBloques(T), pnl=Object.assign({},base);
+  Object.keys(B).forEach(gw=>{
+    const b=B[gw]; if(!b.filas.length) return;
+    const cols=["Gestión","Mes"].concat(b.hdr);
+    // Manteca: la hoja principal también trae las columnas en BOB (se calculan con el TC del mes)
+    const bob=(gw==="Manteca")?[["Ingreso (BOB)","markup"],["Costo (BOB)","costomanteca"],["Costo neto (BOB)","costoneto"]]:[];
+    bob.forEach(([n])=>cols.push(n)); if(bob.length) cols.push("TC BOB/USD");
+    const ix=cols.map(nk), raw=[], vistos={};
+    b.filas.forEach(f=>{
+      const r=[f.g,f.mes].concat(b.hdr.map((_,j)=>f.vals[j]==null?"":f.vals[j]));
+      if(bob.length){ const tc=tcRateFor(f.g+"-"+String(monthIdx(f.mes)+1).padStart(2,"0")+"-15")||RATE||0;
+        bob.forEach(([,k])=>{ const j=ix.findIndex(c=>c.indexOf(k)>-1&&c.indexOf("usd")>-1); const v=j>=0?toNum(r[j]):NaN;
+          r.push(isFinite(v)&&tc?(v*tc).toFixed(2):""); });
+        r.push(tc?String(tc):""); }
+      raw.push(r); vistos[f.g+"|"+f.mes]=1;
+    });
+    // Meses que solo están en la hoja principal: se copian por nombre de columna
+    const o=base[gw];
+    if(o&&o.cols&&o.raw){ const oc=o.cols.map(nk), gi=oc.indexOf("gestion"), mi=oc.indexOf("mes");
+      o.raw.forEach(r=>{ const g=+String(r[gi]).replace(/\.0+$/,""), m=monthIdx(String(r[mi]||"").replace(/20\d\d/,"").trim());
+        if(!g||m<0||vistos[g+"|"+MONTH_ES_LONG[m]]) return;
+        raw.push(cols.map((c,j)=>{ if(j===0) return g; if(j===1) return MONTH_ES_LONG[m]; const k=oc.indexOf(ix[j]); return k>=0?r[k]:""; })); }); }
+    raw.sort((a,b2)=>(a[0]-b2[0])||(monthIdx(a[1])-monthIdx(b2[1])));
+    pnl[gw]={cols, raw, rows:raw.map(r=>r.map(x=>x==null?"":String(x))), fuente:"Treasury"};
+  });
+  STATE.pnl=pnl;
 }
 /* Empareja los pagos del extracto (ext) con los egresos (sis). Cada egreso se usa una sola vez. */
 function cidreConciliar(ext, sis){
@@ -8691,7 +8764,7 @@ function aplicarDatos(res){
   STATE.tablaCostos = (res.tablaCostos && res.tablaCostos.rows) ? res.tablaCostos : {cols:[],rows:[]};
   STATE.mercury = mapMerc(res.mercury||[]);
   STATE.bitgo   = res.bitgo && res.bitgo.rows ? res.bitgo : {cols:[],rows:[]};
-  STATE.pnl     = res.pnl || {};
+  STATE.pnl     = res.pnl || {}; STATE.pnlBase = STATE.pnl; try{ pnlAplicarTreasury(); }catch(e){ console.error("Treasury",e); STATE.pnl=STATE.pnlBase; }   // V212: Treasury manda
   STATE.plan    = mapPlan(res.plan||[]);
   STATE.asignacion = Array.isArray(res.asignacion) ? res.asignacion : [];
   STATE.asigManual = Array.isArray(res.asigManual) ? res.asigManual : [];
@@ -8703,6 +8776,7 @@ function aplicarDatos(res){
   STATE.tc      = mapTC(res.tc||[]);
   convertirMonedas();
   STATE.live=true; STATE.actualizado=res.actualizado||"";
+  setTimeout(()=>{ try{ cidreCargar(); }catch(_){} },0);   // V212: trae Treasury (ingresos al día)
 }
 /** Convierte cada egreso a USD y BOB según su Moneda, usando la cotización (venta) por fecha. */
 function convertirMonedas(){

@@ -1499,7 +1499,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V210";
+const APP_VERSION = "V211";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2779,7 +2779,7 @@ function SUBTABS_MAP(){ return {
   egresos:{key:"egTab", items:[["general","General"],["proveedor","Por Proveedor"],["graficos","Gráficos"]]},
   costos:{key:"cosTab", items:[["lista","Lista de Costos"],["costingreso","Costos por Ingreso",{key:"cosProv",items:PNL_TABS.map(t=>[t,t])}],["pagados","Costos Pagados"],["detalle","Detalle por proveedor"],["graficos","Gráficos"]]},
   cxp:{key:"cxpTab", items:[["graficos","Gráficos"],["lista","Lista"],["presupuesto","Presupuesto"]]},
-  bancos:{key:"bancosTab", items:[["mercury","Mercury"],["bitgo","BitGo"],["tesabiz","Tesabiz"],["otras","Otras Cuentas"]]},
+  bancos:{key:"bancosTab", items:[["mercury","Mercury"],["bitgo","BitGo"],["tesabiz","Tesabiz"],["cidre","Conciliación CIDRE"],["otras","Otras Cuentas"]]},
   reportes:{key:"repTop", items:[["reportes","Reportes"],["cierre","Cierre de Mes"]]},
   flujo:{key:"flujoTab", items:[["uno","Flujo"],["dos","Flujo 2"]]},
   socios:{key:"socioTab", items:[["inversiones","Inversiones"],["prestamos","Préstamos"],["egsocios","Egresos de socios"],["devoluciones","Devoluciones"],["rendiciones","Rendiciones"]]},
@@ -7182,13 +7182,14 @@ function renderRendiciones(){
 /* ---------- BANCOS (contenedor con sub-pestañas: Mercury / BitGo / Tesabiz / Otras Cuentas) ---------- */
 function renderBancos(){
   const tab=STATE.bancosTab||"mercury";
-  const subs={ mercury:renderMercury, bitgo:renderBitgo, tesabiz:renderBancosTesabiz, altitude:()=>renderBancosLista('Pagos hechos desde la cuenta <b>Altitude</b> (Tipo de Pago = Altitude). Cuando tengamos el extracto de Altitude, aquí se verán también los abonos.'), otras:renderOtrasCuentas };
+  const subs={ mercury:renderMercury, bitgo:renderBitgo, tesabiz:renderBancosTesabiz, cidre:renderCidre, altitude:()=>renderBancosLista('Pagos hechos desde la cuenta <b>Altitude</b> (Tipo de Pago = Altitude). Cuando tengamos el extracto de Altitude, aquí se verán también los abonos.'), otras:renderOtrasCuentas };
   (subs[tab]||renderMercury)();          // llena #app con el diseño existente de cada sección
   const seg=`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div class="seg" id="bancosTabs" style="flex-wrap:wrap">
         <button data-t="mercury" class="${tab==='mercury'?'on':''}">Mercury</button>
         <button data-t="bitgo" class="${tab==='bitgo'?'on':''}">BitGo</button>
         <button data-t="tesabiz" class="${tab==='tesabiz'?'on':''}">CIDRE - Peso Liquidez</button>
+        <button data-t="cidre" class="${tab==='cidre'?'on':''}">Conciliación CIDRE</button>
         <button data-t="altitude" class="${tab==='altitude'?'on':''}">Altitude</button>
         <button data-t="otras" class="${tab==='otras'?'on':''}">Otras Cuentas</button>
       </div>
@@ -7371,6 +7372,155 @@ function tarjetaRevisar(movs, nombreArchivo){
     }catch(e){ ov._msg("No se pudo guardar: "+((e&&e.message)||e)); b.disabled=false; b.textContent="Guardar marcados en Egresos"; }
   });
   pintar();
+}
+/* V211: CONCILIACIÓN CIDRE. El servidor lee la hoja «Peso - Costos» (pagos de las cuentas CIDRE en BOB,
+   Liquidez en USD y Tesabiz; resultado FX de Treasury; tarifas de proveedores). Aquí se comparan los pagos de
+   CIDRE con los Egresos cuya cuenta de pago es CIDRE: coinciden, fecha con día/mes invertidos, pago registrado en
+   varias partes, falta en Egresos o está solo en Egresos (posible duplicado). Solo lectura de la hoja. */
+const CIDRE_CUENTA="CIDRE - Peso Liquidez";
+function _cdNum(s){ s=String(s==null?"":s).replace(/[$\s]/g,""); if(!s) return null; const neg=/^\(.*\)$/.test(s)||/^-/.test(s);
+  const n=parseFloat(s.replace(/[()\-%]/g,"").replace(/,/g,"")); return isFinite(n)?(neg?-n:n):null; }
+function _cdFecha(s){ const m=String(s||"").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:""; }
+const _cdDmy=f=>String(f||"").slice(0,10).split("-").reverse().join("/");
+function cidreParsePagos(V){
+  const sec=[]; let cur=null;
+  (V||[]).forEach(r=>{ const c0=String(r[0]||"").trim();
+    if(/^cuenta\s/i.test(c0)){ cur={nombre:c0.replace(/\s+/g," ").replace(/\s*—.*$/,"").trim(), det:c0, usd:/usd/i.test(c0), filas:[], saldo:_cdNum(r[1])}; sec.push(cur); return; }
+    const f=_cdFecha(c0); if(!f||!cur) return;
+    cur.filas.push({f, con:String(r[1]||"").trim(), monto:_cdNum(r[2]), tc:_cdNum(r[3]), equiv:_cdNum(r[4])});
+  });
+  return sec;
+}
+function cidreCargar(forzar){
+  if(STATE._cidreCargando || (STATE.cidre && !forzar)) return;
+  let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
+  STATE._cidreCargando=true; STATE.cidreErr=null;
+  nmRun("cidreLeer",pin).then(res=>{
+    STATE._cidreCargando=false;
+    if(!res||res.error){ const e=(res&&res.error)||"Sin respuesta del servidor.";
+      STATE.cidreErr=/no permitida/i.test(e)?"El servidor todavía no tiene la función para leer la hoja de CIDRE. Hay que actualizar Apps Script (Deploy).":e; }
+    else STATE.cidre={pagos:cidreParsePagos(res.pagos), treasury:res.treasury||[], costos:res.costos||[], actualizado:res.actualizado};
+    if(STATE.section==="bancos"&&STATE.bancosTab==="cidre") render();
+  }).catch(e=>{ STATE._cidreCargando=false; STATE.cidreErr=(e&&e.message)||String(e); if(STATE.section==="bancos"&&STATE.bancosTab==="cidre") render(); });
+}
+/* Empareja los pagos del extracto (ext) con los egresos (sis). Cada egreso se usa una sola vez. */
+function cidreConciliar(ext, sis){
+  const d=s=>new Date(String(s).slice(0,10)+"T12:00").getTime(), D=864e5;
+  const E=ext.map(x=>({x,est:"",par:[]})), S=sis.map(e=>({e,f:String(e.fecha).slice(0,10),v:+(e.impOrig!=null?e.impOrig:e.imp)||0,usado:false}));
+  E.forEach(a=>{ let best=null,bd=1e18; S.forEach(s=>{ if(s.usado||Math.abs(s.v-a.x.monto)>1) return; const dd=Math.abs(d(s.f)-d(a.x.f)); if(dd<=5*D&&dd<bd){ bd=dd; best=s; } });
+    if(best){ best.usado=true; a.est="ok"; a.par=[best]; } });
+  const inv=f=>{ const [y,m,dd]=f.split("-"); return (+dd<=12&&dd!==m)?`${y}-${dd}-${m}`:""; };
+  E.filter(a=>!a.est).forEach(a=>{ const s=S.find(s=>!s.usado&&Math.abs(s.v-a.x.monto)<=1&&inv(s.f)&&Math.abs(d(inv(s.f))-d(a.x.f))<=D);
+    if(s){ s.usado=true; a.est="invertida"; a.par=[s]; } });
+  E.filter(a=>!a.est).forEach(a=>{ const c=S.filter(s=>!s.usado&&s.v>0&&s.v<a.x.monto+1&&Math.abs(d(s.f)-d(a.x.f))<=2*D).slice(0,12), n=c.length;
+    for(let mask=1;mask<(1<<n);mask++){ let sum=0,k=0; for(let j=0;j<n;j++) if(mask&(1<<j)){ sum+=c[j].v; k++; }
+      if(k>=2&&Math.abs(sum-a.x.monto)<=1){ const p=c.filter((_,j)=>mask&(1<<j)); p.forEach(s=>s.usado=true); a.est="dividido"; a.par=p; break; } } });
+  E.filter(a=>!a.est).forEach(a=>a.est="falta");
+  const sobra=S.filter(s=>!s.usado).map(s=>({s,dup:S.some(o=>o!==s&&o.f===s.f&&Math.abs(o.v-s.v)<=0.01)}));
+  return {E,sobra};
+}
+/* Tabla simple de una pestaña tal como se ve en la hoja (bloques separados por filas vacías) */
+function cidreBloquesHTML(V){
+  const bloques=[]; let b=[]; (V||[]).forEach(r=>{ if(!r.length){ if(b.length) bloques.push(b); b=[]; } else b.push(r); }); if(b.length) bloques.push(b);
+  const esNum=c=>/^[-$(]?[\d.,]+%?\)?$/.test(String(c).trim().replace(/\s/g,""));
+  return bloques.map(B=>{ const w=Math.max(...B.map(r=>r.length));
+    const tit=B[0].filter(c=>String(c).trim()).length===1&&B.length>1?B.shift():null;
+    const filas=B.map(r=>{ const hdr=!r.some(c=>esNum(c)); return `<tr>${Array.from({length:w},(_,j)=>{ const c=String(r[j]==null?"":r[j]);
+      return hdr?`<th style="text-align:${j?"right":"left"}">${esc(c)}</th>`:`<td class="${j&&esNum(c)?"num":""}" style="${j?"":"text-align:left"};${/^-/.test(c.trim())?"color:var(--error)":""}">${esc(c)}</td>`; }).join("")}</tr>`; }).join("");
+    return `<div class="card">${tit?`<div class="head"><h3>${esc(tit.find(c=>String(c).trim()))}</h3></div>`:""}<div class="tbl-scroll"><table class="tbl">${filas}</table></div></div>`; }).join("")
+    || emptyState("La pestaña está vacía.");
+}
+function renderCidre(){
+  const app=$("#app"); if(!app) return;
+  const v=STATE.cidreVista||"conc";
+  const seg=`<div class="seg" id="cdVista" style="margin-bottom:14px;flex-wrap:wrap"><button data-v="conc" class="${v==="conc"?"on":""}">Conciliación de pagos</button><button data-v="fx" class="${v==="fx"?"on":""}">Treasury · resultado FX</button><button data-v="tarifas" class="${v==="tarifas"?"on":""}">Tarifas de proveedores</button><div class="spacer"></div></div>`;
+  const C=STATE.cidre;
+  const pie=`<div class="mini" style="margin-top:4px">Fuente: hoja <b>Peso - Costos</b> (solo lectura)${C?` · leída ${new Date(C.actualizado).toLocaleString("es-BO")}`:""} · <a href="#" id="cdRecargar">↻ Volver a leer</a></div>`;
+  if(!C){ app.innerHTML=seg+(STATE.cidreErr?`<div class="msg err" style="display:block">${esc(STATE.cidreErr)}</div>`:`<div class="card">${emptyState("Leyendo la hoja de CIDRE…")}</div>`)+pie; cidreCargar(); _cdWire(); return; }
+  if(v==="fx"){ app.innerHTML=seg+`<p class="section-intro">Resultado mensual por tipo de cambio de la tesorería en Bolivia y de los canales regionales, tal como está en la pestaña <b>Treasury</b>.</p>`+cidreBloquesHTML(C.treasury)+pie; _cdWire(); return; }
+  if(v==="tarifas"){ app.innerHTML=seg+`<p class="section-intro">Tarifas vigentes de los proveedores (pestaña <b>Costos</b>).</p>`+cidreBloquesHTML(C.costos)+pie; _cdWire(); return; }
+  const secC=C.pagos.find(s=>/cidre/i.test(s.nombre)&&!s.usd)||{filas:[]}, secL=C.pagos.find(s=>/liquidez/i.test(s.nombre)), secT=C.pagos.find(s=>/tesabiz/i.test(s.nombre));
+  const ext=secC.filas.filter(x=>x.monto), fs=ext.map(x=>x.f).sort();
+  const desde=fs[0]||"", hasta=fs[fs.length-1]||"";
+  const margen=(f,n)=>{ const t=new Date(f+"T12:00"); t.setDate(t.getDate()+n); return t.toISOString().slice(0,10); };
+  const sisAll=(STATE.egresos||[]).filter(e=>esCuentaCidre(e.tipo));
+  const sis=desde?sisAll.filter(e=>{ const f=String(e.fecha).slice(0,10); return f>=margen(desde,-5)&&f<=margen(hasta,5); }):[];
+  const R=cidreConciliar(ext,sis);
+  const n=k=>R.E.filter(a=>a.est===k), sum=L=>L.reduce((a,x)=>a+(x.x?x.x.monto:x.s.v),0);
+  const ok=n("ok").concat(n("invertida"),n("dividido")), falta=n("falta");
+  const bob=x=>"Bs "+f2(x);
+  const est={ok:'<span class="tag" style="color:var(--brand);font-weight:700">✓ Coincide</span>',invertida:'<span class="tag" style="color:var(--aviso)">⚠ Fecha con día y mes invertidos</span>',
+    dividido:'<span class="tag" style="color:var(--brand)">✓ Registrado en varias partes</span>',falta:'<span class="tag" style="color:var(--error);font-weight:700">✕ Falta en Egresos</span>'};
+  const fil=STATE.cidreFil||"todos";
+  const vis=R.E.filter(a=>fil==="todos"||(fil==="falta"?a.est==="falta":fil==="ok"?a.est!=="falta":a.est==="invertida"))
+    .sort((a,b)=>String(b.x.f).localeCompare(String(a.x.f)));
+  const filas=vis.map(a=>`<tr><td>${_cdDmy(a.x.f)}</td><td style="text-align:left">${esc(a.x.con)}</td><td class="num">${f2(a.x.monto)}</td><td>${est[a.est]}</td>
+      <td style="text-align:left">${a.par.map(s=>`<div class="mini">${_cdDmy(s.f)} · ${esc(s.e.con||s.e.ben||"")} · ${f2(s.v)}</div>`).join("")||'<span class="zero">—</span>'}</td></tr>`).join("");
+  const filasS=R.sobra.sort((a,b)=>b.s.f.localeCompare(a.s.f)).map(o=>`<tr><td>${_cdDmy(o.s.f)}</td><td style="text-align:left">${esc(o.s.e.con||"")}<div class="mini">${esc(o.s.e.ben||"")}${o.s.e.coment?" · "+esc(String(o.s.e.coment).slice(0,60)):""}</div></td><td class="num">${f2(o.s.v)}</td>
+      <td>${o.dup?'<span class="tag" style="color:var(--error);font-weight:700">⚠ Posible duplicado</span>':'<span class="tag" style="color:var(--aviso)">Solo en Egresos</span>'}</td></tr>`).join("");
+  // Liquidez (USD): se busca en todos los Egresos, cualquier cuenta de pago
+  const liq=(secL&&secL.filas||[]).filter(x=>x.monto).map(x=>{ const r=cidreConciliar([x],(STATE.egresos||[]).filter(e=>Math.abs((+e.impOrig||0)-x.monto)<=1)); return {x,par:r.E[0].par}; });
+  const filasL=liq.map(o=>`<tr><td>${_cdDmy(o.x.f)}</td><td style="text-align:left">${esc(o.x.con)}</td><td class="num">${f2(o.x.monto)}</td><td class="num">${o.x.equiv!=null?f2(o.x.equiv):""}</td>
+      <td style="text-align:left">${o.par.length?o.par.map(s=>`<div class="mini">✓ ${_cdDmy(s.f)} · ${esc(s.e.con||"")} · ${f2(s.v)} ${esc(s.e.moneda||"")} · <b>${esc(s.e.tipo||"sin cuenta de pago")}</b></div>`).join(""):'<span class="tag" style="color:var(--error);font-weight:700">✕ No está en Egresos</span>'}</td></tr>`).join("");
+  app.innerHTML=seg+`<p class="section-intro">Pagos de la cuenta <b>CIDRE</b> (bolivianos) anotados en la hoja <b>Pagos de las cuentas de Peso</b>, comparados con los <b>Egresos</b> registrados con cuenta de pago «${CIDRE_CUENTA}»${desde?` del ${_cdDmy(desde)} al ${_cdDmy(hasta)}`:""}. Se emparejan por importe (±1 Bs) y fecha (±5 días); también se reconocen fechas con el día y el mes invertidos y pagos registrados en varias partes.</p>
+    <div class="grid kpis">
+      ${kpi("Pagos en la hoja",String(ext.length),bob(sum(R.E)),"#235347","▤")}
+      ${kpi("Coinciden",String(ok.length),bob(sum(ok)),"#6F9A7D","✓")}
+      ${kpi("Faltan en Egresos",String(falta.length),bob(sum(falta)),"#B42318","✕")}
+      ${kpi("Solo en Egresos",String(R.sobra.length),bob(R.sobra.reduce((a,o)=>a+o.s.v,0))+(R.sobra.some(o=>o.dup)?` · ${R.sobra.filter(o=>o.dup).length} posibles duplicados`:""),"#93370D","!")}
+    </div>
+    <div class="card"><div class="head"><h3>Pagos de la hoja CIDRE</h3>
+        ${falta.length?`<button class="btn primary" id="cdReg">Registrar ${falta.length} faltantes en Egresos</button>`:""}</div>
+      <div class="seg" id="cdFil" style="margin-bottom:10px;flex-wrap:wrap">${[["todos","Todos"],["falta","Faltan en Egresos ("+falta.length+")"],["inv","Fecha invertida ("+n("invertida").length+")"],["ok","Coinciden ("+ok.length+")"]].map(([k,t])=>`<button data-f="${k}" class="${fil===k?"on":""}">${t}</button>`).join("")}</div>
+      <div class="tbl-scroll"><table class="tbl"><thead><tr><th>Fecha</th><th style="text-align:left">Concepto (hoja)</th><th class="num">Monto Bs</th><th>Estado</th><th style="text-align:left">En Egresos</th></tr></thead><tbody>${filas||`<tr><td colspan="5">${emptyState("Nada que mostrar.")}</td></tr>`}</tbody></table></div></div>
+    <div class="card"><div class="head"><h3>Solo en Egresos (no están en la hoja)</h3><span class="mini">egresos con cuenta CIDRE en el mismo período · revisa si falta anotarlos en la hoja o si están repetidos</span></div>
+      <div class="tbl-scroll"><table class="tbl"><thead><tr><th>Fecha</th><th style="text-align:left">Concepto (Egresos)</th><th class="num">Importe Bs</th><th>Estado</th></tr></thead><tbody>${filasS||`<tr><td colspan="4">${emptyState("Todo lo de Egresos está en la hoja.")}</td></tr>`}</tbody></table></div></div>
+    ${secL?`<div class="card"><div class="head"><h3>${esc(secL.nombre)} · pagos en USD</h3><span class="mini">se buscan en todos los Egresos (cualquier cuenta de pago)</span></div>
+      <div class="tbl-scroll"><table class="tbl"><thead><tr><th>Fecha</th><th style="text-align:left">Concepto</th><th class="num">USD</th><th class="num">Equivalente Bs</th><th style="text-align:left">En Egresos</th></tr></thead><tbody>${filasL||`<tr><td colspan="5">${emptyState("Sin pagos.")}</td></tr>`}</tbody></table></div></div>`:""}
+    ${secT&&secT.saldo!=null?`<div class="mini" style="margin-bottom:8px">${esc(secT.nombre)}: <b>${f2(secT.saldo)}</b> (según la hoja)</div>`:""}`+pie;
+  _cdWire();
+  document.querySelectorAll("#cdFil button").forEach(b=>b.addEventListener("click",()=>{ STATE.cidreFil=b.dataset.f; render(); }));
+  const rb=$("#cdReg"); if(rb) rb.addEventListener("click",()=>cidreRegistrar(falta.map(a=>a.x)));
+}
+function _cdWire(){
+  document.querySelectorAll("#cdVista button").forEach(b=>b.addEventListener("click",()=>{ STATE.cidreVista=b.dataset.v; render(); }));
+  const r=$("#cdRecargar"); if(r) r.addEventListener("click",ev=>{ ev.preventDefault(); STATE.cidre=null; cidreCargar(true); render(); });
+}
+/* Registra en Egresos los pagos de la hoja que faltan (se revisan en una lista; cuenta analítica sugerida por el concepto) */
+function cidreRegistrar(lista){
+  poblarDatalists();
+  const porCon={}; (STATE.egresos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(e=>{
+    const cc=e.ca||e.cc; if(!cc) return; [e.con,e.ben].forEach(x=>{ const k=_tjNorm(String(x||"").replace(/\s*-\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre).*$/i,"")); if(k) porCon[k]={cc,e}; }); });
+  const items=lista.map(x=>{ const k=_tjNorm(String(x.con).replace(/\s*-\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre).*$/i,""));
+    const s=porCon[k]||Object.keys(porCon).filter(p=>p.length>4&&(k.indexOf(p)>=0||p.indexOf(k)>=0)).map(p=>porCon[p])[0]; return {x,sel:true,cc:s?s.cc:"",ben:s?(s.e.ben||""):"",sug:s||null}; });
+  const ov=rhModal("Registrar pagos de CIDRE en Egresos",`
+    <p class="section-intro" style="margin:0 0 10px">Se guardan con cuenta de pago <b>${CIDRE_CUENTA}</b>, en bolivianos, país Bolivia. Revisa el beneficiario y la cuenta analítica (puedes dejarla vacía y clasificar después).</p>
+    <div class="us-form" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:10px"><div><label>Pagado por</label><input id="cdPor" list="dl_pagadopor" value="Alejo T."></div></div>
+    <div class="toolbar" style="align-items:center;margin-bottom:8px"><span id="cdRes" style="font-weight:600"></span><div class="spacer"></div><button class="btn primary" id="cdGuardar">Guardar marcados en Egresos</button></div>
+    <div class="tbl-scroll" style="max-height:58vh"><table class="tbl"><thead><tr><th></th><th>Fecha</th><th style="text-align:left">Concepto</th><th class="num">Bs</th><th>Beneficiario</th><th>Cuenta analítica</th></tr></thead><tbody>${items.map((it,i)=>`<tr>
+      <td><input type="checkbox" class="cdSel" data-i="${i}" checked></td><td>${_cdDmy(it.x.f)}</td><td style="text-align:left">${esc(it.x.con)}</td><td class="num">${f2(it.x.monto)}</td>
+      <td><input class="cdBen" data-i="${i}" list="dl_ben" value="${esc(it.ben)}" style="min-width:150px"></td>
+      <td><input class="cdCC" data-i="${i}" list="dl_cc" value="${esc(it.cc)}" placeholder="(clasificar después)" style="min-width:170px"></td></tr>`).join("")}</tbody></table></div>`,1000);
+  const res=()=>{ const s=items.filter(i=>i.sel); ov.querySelector("#cdRes").textContent=`${s.length} marcados · Bs ${f2(s.reduce((a,i)=>a+i.x.monto,0))}`; ov.querySelector("#cdGuardar").disabled=!s.length; };
+  ov.querySelectorAll(".cdSel").forEach(x=>x.addEventListener("change",()=>{ items[+x.dataset.i].sel=x.checked; res(); }));
+  ov.querySelectorAll(".cdBen").forEach(x=>x.addEventListener("change",()=>{ items[+x.dataset.i].ben=x.value.trim(); }));
+  ov.querySelectorAll(".cdCC").forEach(x=>x.addEventListener("change",()=>{ items[+x.dataset.i].cc=x.value.trim(); }));
+  res();
+  ov.querySelector("#cdGuardar").addEventListener("click",async()=>{
+    const s=items.filter(i=>i.sel); if(!s.length||!confirm(`Se agregarán ${s.length} pagos de CIDRE a Egresos. ¿Guardar?`)) return;
+    let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
+    const por=ov.querySelector("#cdPor").value.trim();
+    const datos=s.map(it=>{ let p=it.cc?_tjPlanDe(it.cc):{}; if(it.cc&&!p.codc&&it.sug&&it.sug.cc===it.cc){ const e=it.sug.e; p={codc:e.codc||"",grupo:e.grupoc||"",sc:e.ksubgrupo||"",cp:e.cp||"",cuenta:e.kcuenta||""}; }
+      return {fechaPago:it.x.f,fechaCont:it.x.f,concepto:it.x.con,importe:it.x.monto,moneda:"BOB",estado:"Pagado",pais:"Bolivia",
+        cuentaPrincipal:p.cp||"",subCuenta:p.sc||"",cuentaContable:it.cc||"",grupo:p.grupo||"",codigoContable:p.codc||"",cuenta:p.cuenta||"",
+        comentarios:"Desde la hoja de pagos CIDRE"+(it.x.tc?` · TC ${it.x.tc}`:""),beneficiario:it.ben||"",tipoPago:CIDRE_CUENTA,pagadoPor:por}; });
+    const b=ov.querySelector("#cdGuardar"); b.disabled=true; b.textContent="Guardando…"; ov._msg("");
+    try{ const r=await nmRun("registrarEgresosLote",pin,datos);
+      if(!r||r.error){ ov._msg("No se pudo guardar: "+((r&&r.error)||"sin respuesta")); b.disabled=false; b.textContent="Guardar marcados en Egresos"; return; }
+      ov._msg(`Listo ✓ Se agregaron ${r.agregados} pagos a Egresos. Actualizando…`,true);
+      setTimeout(()=>{ ov.remove(); actualizarDatos(); },1200);
+    }catch(e){ ov._msg("No se pudo guardar: "+((e&&e.message)||e)); b.disabled=false; b.textContent="Guardar marcados en Egresos"; }
+  });
 }
 /* V184: pagos hechos desde Tesabiz (se reconocen por "Tesabiz" en la columna Tipo de Pago) */
 function esPagoTesabiz(r){ return esCuentaCidre(r.tipo); }   // V196: (nombre antiguo) ahora = pagos desde CIDRE - Peso Liquidez

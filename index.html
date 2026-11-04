@@ -7300,8 +7300,8 @@ function tarjetaRevisar(movs, nombreArchivo){
   }
   // Cuenta analítica sugerida: la última usada para ese proveedor
   const porBen={}; (STATE.egresos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(e=>{
-    const k=_tjNorm(e.ben||e.con); if(k&&e.cc) porBen[k]={cc:e.cc,pais:e.pais}; });
-  movs.forEach(m=>{ const s=porBen[_tjNorm(m.prov)]||porBen[_tjNorm(m.desc)]; m.cc=s?s.cc:""; m.paisSug=s?s.pais:""; });
+    const cc=e.ca||e.cc; if(!cc) return; [e.ben,e.con].forEach(x=>{ const k=_tjNorm(x); if(k) porBen[k]={cc,pais:e.pais,e}; }); });
+  movs.forEach(m=>{ const s=porBen[_tjNorm(m.prov)]||porBen[_tjNorm(m.desc)]; m.cc=s?s.cc:""; m.paisSug=s?s.pais:""; m.sug=s||null; });
   marcar();
   const meses=[...new Set(movs.map(m=>m.f.slice(0,7)))].sort();
   const cuentas=cuentasPago().filter(esCuentaTC);
@@ -7344,7 +7344,8 @@ function tarjetaRevisar(movs, nombreArchivo){
     if(!confirm(`Se agregarán ${s.length} gastos a Egresos ($${f2(s.reduce((a,m)=>a+m.usd,0))}), pagados con «${st.cuenta}» por «${st.por}».`+
       (pe?`\n\n⚠ ${pe} están marcados como consumo personal.`:"")+(ya?`\n⚠ ${ya} parecen ya registrados (podrían duplicarse).`:"")+"\n\n¿Guardar?")) return;
     let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
-    const lista=s.map(m=>{ const p=m.cc?_tjPlanDe(m.cc):{};
+    const lista=s.map(m=>{ let p=m.cc?_tjPlanDe(m.cc):{};
+      if(m.cc&&!p.codc&&m.sug&&m.sug.cc===m.cc){ const e=m.sug.e; p={codc:e.codc||"",grupo:e.grupoc||"",sc:e.sc||"",cp:e.cp||""}; }
       const com=["Tarjeta "+(m.tar||st.cuenta), m.desc&&m.desc!==m.prov?m.desc:"", m.mon&&m.mon!=="USD"&&m.orig?`Original: ${m.orig} ${m.mon}`:"", m.pend?"Pendiente de liquidar":""].filter(Boolean).join(" · ");
       return {fechaPago:m.f,fechaCont:m.f,concepto:m.prov,importe:m.usd,moneda:"USD",estado:"Pagado",pais:m.paisSug||"",
         cuentaPrincipal:p.cp||"",subCuenta:p.sc||"",cuentaContable:m.cc||"",grupo:p.grupo||"",codigoContable:p.codc||"",

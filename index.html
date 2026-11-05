@@ -674,13 +674,14 @@ td .pc:focus{border-color:var(--brand)}
 .pnl-l0 td:first-child{font-weight:800;font-size:13.5px}
 /* V223: Estado de Resultados: un color por nivel (sin color = Cuenta Analítica), columna de cuentas más angosta y totales fijos abajo */
 #pnlTable th:first-child,#pnlTable td:first-child{min-width:190px;max-width:250px;white-space:normal;overflow-wrap:anywhere}
-#pnlTable tr.pnl-l0>td{background:#163832!important;color:#fff!important}
-#pnlTable tr.pnl-l1>td{background:#cfe3d5!important;color:#051F20}
+#pnlTable tr.pnl-l0>td,#lcGrp tr.pnl-l0>td{background:#163832!important;color:#fff!important}
+#pnlTable tr.pnl-l1>td,#lcGrp tr.pnl-l1>td{background:#cfe3d5!important;color:#051F20}
 #pnlTable tr.pnl-l2>td{background:#e3f0e6!important;color:#051F20}
 #pnlTable tr.pnl-l3>td{background:#f2f8f3!important;color:#051F20}
-html.tema-oscuro #pnlTable tr.pnl-l1>td{background:#235347!important;color:#fff}
+html.tema-oscuro #pnlTable tr.pnl-l1>td,html.tema-oscuro #lcGrp tr.pnl-l1>td{background:#235347!important;color:#fff}
 html.tema-oscuro #pnlTable tr.pnl-l2>td{background:#1b4038!important;color:#fff}
 html.tema-oscuro #pnlTable tr.pnl-l3>td{background:#12302a!important;color:#fff}
+#lcGrp tfoot td{position:sticky;bottom:0;z-index:2;background:#235347;color:#fff;font-weight:700}
 #pnlTable tfoot td{position:sticky;bottom:0;z-index:2;background:#235347;color:#fff;font-weight:700;border-top:2px solid var(--border2)}
 #pnlTable tfoot tr:nth-last-child(2) td{bottom:34px}
 #pnlTable tfoot tr:nth-last-child(3) td{bottom:68px}
@@ -1570,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V235";
+const APP_VERSION = "V236";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3863,7 +3864,7 @@ function renderEgresosGeneral(){
   if(STATE.egGenCA!=="__all") rows=rows.filter(r=>STATE.egGenCA==="__sin"?!r.ca:String(r.ca||"")===STATE.egGenCA);
   if(STATE.egGenMes!=="__all") rows=rows.filter(r=>String(r.mi)===STATE.egGenMes);
   if(STATE.egGenCosto!=="__all") rows=rows.filter(r=>String(r.costo||"")===STATE.egGenCosto);
-  if(STATE.egGenAsig&&STATE.egGenAsig!=="__all") rows=rows.filter(r=>{ const x=r.casrc; return STATE.egGenAsig==="manual"?x==="manual":STATE.egGenAsig==="auto"?(x==="auto"||x==="hist"):STATE.egGenAsig==="sheet"?x==="sheet":(!r.ca); });
+  if(STATE.egGenAsig&&STATE.egGenAsig!=="__all") rows=rows.filter(r=>{ const x=r.casrc; return STATE.egGenAsig==="manual"?x==="manual":STATE.egGenAsig==="auto"?(x==="auto"||x==="hist"||x==="adiv"):STATE.egGenAsig==="sheet"?x==="sheet":(!r.ca); });
   const q=String(STATE.egGenSearch||"").trim().toLowerCase();
   // V205: también busca por beneficiario, comentario (N° de transferencia, cuenta destino), pagado por, tipo de pago e IMPORTE
   if(q){ const nq=egNumQuery(q); const qn=_rhNorm(q);
@@ -4121,7 +4122,9 @@ function resolveGeneric(fuente, huella, keyText, sheetCa, conText){
   const base=asigBaseIndex()[_normTxt(keyText)]; if(base) return {ca:caNombre(base), src:"auto"};
   if(sheetCa && String(sheetCa).trim()) return {ca:caNombre(String(sheetCa).trim()), src:"sheet"};
   // V232: si nadie la asignó, el sistema la deduce del historial (mismo proveedor o mismo concepto)
-  if(!STATE._histBuilding){ const H=caHistIndex(); const h=H[_normTxt(keyText)]||H[_normTxt(conText)]; if(h) return {ca:h, src:"hist"}; }
+  if(!STATE._histBuilding){ const H=caHistIndex(); const h=H[_normTxt(keyText)]||H[_normTxt(conText)]; if(h) return {ca:h, src:"hist"};
+    // V236: último recurso, una cuenta aproximada por palabras parecidas (se corrige con un clic)
+    const a=caAdivinar((keyText||"")+" "+(conText||"")); if(a) return {ca:a, src:"adiv"}; }
   return {ca:"", src:"none"};
 }
 /* V232: si la cuenta analítica vino como código del plan (ej. 533004001), se muestra su nombre.
@@ -4137,22 +4140,39 @@ function caNombre(v){ const t=String(v||"").trim(); if(!t) return t;
 function caHistIndex(){
   const sig=[STATE.egresos,STATE.mercury,STATE.bitgo,(STATE.asigManual||[]).length,STATE.plan].map(x=>x&&x.length!=null?x.length:x);
   if(STATE._chIdx&&STATE._chSig&&sig.every((x,i)=>x===STATE._chSig[i])&&STATE._chEg===STATE.egresos) return STATE._chIdx;
-  const cnt={}; STATE._histBuilding=true;
-  try{ egresosUnificados().forEach(r=>{ if(!r.ca||r.casrc==="sin"||r.casrc==="none"||r.casrc==="hist") return;
-      [r.keytext,r.con].forEach(k=>{ k=_normTxt(k); if(k.length<3) return; const o=cnt[k]||(cnt[k]={}); o[r.ca]=(o[r.ca]||0)+1; }); }); }
+  const cnt={}, tok={}; STATE._histBuilding=true;
+  try{ egresosUnificados().forEach(r=>{ if(!r.ca||r.casrc==="sin"||r.casrc==="none"||r.casrc==="hist"||r.casrc==="adiv") return;
+      [r.keytext,r.con].forEach(k=>{ k=_normTxt(k); if(k.length<3) return; const o=cnt[k]||(cnt[k]={}); o[r.ca]=(o[r.ca]||0)+1; });
+      new Set(_caToks(r.keytext+" "+r.con)).forEach(t=>{ const o=tok[t]||(tok[t]={}); o[r.ca]=(o[r.ca]||0)+1; }); }); }
   catch(e){ console.error("historial CA",e); }
   finally{ STATE._histBuilding=false; }
   const idx={}; Object.entries(cnt).forEach(([k,o])=>{ const L=Object.entries(o).sort((a,b)=>b[1]-a[1]), tot=L.reduce((s,x)=>s+x[1],0); if(L[0][1]/tot>=0.6) idx[k]=L[0][0]; });
-  STATE._chIdx=idx; STATE._chSig=sig; STATE._chEg=STATE.egresos; return idx;
+  STATE._chIdx=idx; STATE._chTok=tok; STATE._chAdiv={}; STATE._chSig=sig; STATE._chEg=STATE.egresos; return idx;
 }
+/* V236: cuenta analítica aproximada para lo que sigue sin cuenta.
+   1) si el texto contiene el nombre de una cuenta analítica activa del plan (ej. «Dismac», «DocuSign»), esa;
+   2) si no, votan las palabras del texto según en qué cuentas aparecieron antes (las palabras raras pesan más). */
+const _CA_STOP=new Set("pago pagos compra compras servicio servicios peso pesos latam bolivia factura recibo transferencia transfer para por con del las los una uno srl ltda inc llc com www http https mes enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre diciembre usd bob dolares bolivianos monto total varios otros".split(" "));
+function _caToks(t){ return _normTxt(t).split(/[^a-z0-9]+/).filter(w=>w.length>=4&&!_CA_STOP.has(w)&&!/^\d+$/.test(w)); }
+function caAdivinar(txt){
+  const cache=STATE._chAdiv||(STATE._chAdiv={}); const k=_normTxt(txt); if(!k.trim()) return ""; if(k in cache) return cache[k];
+  let res="";
+  const nombres=((STATE.plan&&(STATE.plan.rows||STATE.plan))||[]).filter(r=>/anal/i.test(r.categoria||"")&&!/inact|baja/i.test(r.estado||""))
+    .map(r=>String(r.nombre||"").trim()).filter(n=>n.length>=4&&!/^\d+$/.test(n)&&_normTxt(n)!=="otros").sort((a,b)=>b.length-a.length);
+  const pal=" "+k.replace(/[^a-z0-9]+/g," ")+" ";
+  for(const n of nombres){ const nn=_normTxt(n).replace(/[^a-z0-9]+/g," ").trim(); if(nn.length>=4&&pal.indexOf(" "+nn+" ")>=0){ res=n; break; } }
+  if(!res&&STATE._chTok){ const v={}; _caToks(txt).forEach(t=>{ const o=STATE._chTok[t]; if(!o) return; const L=Object.entries(o), tot=L.reduce((s,x)=>s+x[1],0), w=1/Math.max(1,Object.keys(o).length);
+      L.forEach(([ca,c])=>{ v[ca]=(v[ca]||0)+w*c/tot; }); });
+    const L=Object.entries(v).sort((a,b)=>b[1]-a[1]), tot=L.reduce((s,x)=>s+x[1],0); if(L.length&&L[0][1]/tot>=0.5) res=L[0][0]; }
+  cache[k]=res; return res; }
 function ancGeneric(res, fb){ fb=fb||{}; const j=caJer(res.ca, fb.cp)||{};
   if(j.plan) return { ca:res.ca, src:res.src, kcuenta:j.kcuenta, grupoc:j.grupoc, ksubgrupo:j.ksubgrupo, cp:j.cp, plan:true };
   return { ca:res.ca, src:res.src, kcuenta:j.kcuenta||fb.kcuenta||"", grupoc:j.grupoc||fb.grupoc||"", ksubgrupo:j.ksubgrupo||fb.ksubgrupo||"", cp:j.cp||fb.cp||"", plan:false }; }
 // Celda interactiva genérica (fuente + huella)
 function caCellHTMLg(fuente, huella, res){
-  const cls=res.src==="manual"?"ca-man":((res.src==="auto"||res.src==="hist")?"ca-auto":(res.src==="sheet"?"ca-sheet":"ca-none"));
+  const cls=res.src==="manual"?"ca-man":((res.src==="auto"||res.src==="hist"||res.src==="adiv")?"ca-auto":(res.src==="sheet"?"ca-sheet":"ca-none"));
   const label=res.ca?esc(res.ca):"Asignar";
-  const title=res.src==="manual"?"Manual (tú la pusiste) · clic para cambiar":(res.src==="auto"?"Automática (base Asignación) · clic para cambiar":res.src==="hist"?"Automática: el sistema la dedujo del historial (mismo proveedor o concepto) · clic para cambiar":(res.src==="sheet"?"Valor de la hoja, aún no está en la base · clic para asignar":"Sin asignar · clic para asignar"));
+  const title=res.src==="manual"?"Manual (tú la pusiste) · clic para cambiar":(res.src==="auto"?"Automática (base Asignación) · clic para cambiar":res.src==="hist"?"Automática: el sistema la dedujo del historial (mismo proveedor o concepto) · clic para cambiar":res.src==="adiv"?"Automática (aproximada): el sistema la eligió por palabras parecidas · revísala y clic para corregir":(res.src==="sheet"?"Valor de la hoja, aún no está en la base · clic para asignar":"Sin asignar · clic para asignar"));
   const rev=(res.src==="manual"||res.src==="sin")?`<button type="button" class="ca-revert" data-fuente="${esc(fuente)}" data-hu="${esc(huella)}" title="Volver a automático">↻</button>`:"";
   return `<span class="ca-wrap"><button type="button" class="ca-cell ${cls}" data-fuente="${esc(fuente)}" data-hu="${esc(huella)}" title="${esc(title)}">${label}</button>${rev}</span>`;
 }
@@ -6028,7 +6048,7 @@ function renderCostos(){
     const accion=STATE.cosFB?`<button class="btn primary" id="lcAdd">+ Agregar costo</button>`:(NMFB.esAdmin()&&nmFbActivo()?`<button class="btn primary" id="lcMigrar" title="Copia la hoja «Tabla Costos» a la nube del sistema; la hoja queda de respaldo">☁ Pasar la lista a la nube</button>`:"");
     const toolbar=`<div class="toolbar" style="align-items:center">${esearch("lcSearch","Buscar proveedor o concepto…",STATE.lcSearch)}${lcFB.bar}<div class="spacer"></div>${accion}</div>${lcFB.panel}
       ${STATE.cosFBErr?`<div class="msg err" style="display:block;margin:0 0 12px">${esc(STATE.cosFBErr)}</div>`:""}${!STATE.cosFB?`<div class="mini" style="margin:-4px 0 10px">La lista todavía se lee de la hoja «Tabla Costos». Para editarla aquí hay que pasarla a la nube.</div>`:""}`;
-    const vistaSeg=`<div class="seg" id="lcVista" style="margin:0 0 14px;flex-wrap:wrap"><button data-v="lista" class="${vista==="lista"?"on":""}">Lista</button><button data-v="sugerencias" class="${vista==="sugerencias"?"on":""}">Sugerencias (${sug.length})</button><button data-v="comparar" class="${vista==="comparar"?"on":""}">Lista vs lo pagado</button></div>`;
+    const vistaSeg=`<div class="seg" id="lcVista" style="margin:0 0 14px;flex-wrap:wrap"><button data-v="lista" class="${vista==="lista"?"on":""}">Lista</button><button data-v="agrupada" class="${vista==="agrupada"?"on":""}">Agrupada</button><button data-v="sugerencias" class="${vista==="sugerencias"?"on":""}">Sugerencias (${sug.length})</button><button data-v="comparar" class="${vista==="comparar"?"on":""}">Lista vs lo pagado</button></div>`;
     const mesK=k=>MONTH_ES[k%12]+" "+String(Math.floor(k/12)).slice(2);
     let cuerpo;
     if(vista==="sugerencias") cuerpo=`<div class="card"><div class="head"><h3>Pagos frecuentes que no están en la lista</h3><span class="mini">${sug.length} · se pagaron en 2 o más meses del último año</span></div>
@@ -6045,6 +6065,29 @@ function renderCostos(){
           <td class="num" style="color:${Math.abs(f.dif)<1?"inherit":(f.dif>0?"var(--danger,#B42318)":"var(--emerald)")}">${Math.abs(f.dif)<1?"=":(f.dif>0?"+":"−")+"$"+f2(Math.abs(f.dif))}</td></tr>`).join("")}
         </tbody><tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.i.mFijoM,0))}</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.i.mVarM,0))}</b></td>
           ${cmp.ks.map((k,j)=>`<td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.pag[j],0))}</b></td>`).join("")}<td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.prom,0))}</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.dif,0))}</b></td></tr></tfoot></table></div></div>`;
+    else if(vista==="agrupada"){
+      // V236: agrupada como el Estado de Resultados: Grupo ▸ Centro de costo ▸ costo, con totales y plegable
+      const cerr=STATE.lcCerr||(STATE.lcCerr=new Set()), abiertos=STATE.lcAbr||(STATE.lcAbr=new Set());
+      const usd=v=>v?"$"+f2(v):'<span class="zero">–</span>', bob=v=>(v&&RATE)?"Bs "+f2(v*RATE):'<span class="zero">–</span>';
+      const tot=L=>({f:L.reduce((s,i)=>s+i.mFijoM,0),v:L.reduce((s,i)=>s+i.mVarM,0)});
+      const fila=(cls,pid,lbl,sub,L,caret,pad)=>{ const t=tot(L); return `<tr class="pnl-row ${cls}" ${pid?`data-lcg="${esc(pid)}"`:""}><td style="padding-left:${pad}px">${caret}${lbl}${sub?`<span class="sub2">${sub}</span>`:""}</td><td class="num">${L.length}</td><td class="num">${usd(t.f)}</td><td class="num">${usd(t.v)}</td><td class="num"><b>${usd(t.f+t.v)}</b></td><td class="num">${bob(t.f+t.v)}</td></tr>`; };
+      let body="";
+      ["Operativo","Administrativo","Comercialización"].forEach(g=>{ const L=allF.filter(i=>i.tipo===g); if(!L.length) return;
+        const ab0=!cerr.has(g);
+        body+=fila("pnl-l0 pnl-parent",g,esc(g==="Comercialización"?"Comercialización (Marketing)":g).toUpperCase(),"",L,`<span class="pnl-caret ${ab0?"open":""}">▶</span>`,8);
+        if(!ab0) return;
+        const cs={}; L.forEach(i=>{ const c=i.centro||i.cat||"(Sin centro de costo)"; (cs[c]=cs[c]||[]).push(i); });
+        Object.entries(cs).sort((a,b)=>(tot(b[1]).f+tot(b[1]).v)-(tot(a[1]).f+tot(a[1]).v)).forEach(([c,M])=>{ const pid=g+"|"+c, ab1=abiertos.has(pid);
+          body+=fila("pnl-l1 pnl-parent",pid,esc(c),"",M,`<span class="pnl-caret ${ab1?"open":""}">▶</span>`,26);
+          if(ab1) M.slice().sort((a,b)=>(b.mFijoM+b.mVarM)-(a.mFijoM+a.mVarM)).forEach(i=>{ body+=fila("pnl-l2","",esc(i.prov||"–")+(i.con?" · "+esc(i.con):""),esc(i.frec+(i.fv?" · "+costoLabel(i.fv):"")+" · "+i.moneda),[i],`<span class="pnl-caret-none"></span>`,46); });
+        }); });
+      const T=tot(allF);
+      cuerpo=`<div class="card"><div class="head"><h3>Lista de Costos agrupada</h3><span class="mini">clic en una fila para abrir o cerrar · montos llevados a base mensual</span></div>
+        <div class="toolbar" style="align-items:center;margin-bottom:10px">${esearch("lcSearch","Buscar proveedor o concepto…",STATE.lcSearch)}${lcFB.bar}<div class="spacer"></div><button class="btn ghost" id="lcAbrirTodo">Abrir todo</button><button class="btn ghost" id="lcCerrarTodo">Cerrar todo</button></div>${lcFB.panel}
+        <div class="tbl-scroll sticky-head" style="max-height:70vh"><table id="lcGrp"><thead><tr><th>Grupo ▸ Centro de costo ▸ Costo</th><th class="num">Costos</th><th class="num">Fijo /mes</th><th class="num">Variable /mes</th><th class="num tot">Total /mes</th><th class="num">BOB /mes</th></tr></thead>
+        <tbody>${body||`<tr><td colspan="6">${emptyState("Sin costos con los filtros actuales.")}</td></tr>`}</tbody>
+        <tfoot><tr><td>Total (${allF.length})</td><td class="num">${allF.length}</td><td class="num">${usd(T.f)}</td><td class="num">${usd(T.v)}</td><td class="num">${usd(T.f+T.v)}</td><td class="num">${bob(T.f+T.v)}</td></tr></tfoot></table></div></div>`;
+    }
     else cuerpo=`<div class="card"><div class="head"><h3>Lista de Costos</h3><span class="mini">${allF.length} de ${items.length} · $${f2(totUSD_F)}/mes · clic en un encabezado para ordenar</span></div>${toolbar}${tabla}</div>`;
     app.innerHTML=`
       <p class="section-intro">Todos los costos de la empresa desde tu hoja <b>Tabla Costos</b>: clasificados por <b>Tipo</b> (función), <b>Empresa</b>, <b>Centro de Costo</b> (área) y <b>Fijo/Variable</b> (comportamiento). Los montos se llevan a base <b>mensual</b> según su frecuencia; <b>USD /mes</b> y <b>BOB /mes</b> son el costo mensual total (fijo + variable) de cada fila${RATE?` al TC del día (Bs ${fTC(RATE)}/USD)`:""}.</p>
@@ -6062,6 +6105,10 @@ function renderCostos(){
     const si=$("#lcSearch"); if(si){ si.addEventListener("input",()=>{STATE.lcSearch=si.value;STATE._dynFocus="lcSearch";render();}); }
     fbWire("lcf", lcFilterDefs);
     document.querySelectorAll("#lcVista button").forEach(b=>b.addEventListener("click",()=>{ STATE.lcVista=b.dataset.v; render(); }));
+    document.querySelectorAll("#lcGrp tr[data-lcg]").forEach(tr=>tr.addEventListener("click",()=>{ const k=tr.dataset.lcg;
+      if(k.indexOf("|")<0){ const C=STATE.lcCerr; C.has(k)?C.delete(k):C.add(k); } else { const A=STATE.lcAbr; A.has(k)?A.delete(k):A.add(k); } render(); }));
+    const lat=$("#lcAbrirTodo"); if(lat) lat.addEventListener("click",()=>{ STATE.lcCerr=new Set(); STATE.lcAbr=new Set(items.map(i=>i.tipo+"|"+(i.centro||i.cat||"(Sin centro de costo)"))); render(); });
+    const lct=$("#lcCerrarTodo"); if(lct) lct.addEventListener("click",()=>{ STATE.lcCerr=new Set(["Operativo","Administrativo","Comercialización"]); STATE.lcAbr=new Set(); render(); });
     const la=$("#lcAdd"); if(la) la.addEventListener("click",()=>costoModal(null));
     document.querySelectorAll(".lc-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const it=items.find(i=>i._id===b.dataset.id); if(it) costoModal(it); }));
     document.querySelectorAll(".lc-cxp").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const it=items.find(i=>i._id===b.dataset.id); if(it) costoACxP(it); }));

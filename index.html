@@ -1570,7 +1570,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V228";
+const APP_VERSION = "V229";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4293,7 +4293,7 @@ function fbWire(prefix, defs){
 /* V228: cada tabla con su propia descarga (Excel / PDF) en su encabezado.
    Se activa pestaña por pestaña (TT_SECC). Lee la tabla tal como se ve; si la tarjeta tiene data-tx,
    usa la lista completa registrada en STATE._tx (por ejemplo cuando la pantalla muestra solo 1000 filas). */
-const TT_SECC=new Set(["egresos"]);
+const TT_SECC=new Set(["egresos","cxp"]);
 function ttWire(){
   if(!TT_SECC.has(STATE.section)) return;
   document.querySelectorAll("#app .card").forEach(card=>{
@@ -5421,7 +5421,7 @@ function renderCxP(){
     </div>`;
   const cxpFilterDefs=[
     {k:"cxpProv",lbl:"Proveedor",disp:v=>v,opts:provs.map(p=>({v:p,t:p})),ph:"Todos los proveedores"},
-    {k:"cxpMes",lbl:"Mes",disp:v=>mesES(v),opts:mesesP.map(m=>({v:m,t:mesES(m)})),ph:"Todos los meses"}
+    {k:"cxpMes",lbl:"Mes",seg:true,disp:v=>mesES(v),opts:mesesP.map(m=>({v:m,t:mesES(m)})),ph:"Todos los meses"}
   ];
   const cxpFB=fbHTML("cxpf", cxpFilterDefs);
   const puedeEd=!!STATE.egFB&&nmFbActivo();
@@ -5436,9 +5436,6 @@ function renderCxP(){
         <button data-t="lista" class="${tab==='lista'?'on':''}">Lista</button>
         <button data-t="presupuesto" class="${tab==='presupuesto'?'on':''}">Presupuesto</button>
       </div>
-      <button class="btn btn-icon icon-only" id="cxpPdf" title="Descargar PDF de lo que ves" aria-label="PDF">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
-      </button>
     </div>`;
 
   const byProv={}; rows.forEach(r=>{const p=String(r.ben||"(Sin proveedor)"); byProv[p]=(byProv[p]||0)+(+r.imp||0);});
@@ -5458,8 +5455,10 @@ function renderCxP(){
   if(puedeEd) cols.push({label:"",render:r=>r._id?`<span class="ta-acts" style="white-space:nowrap">${isPresu?"":`<button class="btn primary cxp-pagar" data-id="${esc(r._id)}" title="Registrar que ya se pagó">Pagar</button>`}<button class="btn ghost cxp-dp" data-ben="${esc(r.ben||"")}" title="Banco, cuenta y QR del proveedor">🏦</button><button class="btn ghost cxp-ed" data-id="${esc(r._id)}" title="Editar">✎</button></span>`:""});
   const S=STATE.cxpSort;
   const sorted=[...rows].sort(mkCmp(S.key,S.dir,["imp","impBOB"],["fecha"]));
-  const tableHTML=`<div class="card">
+  // V229: los filtros y la descarga van dentro de la tabla
+  const tableHTML=`<div class="card" data-tx="cxp">
       <div class="head"><h3>${isPresu?"Lista de presupuesto":"Lista de cuentas por pagar"}</h3><span class="mini">${rows.length} ${isPresu?"presupuestados":"por pagar"} · ${fmt(total)} · Bs ${f2(totalBOB)}</span></div>
+      ${toolbarHTML}
       <div class="count" style="margin:-4px 0 10px">clic en un encabezado para ordenar</div>
       ${tbl(cols,sorted.slice(0,600),["Total","","","","","",fmt(total),"Bs "+f2(totalBOB)].concat(puedeEd?[""]:[]),S,{sticky:true})}
       ${rows.length>600?`<div class="mini" style="margin-top:12px">Mostrando los primeros 600 de ${rows.length}. Usa la búsqueda o filtros para acotar.</div>`:""}
@@ -5470,9 +5469,9 @@ function renderCxP(){
     const msg = isPresu
       ? "No hay egresos presupuestados. Registra egresos con Estado <b>Presupuestado</b> en tu hoja para verlos aquí."
       : "No hay cuentas por pagar. Usa <b>+ Agregar cuenta por pagar</b>, o registra una factura en <b>Comprobantes</b>: queda como Pendiente hasta que se pague.";
-    contentHTML=`<div class="card">${emptyState(msg)}</div>`;
+    contentHTML=`${toolbarHTML}<div class="card">${emptyState(msg)}</div>`;
   } else if(isGraf){
-    contentHTML=`
+    contentHTML=`${toolbarHTML}
       <div class="grid cols-2">
         <div class="card"><div class="head"><h3>Por proveedor</h3><span class="mini">${fmt(total)}</span></div>${hbars(barsProv,()=>"#B42318",fmt)}</div>
         <div class="card"><div class="head"><h3>Por categoría</h3></div><div id="cxpBreak"></div></div>
@@ -5482,7 +5481,8 @@ function renderCxP(){
     contentHTML=tableHTML;
   }
 
-  $("#app").innerHTML = kpisHTML + toolbarHTML + pillsHTML + contentHTML;
+  $("#app").innerHTML = kpisHTML + pillsHTML + contentHTML;
+  STATE._tx=Object.assign(STATE._tx||{},{cxp:{cols,rows:sorted,tot:["Total","","","","","",fmt(total),"Bs "+f2(totalBOB)].concat(puedeEd?[""]:[])}});
 
   if(isGraf && rows.length){
     drawMonthly(monthTot);

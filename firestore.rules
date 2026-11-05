@@ -73,5 +73,8 @@ service cloud.firestore {
     // Datos del sistema
     match /tareas/{id} { allow read, write: if claveOk(); }
     match /asignacionManual/{id} { allow read, write: if claveOk(); }
+    // V216: egresos (antes hoja HistorialEgresos), un documento por gasto. El sistema "borra" marcando _borrado;
+    // borrar el documento de verdad solo lo puede el administrador.
+    match /egresos/{id} { allow read, create, update: if claveOk(); allow delete: if esAdmin(); }
   }
 }

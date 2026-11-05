@@ -1365,8 +1365,8 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
   <div class="modal">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
-        <h2>Registrar gasto</h2>
-        <p class="lead">Se guardará en la hoja <b>HistorialEgresos</b> del archivo principal y aparecerá en el dashboard.</p>
+        <h2 id="egFormTitle">Registrar gasto</h2>
+        <p class="lead" id="egFormLead">Se guardará en la hoja <b>HistorialEgresos</b> del archivo principal y aparecerá en el dashboard.</p>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn" id="egCompBtn">📎 Leer comprobante con IA</button><input type="file" id="egCompFile" accept="image/*,application/pdf" hidden><span class="mini" id="egCompMsg"></span></div>
       </div>
       <button class="x" id="egFormClose">&times;</button>
@@ -1416,6 +1416,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
     <datalist id="dl_pagadopor"></datalist>
     <datalist id="dl_pais"></datalist>
     <div class="modal-actions">
+      <button class="btn" id="egFormDel" style="display:none;margin-right:auto;color:var(--rose)">🗑 Borrar gasto</button>
       <button class="btn" id="egFormCancel">Cancelar</button>
       <button class="btn primary" id="egFormSave">Guardar gasto</button>
     </div>
@@ -1517,7 +1518,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V215";
+const APP_VERSION = "V216";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3547,7 +3548,7 @@ function egresosUnificados(){
   const bobOf=(usd,fecha)=>{ const r=tcRateFor(fecha); return r? usd*r : (RATE? usd*RATE : null); };
   (STATE.egresos||[]).filter(e=>yOk(e.g)&&empPassRow(e)).forEach(e=>{
     const a=ancEgreso(e);
-    out.push({ origen:"Egresos", fecha:e.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Egresos", hu:e._hu,
+    out.push({ origen:"Egresos", egId:e._id||null, fecha:e.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Egresos", hu:e._hu,
       keytext:e.ben||"", con:e.con||e.ben||"", moneda:e.moneda||"USD", usd:(e.impUSD!=null?+e.impUSD:(+e.imp||0)), bob:(e.impBOB!=null?+e.impBOB:null),
       estado:e.e||"", tipo:e.tipo||"", costo:e._costo||"", m:e.m, g:e.g, mi:monthIdx(e.m), orig:(e.impOrig!=null?+e.impOrig:+e.imp||0), cuentaPago:e.tipo||"",
       extra:[e.ben,e.coment,e.pagadopor,e.pais,e.codc].filter(Boolean).join(" ") });
@@ -3634,6 +3635,7 @@ function renderEgresosGeneral(){
     {label:"Monto original",right:1,cls:"num",sortKey:"orig",render:r=>r.orig!=null?((r.moneda==="BOB"?"Bs ":"$")+f2(r.orig)):'<span class="zero">–</span>'},
     {label:"USD",right:1,cls:"num",sortKey:"usd",render:r=>r.usd!=null?fmt(r.usd,2):'<span class="zero">–</span>'},
     {label:"BOB",right:1,cls:"num",sortKey:"bob",render:r=>r.bob!=null?("Bs "+f2(r.bob)):'<span class="zero">–</span>'},
+    {label:"",render:r=>(r.egId&&STATE.egFB)?`<button class="btn ghost eg-ed" data-id="${esc(r.egId)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button>`:""},
   ];
   const totRow=cols.map((c,i)=> i===0?("Total ("+rows.length+")"):(c.label==="USD"?fmt(totUSD,2):(c.label==="BOB"?("Bs "+f2(totBOB)):"")));
   const fijoUSD=rows.filter(r=>r.costo==="fijo").reduce((s,r)=>s+(+r.usd||0),0);
@@ -3672,6 +3674,7 @@ function renderEgresosGeneral(){
   const si=$("#egGenSearch"); if(si){ si.addEventListener("input",()=>{STATE.egGenSearch=si.value;STATE._focus=true;render();}); }
   fbWire("eggf", egGenFilterDefs);
   tarjetaWire(); wireCaCells();
+  document.querySelectorAll(".eg-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const e=(STATE.egresos||[]).find(x=>x._id===b.dataset.id); if(e) abrirFormEgreso(e); }));
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
   document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
     const k=th.dataset.k;
@@ -7403,12 +7406,12 @@ function tarjetaRevisar(movs, nombreArchivo){
         cuentaPrincipal:p.cp||"",subCuenta:p.sc||"",cuentaContable:m.cc||"",grupo:p.grupo||"",codigoContable:p.codc||"",cuenta:p.cuenta||"",
         comentarios:com,beneficiario:m.prov,tipoPago:st.cuenta,pagadoPor:st.por}; });
     const b=ov.querySelector("#tjGuardar"); b.disabled=true; b.textContent="Guardando…"; ov._msg("");
-    try{ const res=await nmRun("registrarEgresosLote",pin,lista);
+    try{ const res=await egresosRegistrarLote(pin,lista);
       if(!res||res.error){ const e=(res&&res.error)||"Sin respuesta del servidor.";
         ov._msg(/no permitida/i.test(e)?"El servidor todavía no tiene la función para guardar varios gastos. Hay que actualizar Apps Script (Deploy).":"No se pudo guardar: "+e);
         b.disabled=false; b.textContent="Guardar marcados en Egresos"; return; }
       ov._msg(`Listo ✓ Se agregaron ${res.agregados} gastos a Egresos. Actualizando…`,true);
-      setTimeout(()=>{ ov.remove(); actualizarDatos(); },1200);
+      setTimeout(()=>{ ov.remove(); egresosTrasGuardar(); },1200);
     }catch(e){ ov._msg("No se pudo guardar: "+((e&&e.message)||e)); b.disabled=false; b.textContent="Guardar marcados en Egresos"; }
   });
   pintar();
@@ -7617,10 +7620,10 @@ function cidreRegistrar(lista){
         cuentaPrincipal:p.cp||"",subCuenta:p.sc||"",cuentaContable:it.cc||"",grupo:p.grupo||"",codigoContable:p.codc||"",cuenta:p.cuenta||"",
         comentarios:"Desde la hoja de pagos CIDRE"+(it.x.tc?` · TC ${it.x.tc}`:""),beneficiario:it.ben||"",tipoPago:CIDRE_CUENTA,pagadoPor:por}; });
     const b=ov.querySelector("#cdGuardar"); b.disabled=true; b.textContent="Guardando…"; ov._msg("");
-    try{ const r=await nmRun("registrarEgresosLote",pin,datos);
+    try{ const r=await egresosRegistrarLote(pin,datos);
       if(!r||r.error){ ov._msg("No se pudo guardar: "+((r&&r.error)||"sin respuesta")); b.disabled=false; b.textContent="Guardar marcados en Egresos"; return; }
       ov._msg(`Listo ✓ Se agregaron ${r.agregados} pagos a Egresos. Actualizando…`,true);
-      setTimeout(()=>{ ov.remove(); actualizarDatos(); },1200);
+      setTimeout(()=>{ ov.remove(); egresosTrasGuardar(); },1200);
     }catch(e){ ov._msg("No se pudo guardar: "+((e&&e.message)||e)); b.disabled=false; b.textContent="Guardar marcados en Egresos"; }
   });
 }
@@ -8746,6 +8749,7 @@ function mapEgresosHist(raw){
     if(_tcm==null || String(_tcm).trim()==="") _tcm = r.tcmanual;
     o.tcManual = (_tcm!=null && String(_tcm).trim()!=="") ? toNum(_tcm) : null;
     if(!(o.tcManual>0)) o.tcManual=null;
+    o._id=r._id||null; o._raw=r;   // V216: para editar/borrar en Firebase
     o._manual=true; return o;
   }).filter(o=> o.impOrig!==0 || o.cp || o.cc);
 }
@@ -9004,6 +9008,16 @@ const NMFB={
     const o={id:id,tarea:String(t.tarea||""),estado:String(t.estado||"Pendiente"),prioridad:String(t.prioridad||"Media"),vence:String(t.vence||"").slice(0,10),notas:String(t.notas||""),creado:String(t.creado||_isoHoy()),actualizado:new Date().toISOString(),por:this.sesion.email};
     await this.db.doc("tareas/"+id).set(o); return o; },
   async tareaBorrar(id){ await this.db.doc("tareas/"+String(id).replace(/\//g,"-")).delete(); },
+  // V216: egresos (un documento por gasto). desdeMs = solo los cambiados después de esa hora (caché)
+  async egLeer(desdeMs){ let q=this.db.collection("egresos"); if(desdeMs) q=q.where("_act",">",firebase.firestore.Timestamp.fromMillis(desdeMs));
+    const sn=await q.get(); return sn.docs.map(d=>{ const o=d.data(); o._id=d.id; o._actMs=(o._act&&o._act.toMillis)?o._act.toMillis():0; delete o._act; return o; }); },
+  async egGuardar(filas){ const ids=[]; const por=(this.sesion&&this.sesion.email)||"";
+    for(let i=0;i<filas.length;i+=400){ const b=this.db.batch();
+      filas.slice(i,i+400).forEach((f,k)=>{ const o=Object.assign({},f); const id=o._id; delete o._id; delete o._actMs;
+        const ref=id?this.db.collection("egresos").doc(String(id)):this.db.collection("egresos").doc();
+        if(o._orden==null) o._orden=Date.now()+i+k; o._act=firebase.firestore.FieldValue.serverTimestamp(); o._por=por; b.set(ref,o); ids.push(ref.id); });
+      await b.commit(); }
+    return ids; },
   async asigGuardar(items){ const ahora=new Date().toISOString(), por=this.sesion.email;
     await this._lote(items.map(it=>b=>{ const ref=this.db.doc("asignacionManual/"+this._id(it.fuente,it.huella));
       if(it.ca) b.set(ref,{fuente:String(it.fuente),huella:String(it.huella),ca:String(it.ca),actualizado:ahora,por:por}); else b.delete(ref); })); }
@@ -9046,8 +9060,83 @@ async function nmGetDataRapido(pin){
   res._fbPre=pre;
   return res;
 }
+/* ============================================================
+   V216: EGRESOS EN FIREBASE (antes: hoja HistorialEgresos)
+   - Colección egresos/{id}: un documento por gasto, con los mismos campos que la hoja
+     (fechadepago, concepto, importe… ) + _orden (orden original), _act (hora del servidor), _por, _borrado.
+   - config/egresosFB {migrado:true} indica que la hoja ya se copió; desde ahí la hoja queda como respaldo.
+   - Caché en el navegador (localStorage): la primera vez se descargan todos; después solo lo que cambió.
+   ============================================================ */
+const EG_CACHE="nm_eg_cache_v1";
+const EG_CAMPOS=["fechadepago","fechadecontabilizacion","concepto","comentarios","importe","moneda","tipodepago","pagadopor","pais","beneficiario","estado",
+  "cuenta","grupo","subgrupo","cuentaprincipal","cuentaanalitica","codigocontable","tipodecambio","mesesadistribuir","empresa"];
+function egCacheLeer(){ try{ const c=JSON.parse(localStorage.getItem(EG_CACHE)||"null"); if(c&&c.rows) return c; }catch(_){} return {sync:0,rows:{},creado:Date.now()}; }
+function egCacheGuardar(C){ try{ localStorage.setItem(EG_CACHE,JSON.stringify(C)); }catch(_){ /* sin espacio: se leerá todo la próxima vez */ } }
+function egCacheBorrar(){ try{ localStorage.removeItem(EG_CACHE); }catch(_){} }
+/* Devuelve las filas (formato hoja) desde Firebase, o null si los egresos todavía viven en la hoja */
+async function egresosFB(meta){
+  meta=meta||await NMFB.cfgGet("egresosFB"); if(!meta||!meta.migrado) return null;
+  let C=egCacheLeer();
+  if(meta.reinicio && meta.reinicio>(C.creado||0)) C={sync:0,rows:{},creado:Date.now()};   // forzar descarga completa
+  const nuevos=await NMFB.egLeer(C.sync?C.sync-5*60*1000:0);                              // 5 min de margen
+  nuevos.forEach(r=>{ C.rows[r._id]=r; if((r._actMs||0)>C.sync) C.sync=r._actMs; });
+  egCacheGuardar(C); STATE._egLeidos=nuevos.length;
+  return Object.values(C.rows).filter(r=>!r._borrado).sort((a,b)=>(a._orden||0)-(b._orden||0));
+}
+/* Pone las filas en el sistema (igual que aplicarDatos) */
+function egresosAplicarFilas(rows){
+  STATE.egresos=mapEgresosHist(rows);
+  STATE._huDone=false; STATE._huSrc=null; STATE._abIdx=null; STATE._abSrc=null; STATE._amIdx=null; STATE._amSrc=null; STATE._rcIdx=null; STATE._rcSrc=null;
+  convertirMonedas();
+}
+async function egresosRefrescar(){ const rows=await egresosFB(); if(rows){ egresosAplicarFilas(rows); render(); } }
+/* Datos del formulario (mismos nombres que usa el servidor) → fila con los campos de la hoja */
+function egresoFilaDesdeDatos(d){
+  return { fechadepago:d.fechaPago||"", fechadecontabilizacion:d.fechaCont||"", concepto:String(d.concepto||"").trim(), comentarios:d.comentarios||"",
+    importe:Number(d.importe)||0, moneda:d.moneda||"USD", tipodepago:d.tipoPago||"", pagadopor:d.pagadoPor||"", pais:d.pais||"",
+    beneficiario:d.beneficiario||"", estado:d.estado||"Pagado", cuenta:d.cuenta||(d.cuentaContable?"Egresos":""), grupo:d.grupo||"",
+    subgrupo:d.subCuenta||"", cuentaprincipal:d.cuentaPrincipal||"", cuentaanalitica:d.cuentaContable||"", codigocontable:d.codigoContable||"",
+    tipodecambio:d.tipoCambio||"", mesesadistribuir:d.mesesDistribuir||"", empresa:d.empresa||"" };
+}
+/* Guarda gastos nuevos: en Firebase si ya se migró; si no, en la hoja (servidor). Devuelve {ok, agregados} o {error} */
+async function egresosRegistrarLote(pin, lista){
+  if(!STATE.egFB) return nmRun("registrarEgresosLote",pin,lista);
+  for(let i=0;i<lista.length;i++){ const d=lista[i]||{}; if(!String(d.concepto||"").trim()||!Number(d.importe)) return {error:"Fila "+(i+1)+": falta el concepto o el importe. No se guardó nada."}; }
+  const t=Date.now(); await NMFB.egGuardar(lista.map((d,i)=>Object.assign(egresoFilaDesdeDatos(d),{_orden:t+i})));
+  return {ok:true, agregados:lista.length};
+}
+/* Después de guardar: con Firebase basta traer lo nuevo; con la hoja hay que recargar todo */
+function egresosTrasGuardar(){ if(STATE.egFB) return egresosRefrescar().catch(()=>actualizarDatos()); actualizarDatos(); }
+/* Edita (o borra) un gasto. Si cambia la huella, la Cuenta Analítica asignada a mano pasa a la nueva. */
+async function egresoActualizar(id, cambios, borrar){
+  const old=(STATE.egresos||[]).find(e=>e._id===id); if(!old||!old._raw) throw new Error("No se encontró el gasto.");
+  ensureHuellas(); const oldHu=old._hu;
+  const fila=Object.assign({},old._raw,cambios||{}); if(borrar) fila._borrado=true;
+  await NMFB.egGuardar([fila]);
+  await egresosRefrescar();
+  if(!borrar && oldHu){ ensureHuellas(); const nu=(STATE.egresos||[]).find(e=>e._id===id);
+    const man=(STATE.asigManual||[]).find(a=>a.fuente==="Egresos"&&a.huella===oldHu);
+    if(nu && man && nu._hu!==oldHu){ await NMFB.asigGuardar([{fuente:"Egresos",huella:nu._hu,ca:man.ca}]);
+      STATE.asigManual=(STATE.asigManual||[]).concat([{fuente:"Egresos",huella:nu._hu,ca:man.ca}]); STATE._amSrc=null; STATE._amIdx=null; render(); } }
+}
+/* Copia única de la hoja a Firebase (solo administrador). Las filas se identifican por su número en la hoja. */
+async function egresosMigrarAFirebase(){
+  if(!NMFB.esAdmin()) throw new Error("Solo un administrador puede migrar.");
+  const meta=await NMFB.cfgGet("egresosFB"); if(meta&&meta.migrado) throw new Error("Los egresos ya están en Firebase.");
+  const pin=localStorage.getItem("peso_pin")||""; const r=await nmRun("getDataParte",pin,"base");
+  const E=(r&&r.egresos)||[]; if(!E.length) throw new Error("La hoja no devolvió egresos.");
+  const filas=E.map((x,i)=>{ const o={}; EG_CAMPOS.forEach(k=>o[k]=(x[k]==null?"":x[k])); Object.keys(x).forEach(k=>{ if(!(k in o)) o[k]=x[k]; });
+    o._id="H"+String(i+2).padStart(5,"0"); o._fila=i+2; o._orden=i+1; return o; });   // fila 1 = títulos
+  await NMFB.egGuardar(filas);
+  await NMFB.cfgSet("egresosFB",{migrado:true,n:filas.length,fecha:new Date().toISOString(),reinicio:Date.now()});
+  egCacheBorrar(); return filas.length;
+}
 async function nmFbHistoricos(res){
   if(!nmFbActivo()||!res) return;
+  // V216: los egresos viven en Firebase (si ya se migraron); la hoja queda de respaldo
+  STATE.egFB=false; STATE.egFBErr=null;
+  try{ const eg=await egresosFB(); if(eg){ res.egresos=eg; STATE.egFB=true; } }
+  catch(e){ console.error("egresos Firebase",e); STATE.egFBErr=(e&&e.message)||String(e); }
   const PRE=res._fbPre||{};
   for(const n of NM_HIST){
     if(PRE[n]){ STATE.histFB[n]=true; continue; }   // V198: ya vino de Firebase
@@ -9668,7 +9757,7 @@ function actualizarDatos(){
     .then(async function(res){ if(res&&!res.error){ await nmFbHistoricos(res); aplicarDatos(res); await nmFbAplicarDatos(res); } done(function(){ if(res&&!res.error){ buildYears(); buildEmpresas(); _nmOdoFirma=""; render(); } else { showLogin(); } }); })
     .catch(function(){ done(); });
 }
-function cerrarSesion(){ try{ localStorage.removeItem("peso_pin"); }catch(_){} if(NMFB.on){ NMFB.logout(); STATE.usuarios=null; nmMostrarUsuariosNav(); const c=$("#fbClave"); if(c) c.value=""; } showLogin(); }
+function cerrarSesion(){ try{ localStorage.removeItem("peso_pin"); }catch(_){} egCacheBorrar(); if(NMFB.on){ NMFB.logout(); STATE.usuarios=null; nmMostrarUsuariosNav(); const c=$("#fbClave"); if(c) c.value=""; } showLogin(); }
 function showLogin(){ const c=document.querySelector(".login-card"); if(c) c.classList.remove("loading"); $("#loginOverlay").classList.add("show"); nmLoginModo(); const i=NMFB.on?($("#fbEmail")&&$("#fbEmail").value?$("#fbClave"):$("#fbEmail")):$("#pin"); if(i){ if(!NMFB.on) i.value=""; i.focus(); } try{ iaFabShow(false); }catch(_){} }
 
 /* ---------- Registrar gasto (escribe en HistorialEgresos) ---------- */
@@ -9712,19 +9801,29 @@ function autoFillCuenta(){
     ["f_codc","f_ctipo","f_grupo","f_sc","f_cp"].forEach(id=>set(id,""));
   }
 }
-function abrirFormEgreso(){
+function abrirFormEgreso(ed){
   const hoy=new Date().toISOString().slice(0,10);
+  const edit=(ed&&ed._raw&&ed._id&&STATE.egFB)?ed:null; STATE._egEdit=edit?edit._id:null;   // V216: editar un gasto existente
   const fp=$("#f_fechaPago"), fc=$("#f_fechaCont");
   if(fp) fp.value=hoy; if(fc) fc.value=hoy;
   ["f_concepto","f_importe","f_sc","f_cc","f_ben","f_tipo","f_pagadopor","f_coment","f_cp","f_pais","f_codc","f_ctipo","f_grupo"].forEach(id=>{const el=$("#"+id); if(el) el.value="";});
   const est=$("#f_estado"); if(est) est.value="Pagado";
   const mon=$("#f_moneda"); if(mon) mon.value="USD";
   poblarDatalists();
+  if(edit){ const R=edit._raw, set=(id,v)=>{ const el=$("#"+id); if(el) el.value=(v==null?"":String(v)); };
+    set("f_fechaPago",R.fechadepago); set("f_fechaCont",R.fechadecontabilizacion); set("f_concepto",R.concepto); set("f_importe",R.importe);
+    set("f_moneda",String(R.moneda||"USD").toUpperCase()); set("f_estado",R.estado||"Pagado"); set("f_pais",R.pais); set("f_cp",R.cuentaprincipal);
+    set("f_sc",R.subgrupo); set("f_cc",R.cuentaanalitica); set("f_grupo",R.grupo); set("f_codc",R.codigocontable); set("f_ctipo",R.cuenta);
+    set("f_coment",R.comentarios); set("f_ben",R.beneficiario); set("f_tipo",R.tipodepago); set("f_pagadopor",R.pagadopor); }
+  const tt=$("#egFormTitle"); if(tt) tt.textContent=edit?"Editar gasto":"Registrar gasto";
+  const ld=$("#egFormLead"); if(ld) ld.innerHTML=edit?"Los cambios se guardan en <b>Firebase</b> y se ven al instante para todos.":(STATE.egFB?"Se guardará en <b>Firebase</b> y aparecerá al instante en el sistema.":"Se guardará en la hoja <b>HistorialEgresos</b> del archivo principal y aparecerá en el dashboard.");
+  const del=$("#egFormDel"); if(del) del.style.display=edit?"":"none";
+  const sv=$("#egFormSave"); if(sv) sv.textContent=edit?"Guardar cambios":"Guardar gasto";
   const m=$("#egFormMsg"); m.className="msg"; m.textContent="";
   $("#egForm").classList.add("show");
   const c=$("#f_concepto"); if(c) c.focus();
 }
-function cerrarFormEgreso(){ $("#egForm").classList.remove("show"); STATE._compReg=null; const cm=$("#egCompMsg"); if(cm) cm.textContent=""; }
+function cerrarFormEgreso(){ $("#egForm").classList.remove("show"); STATE._egEdit=null; STATE._compReg=null; const cm=$("#egCompMsg"); if(cm) cm.textContent=""; }
 function guardarEgreso(){
   const m=$("#egFormMsg");
   const concepto=$("#f_concepto").value.trim();
@@ -9732,11 +9831,13 @@ function guardarEgreso(){
   if(!concepto){ m.className="msg err"; m.textContent="El concepto es obligatorio."; return; }
   if(!importe||isNaN(importe)){ m.className="msg err"; m.textContent="Ingresa un importe válido."; return; }
   let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
-  if(!pin){ cerrarFormEgreso(); showLogin(); return; }
+  if(!pin && !STATE.egFB){ cerrarFormEgreso(); showLogin(); return; }
+  if(STATE.egFB) return guardarEgresoFB(m);
   if(!(window.google&&google.script&&google.script.run)){
     m.className="msg err"; m.textContent="Debe abrirse desde el enlace de Apps Script para poder guardar."; return;
   }
-  const datos={
+  const datos=egresoDatosForm();
+  const _noUsado={
     fechaPago:$("#f_fechaPago").value, fechaCont:$("#f_fechaCont").value, concepto, importe,
     moneda:($("#f_moneda").value.trim().toUpperCase()||"USD"),
     estado:$("#f_estado").value, pais:$("#f_pais").value.trim(),
@@ -9757,6 +9858,39 @@ function guardarEgreso(){
     })
     .withFailureHandler(function(e){ btn.textContent="Guardar gasto"; btn.disabled=false; m.className="msg err"; m.textContent=(e&&e.message)||"Error al guardar."; })
     .registrarEgreso(pin, datos);
+}
+function egresoDatosForm(){
+  return {
+    fechaPago:$("#f_fechaPago").value, fechaCont:$("#f_fechaCont").value, concepto:$("#f_concepto").value.trim(), importe:parseFloat($("#f_importe").value),
+    moneda:($("#f_moneda").value.trim().toUpperCase()||"USD"),
+    estado:$("#f_estado").value, pais:$("#f_pais").value.trim(),
+    cuentaPrincipal:$("#f_cp").value.trim(), subCuenta:$("#f_sc").value.trim(), cuentaContable:$("#f_cc").value.trim(),
+    grupo:$("#f_grupo").value.trim(), codigoContable:$("#f_codc").value.trim(), cuenta:_cuentaRaiz($("#f_codc").value.trim()),
+    comentarios:$("#f_coment").value.trim(), beneficiario:$("#f_ben").value.trim(),
+    tipoPago:$("#f_tipo").value.trim(), pagadoPor:$("#f_pagadopor").value.trim()
+  };
+}
+/* V216: guardar (nuevo o editado) directo en Firebase */
+async function guardarEgresoFB(m){
+  const datos=egresoDatosForm(), editId=STATE._egEdit;
+  const btn=$("#egFormSave"), txt=btn.textContent; btn.textContent="Guardando…"; btn.disabled=true; m.className="msg"; m.textContent="";
+  try{
+    if(editId){ const f=egresoFilaDesdeDatos(datos); ["tipodecambio","mesesadistribuir","empresa"].forEach(k=>delete f[k]);   // el formulario no tiene esos campos: se conservan
+      await egresoActualizar(editId,f,false); }
+    else { const r=await egresosRegistrarLote("",[datos]); if(!r||r.error) throw new Error((r&&r.error)||"No se pudo guardar.");
+      try{ compMarcarRegistrado(datos); }catch(_){}
+      await egresosRefrescar(); }
+    m.className="msg ok"; m.textContent=editId?"Cambios guardados ✓":"Gasto guardado ✓";
+    setTimeout(()=>{ btn.textContent=txt; btn.disabled=false; cerrarFormEgreso(); render(); },600);
+  }catch(e){ btn.textContent=txt; btn.disabled=false; m.className="msg err"; m.textContent="No se pudo guardar: "+((e&&e.message)||e); }
+}
+async function borrarEgresoForm(){
+  const id=STATE._egEdit; if(!id) return;
+  const e=(STATE.egresos||[]).find(x=>x._id===id);
+  if(!confirm("¿Borrar este gasto?\n\n"+((e&&e.con)||"")+" · "+((e&&e.impOrig)||"")+"\n\nDeja de contar en Egresos y en el P&L. (Queda guardado en Firebase como borrado, por si hay que recuperarlo.)")) return;
+  const m=$("#egFormMsg");
+  try{ await egresoActualizar(id,{},true); cerrarFormEgreso(); render(); }
+  catch(err){ m.className="msg err"; m.textContent="No se pudo borrar: "+((err&&err.message)||err); }
 }
 function setMode(live){
   try{ iaFabShow(!!live); }catch(_){}
@@ -9900,6 +10034,7 @@ $("#pin").addEventListener("keydown",e=>{ if(e.key==="Enter") conectar($("#pin")
 $("#egFormClose").addEventListener("click",cerrarFormEgreso);
 $("#egFormCancel").addEventListener("click",cerrarFormEgreso);
 $("#egFormSave").addEventListener("click",guardarEgreso);
+$("#egFormDel").addEventListener("click",borrarEgresoForm);
 $("#egForm").addEventListener("click",e=>{ if(e.target.id==="egForm") cerrarFormEgreso(); });
 $("#f_cc").addEventListener("input",autoFillCuenta);
 $("#f_cc").addEventListener("change",autoFillCuenta);

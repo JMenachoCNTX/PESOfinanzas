@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V239";
+const APP_VERSION = "V240";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3874,7 +3874,7 @@ function renderEgresosGeneral(){
   const totUSD=rows.reduce((s,r)=>s+(+r.usd||0),0), totBOB=rows.reduce((s,r)=>s+(r.bob!=null?+r.bob:0),0);
   const S=STATE.egGenSort||{key:"fecha",dir:"desc"};
   const sorted=[...rows].sort(mkCmp(S.key,S.dir,["usd","bob"],["fecha"]));
-  const cols=[
+  STATE._egCxpRows=[]; const cols=[
     {label:"Origen",sortKey:"origen",render:r=>`<span class="tag">${esc(r.origen)}</span>`},
     {label:"Fecha",sortKey:"fecha",render:r=>`<span class="mini">${esc(fmtDate(r.fecha)|| (mesES(r.m)+" "+(r.g||"")))}</span>`},
     {label:"Cuenta",sortKey:"kcuenta",render:r=>esc(r.kcuenta||"–")},

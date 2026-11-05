@@ -3374,8 +3374,10 @@ function renderResumen(){
     const devTot = (STATE.dev||[]).reduce((s,e)=>s+(+e.importe||0),0);
     const egPaid = (STATE.egresos||[]).filter(e=>String(e.e||"").trim().toLowerCase()==="pagado").reduce((s,e)=>s+(+e.imp||0),0);
     const caja = invTot + preTot - egPaid - devTot;
-    const mesesAct=new Set((STATE.egresos||[]).filter(e=>String(e.e||"").trim().toLowerCase()==="pagado").map(e=>e.g+"-"+e.m)).size;
-    const burn=mesesAct?egPaid/mesesAct:0, runway=burn>0?caja/burn:0;
+    // Gasto mensual = promedio de los últimos 3 meses completos, de TODAS las fuentes (Egresos, BitGo, Mercury), por fecha de pago
+    const hoy=new Date(), ref=[1,2,3].map(k=>{ const d=new Date(hoy.getFullYear(),hoy.getMonth()-k,1); return d.getFullYear()*12+d.getMonth(); });
+    const svB=STATE.resBase; let pr=[]; try{ STATE.resBase="caja"; STATE._pnlSoloPagado=true; pr=pnlRows(true); } finally { STATE.resBase=svB; STATE._pnlSoloPagado=false; }
+    const burn=pr.filter(r=>!r.income&&!r.dato&&ref.includes(r.g*12+monthIdx(r.m))).reduce((a,r)=>a+(+r.usd||0),0)/3, runway=burn>0?caja/burn:0;
     STATE._resPDF.caja={invTot,preTot,egPaid,devTot,caja,runway};
     content=`<div class="card"><div class="head"><h3>Posición de caja</h3><span class="mini">referencial · acumulado desde el inicio</span></div>
         <div class="caja">
@@ -3386,7 +3388,7 @@ function renderResumen(){
           <div class="c hi"><div class="l">Caja estimada</div><div class="v">${money(caja)}</div></div>
           <div class="c hi"><div class="l">Runway</div><div class="v">${runway>0?runway.toFixed(1)+" meses":"—"}</div></div>
         </div>
-        <p class="section-intro" style="margin:10px 0 0"><b>Caja estimada</b> = capital + préstamos − egresos pagados (hoja de Egresos) − devoluciones. Es una estimación: los pagos que solo están en BitGo o Mercury no se restan aquí. <b>Runway</b> = cuántos meses alcanza esa caja al ritmo de gasto promedio (${money(burn)}/mes).</p>
+        <p class="section-intro" style="margin:10px 0 0"><b>Caja estimada</b> = capital + préstamos − egresos pagados (hoja de Egresos) − devoluciones. Es una estimación: los pagos que solo están en BitGo o Mercury no se restan aquí. <b>Runway</b> = cuántos meses alcanza esa caja al ritmo de gasto de los últimos 3 meses (${money(burn)}/mes, todas las fuentes).</p>
       </div>
       ${estadoCuentaHTML()}`;
   }

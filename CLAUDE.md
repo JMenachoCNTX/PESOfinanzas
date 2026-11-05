@@ -27,6 +27,8 @@ Incluye un widget para iPhone (app Scriptable) con un resumen.
   (`getData`, `getDataParte`, etc.) enviando un PIN. Hojas: Egresos, Ingresos, RRHH, Inversiones, Préstamos,
   Devoluciones, etc. La IA (Gemini), Slack y Google Drive (comprobantes) también se manejan desde Apps Script.
 - **Firebase Firestore** (proyecto `nummeros-peso`), colecciones:
+  `egresos` (V216: un documento por gasto, antes hoja HistorialEgresos; `config/egresosFB` = migrado; la hoja
+  quedó de respaldo y ya NO se escribe; caché en localStorage `nm_eg_cache_v1`, solo baja lo cambiado por `_act`),
   `usuarios` (correo = ID, con clave y rol), `sesiones`, `claves` (formato antiguo), `config/*`
   (apps = PIN del servidor, widget, presupuesto, plan de cuentas, tipo de cambio, históricos `config/h_*`…),
   `tareas`, `asignacionManual`.

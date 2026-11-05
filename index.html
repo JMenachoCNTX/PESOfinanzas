@@ -1556,7 +1556,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V225";
+const APP_VERSION = "V226";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -5159,15 +5159,15 @@ const INV_CATS=["Muebles","Sillas","Computadoras","Monitores y pantallas","Celul
 const INV_ESTADOS=["Bueno","Regular","Malo","De baja"];
 const INV_RX=/mueble|silla|escritorio|mesa|estante|sof[aá]|computador|laptop|notebook|macbook|imac|\bpc\b|monitor|pantalla|televisor|\btv\b|impresora|celular|iphone|tablet|ipad|teclado|mouse|aire acondicionado|refrigerador|heladera|microondas|cafetera|proyector|router|ups\b|equipo de computaci|activo fijo/i;
 function invCargar(forzar){
-  if(STATE._invCargando||(STATE.inv&&!forzar)||!nmFbActivo()) return;
-  STATE._invCargando=true;
-  NMFB.invLeer().then(L=>{ STATE.inv=L; STATE.invErr=null; })
-    .catch(e=>{ STATE.inv=[]; STATE.invErr=/permission|insufficient/i.test(String(e&&e.message||e))?"Falta publicar la regla nueva de Firebase (inventario).":String(e&&e.message||e); })
-    .then(()=>{ STATE._invCargando=false; if(STATE.section==="inventario") render(); });
+  if(STATE._inventCargando||(STATE.invent&&!forzar)||!nmFbActivo()) return;
+  STATE._inventCargando=true;
+  NMFB.invLeer().then(L=>{ STATE.invent=L; STATE.inventErr=null; })
+    .catch(e=>{ STATE.invent=[]; STATE.inventErr=/permission|insufficient/i.test(String(e&&e.message||e))?"Falta publicar la regla nueva de Firebase (inventario).":String(e&&e.message||e); })
+    .then(()=>{ STATE._inventCargando=false; if(STATE.section==="inventario") render(); });
 }
 function invUSD(o){ const t=(+o.unidades||0)*(+o.precio||0); if(String(o.moneda||"USD").toUpperCase()!=="BOB") return t; const r=tcRateLatest(); return r?t/r:0; }
 function invEgresoCand(){
-  const ya=new Set((STATE.inv||[]).map(o=>o.egId).filter(Boolean));
+  const ya=new Set((STATE.invent||[]).map(o=>o.egId).filter(Boolean));
   return (STATE.egresos||[]).filter(e=>{ if(!e._id||ya.has(e._id)) return false;
     const a=ancEgreso(e)||{}; if(/^activo/i.test(String(a.kcuenta||"").trim())) return true;
     return INV_RX.test([e.con,a.ca,a.cp,a.grupoc,a.ksubgrupo].join(" ")); })
@@ -5234,7 +5234,7 @@ function invModal(o){
       moneda:v("ivMon"),fecha:v("ivFec"),ubicacion:v("ivUbi"),responsable:v("ivRes"),notas:v("ivNot"),fotos:fotos,egId:o.egId||""};
     if(JSON.stringify(x).length>950000) return ov._msg("Las fotos pesan demasiado juntas. Quita una e inténtalo de nuevo.");
     const b=ov.querySelector("#ivGuardar"); b.disabled=true; b.textContent="Guardando…";
-    try{ const g=await NMFB.invGuardar(o._id,x); STATE.inv=(STATE.inv||[]).filter(i=>i._id!==g._id).concat([g]); ov.remove(); render(); }
+    try{ const g=await NMFB.invGuardar(o._id,x); STATE.invent=(STATE.invent||[]).filter(i=>i._id!==g._id).concat([g]); ov.remove(); render(); }
     catch(e){ b.disabled=false; b.textContent="Guardar";
       ov._msg(/permission|insufficient/i.test(String(e&&e.message||e))?"Todavía no se puede guardar: falta publicar la regla nueva de Firebase (inventario).":"No se pudo guardar: "+((e&&e.message)||e)); }
   };
@@ -5251,7 +5251,7 @@ function renderInventario(){
   if(!nmFbActivo()){ app.innerHTML=`<div class="card">${emptyState("El inventario se guarda en Firebase. Entra con tu correo y clave para verlo.")}</div>`; return; }
   invCargar();
   const tab=STATE.invTab||"lista";
-  const L=(STATE.inv||[]).slice().sort((a,b)=>String(a.categoria).localeCompare(String(b.categoria))||String(a.nombre).localeCompare(String(b.nombre)));
+  const L=(STATE.invent||[]).slice().sort((a,b)=>String(a.categoria).localeCompare(String(b.categoria))||String(a.nombre).localeCompare(String(b.nombre)));
   const cand=STATE.egresos?invEgresoCand():[];
   const q=String(STATE.invSearch||"").trim().toLowerCase(), cat=STATE.invCat||"__all";
   const rows=L.filter(o=>(cat==="__all"||o.categoria===cat)&&(!q||[o.nombre,o.categoria,o.ubicacion,o.responsable,o.notas,o.estado].join(" ").toLowerCase().includes(q)));
@@ -5268,9 +5268,9 @@ function renderInventario(){
       <div class="seg" id="invTabs"><button data-t="lista" class="${tab==="lista"?"on":""}">Inventario</button><button data-t="egresos" class="${tab==="egresos"?"on":""}">Desde Egresos (${cand.length})</button></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">${tab==="lista"?`<button class="btn" id="invXls" title="Descargar esta lista en Excel">⬇ Excel</button>`:""}<button class="btn primary" id="invAdd">+ Agregar bien</button></div>
     </div>
-    ${STATE.invErr?`<div class="msg err" style="display:block;margin:0 0 12px">${esc(STATE.invErr)}</div>`:""}`;
+    ${STATE.inventErr?`<div class="msg err" style="display:block;margin:0 0 12px">${esc(STATE.inventErr)}</div>`:""}`;
   let body="";
-  if(STATE._invCargando&&!STATE.inv) body=`<div class="card"><p class="mini">Cargando inventario…</p></div>`;
+  if(STATE._inventCargando&&!STATE.invent) body=`<div class="card"><p class="mini">Cargando inventario…</p></div>`;
   else if(tab==="egresos"){
     body=`<div class="card"><div class="head"><h3>Gastos que parecen equipos o muebles</h3></div>
       <p class="section-intro">Son gastos de Egresos con cuenta <b>ACTIVO</b> o con palabras como silla, laptop, monitor… Pulsa <b>Agregar</b> para pasarlos al inventario (puedes cambiar los datos antes de guardar).</p>
@@ -5301,7 +5301,7 @@ function renderInventario(){
   document.querySelectorAll("[data-ivf]").forEach(m=>m.onclick=()=>invFotosModal(porId(m.dataset.ivf),0));
   document.querySelectorAll("[data-ive]").forEach(b=>b.onclick=()=>invModal(porId(b.dataset.ive)));
   document.querySelectorAll("[data-ivd]").forEach(b=>b.onclick=async()=>{ const o=porId(b.dataset.ivd); if(!o||!confirm("¿Borrar «"+o.nombre+"» del inventario? Esto no se puede deshacer.")) return;
-    try{ await NMFB.invBorrar(o._id); STATE.inv=(STATE.inv||[]).filter(i=>i._id!==o._id); render(); }catch(e){ alert("No se pudo borrar: "+((e&&e.message)||e)); } });
+    try{ await NMFB.invBorrar(o._id); STATE.invent=(STATE.invent||[]).filter(i=>i._id!==o._id); render(); }catch(e){ alert("No se pudo borrar: "+((e&&e.message)||e)); } });
   document.querySelectorAll("[data-ivc]").forEach(b=>b.onclick=()=>{ const e=cand[+b.dataset.ivc]; if(!e) return; const a=ancEgreso(e)||{}, R=e._raw||{};
     invModal({nombre:e.con||a.ca||"",categoria:invCatDe([e.con,a.ca,a.cp].join(" ")),unidades:1,precio:R.importe!=null?+R.importe:(+e.imp||0),
       moneda:String(R.moneda||"USD").toUpperCase()==="BOB"?"BOB":"USD",fecha:String(e.fecha||"").slice(0,10),notas:e.ben?("Proveedor: "+e.ben):"",egId:e._id,_egTxt:[String(e.fecha||"").slice(0,10),e.con,e.ben].filter(Boolean).join(" · ")}); });

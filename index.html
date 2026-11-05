@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V236";
+const APP_VERSION = "V237";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4153,16 +4153,17 @@ function caHistIndex(){
    1) si el texto contiene el nombre de una cuenta analítica activa del plan (ej. «Dismac», «DocuSign»), esa;
    2) si no, votan las palabras del texto según en qué cuentas aparecieron antes (las palabras raras pesan más). */
 const _CA_STOP=new Set("pago pagos compra compras servicio servicios peso pesos latam bolivia factura recibo transferencia transfer para por con del las los una uno srl ltda inc llc com www http https mes enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre diciembre usd bob dolares bolivianos monto total varios otros".split(" "));
+const _CA_NO=/^\s*(otros?|falta|pendiente|sin asignar|sin cuenta|-+)\s*$/i;  // nunca se proponen como aproximadas
 function _caToks(t){ return _normTxt(t).split(/[^a-z0-9]+/).filter(w=>w.length>=4&&!_CA_STOP.has(w)&&!/^\d+$/.test(w)); }
 function caAdivinar(txt){
   const cache=STATE._chAdiv||(STATE._chAdiv={}); const k=_normTxt(txt); if(!k.trim()) return ""; if(k in cache) return cache[k];
   let res="";
   const nombres=((STATE.plan&&(STATE.plan.rows||STATE.plan))||[]).filter(r=>/anal/i.test(r.categoria||"")&&!/inact|baja/i.test(r.estado||""))
-    .map(r=>String(r.nombre||"").trim()).filter(n=>n.length>=4&&!/^\d+$/.test(n)&&_normTxt(n)!=="otros").sort((a,b)=>b.length-a.length);
+    .map(r=>String(r.nombre||"").trim()).filter(n=>n.length>=4&&!/^\d+$/.test(n)&&!_CA_NO.test(n)).sort((a,b)=>b.length-a.length);
   const pal=" "+k.replace(/[^a-z0-9]+/g," ")+" ";
   for(const n of nombres){ const nn=_normTxt(n).replace(/[^a-z0-9]+/g," ").trim(); if(nn.length>=4&&pal.indexOf(" "+nn+" ")>=0){ res=n; break; } }
   if(!res&&STATE._chTok){ const v={}; _caToks(txt).forEach(t=>{ const o=STATE._chTok[t]; if(!o) return; const L=Object.entries(o), tot=L.reduce((s,x)=>s+x[1],0), w=1/Math.max(1,Object.keys(o).length);
-      L.forEach(([ca,c])=>{ v[ca]=(v[ca]||0)+w*c/tot; }); });
+      L.forEach(([ca,c])=>{ if(!_CA_NO.test(ca)) v[ca]=(v[ca]||0)+w*c/tot; }); });
     const L=Object.entries(v).sort((a,b)=>b[1]-a[1]), tot=L.reduce((s,x)=>s+x[1],0); if(L.length&&L[0][1]/tot>=0.5) res=L[0][0]; }
   cache[k]=res; return res; }
 function ancGeneric(res, fb){ fb=fb||{}; const j=caJer(res.ca, fb.cp)||{};

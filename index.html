@@ -1001,6 +1001,12 @@ td.chk input,th.chk input{accent-color:var(--brand)}
 :root{--on-brand:#FFFFFF}
 .btn.primary,.seg button.on,.rchip.on,.topsub.on,.tsub-mi.on,.filt-btn.on,#sidenav button.on,#sidenav button.on:hover,.sidebar .ver,.ia-b.u,.iafab-btn,.iafab-send,.emp-ic{color:var(--on-brand)}
 .reloj{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1;padding:0 6px;white-space:nowrap}
+/* V214: Resumen P&L */
+.res-cascada td,.res-mes td{padding:8px 10px}
+.res-mes td:first-child{white-space:nowrap}
+tr.res-sub td{font-weight:600;border-top:1px solid var(--border)}
+tr.res-tot td{font-weight:700;border-top:2px solid var(--text)}
+tr.res-pos td:first-child{font-weight:600}
 /* V213: botones arriba a la derecha y la hora debajo */
 .topbar-in>.spacer{display:none}
 .topder{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto}
@@ -1508,7 +1514,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V213";
+const APP_VERSION = "V214";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2428,7 +2434,7 @@ function render(){
 let NM_PRESU=null;
 function presuCargar(){ if(NM_PRESU||!nmFbActivo()) return; NM_PRESU={ajustes:{}}; NMFB.cfgGet("presupuesto").then(d=>{ NM_PRESU=(d&&d.ajustes)?{ajustes:d.ajustes}:{ajustes:{}}; if(STATE.section==="resumen") render(); }).catch(()=>{}); }
 function presuGuardar(){ if(!nmFbActivo()||!NM_PRESU) return; nmAjGuardar("presupuesto",{ajustes:NM_PRESU.ajustes}); }
-function renderPresupuesto(){
+function renderPresupuesto(pre){
   const app=$("#app"); if(!app) return; presuCargar();
   const hoy=new Date(); const yNow=hoy.getFullYear(), mNow=hoy.getMonth();
   if(!STATE.presuMes){ const d=new Date(yNow,mNow+1,1); STATE.presuMes=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
@@ -2462,9 +2468,9 @@ function renderPresupuesto(){
       ${o.ref.map(v=>`<td>${v?money(v):'<span class="zero">–</span>'}</td>`).join("")}<td><b>${money(o.prom)}</b></td>
       <td><input class="pr-in${o.aj?" pr-aj":""}" data-ca="${esc(o.ca)}" value="${Math.round(o.bud)}" inputmode="decimal" title="${o.aj?"Ajustado a mano":"Sugerido: promedio (o lo presupuestado si es mayor)"}">${o.aj?`<button class="btn ghost pr-rst" data-ca="${esc(o.ca)}" title="Volver al promedio">↻</button>`:""}</td>
       <td>${o.pend?money(o.pend):'<span class="zero">–</span>'}</td><td><b>${money(o.tot)}</b></td></tr>`; }).join("");
-  app.innerHTML=`
+  STATE._resPDF={tab:"presupuesto", year:STATE.year, cur:CUR, presu:{mes:MES[tMi]+" "+ty, ref:ref.map(x=>MES[x.mi].slice(0,3)+" "+String(x.g).slice(2)), lista:lista.map(o=>({gr:o.gr,ca:o.ca,ref:o.ref.slice(),prom:o.prom,bud:o.bud,pend:o.pend,tot:o.tot}))}};
+  app.innerHTML=(pre||"")+`
     <div class="toolbar-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-      <div class="seg" id="resBase"><button data-b="devengado">Devengado</button><button data-b="caja">Caja</button><button data-b="presupuesto" class="on">Presupuesto</button></div>
       <label class="mini" style="display:flex;gap:8px;align-items:center">Mes a presupuestar <span class="select-wrap"><select id="prMes">${mopts.join("")}</select></span></label>
     </div>
     <div class="grid kpis">
@@ -2479,7 +2485,6 @@ function renderPresupuesto(){
       <tbody>${filas||`<tr><td colspan="8">${emptyState("No hay gastos pagados en los últimos 3 meses ni cuentas por pagar.")}</td></tr>`}</tbody>
       <tfoot><tr><td style="text-align:left"><b>Total</b></td>${[0,1,2].map(i=>`<td><b>${money(lista.reduce((s,o)=>s+o.ref[i],0))}</b></td>`).join("")}<td><b>${money(T("prom"))}</b></td><td><b>${money(T("bud"))}</b></td><td><b>${money(T("pend"))}</b></td><td><b>${money(T("tot"))}</b></td></tr></tfoot></table></div>
     </div>`;
-  document.querySelectorAll("#resBase button").forEach(b=>b.addEventListener("click",()=>{STATE.resBase=b.dataset.b;render();}));
   $("#prMes").addEventListener("change",ev=>{ STATE.presuMes=ev.target.value; render(); });
   document.querySelectorAll(".pr-in").forEach(inp=>inp.addEventListener("change",()=>{ if(!NM_PRESU) NM_PRESU={ajustes:{}};
     const v=parseFloat(String(inp.value).replace(/[^0-9.\-]/g,"")); const k=STATE.presuMes+"|"+inp.dataset.ca;
@@ -2787,7 +2792,7 @@ function nmOdometro(forzar){
    SUB-PESTAÑAS EN LA BARRA SUPERIOR + SUBMENÚS AL PASAR EL CURSOR
    ============================================================ */
 function SUBTABS_MAP(){ return {
-  resumen:{key:"resTab", items:[["resumen","Resumen"],["eresultados","Estado de Resultados"],["graficos","Gráficos"],["comparativo","Comparativo"],["estadocuenta","Estado de Cuenta"]]},
+  resumen:{key:"resTab", items:[["resumen","Resumen"],["eresultados","Estado de Resultados"],["pormes","Por mes"],["presupuesto","Presupuesto"],["caja","Caja"]]},
   ingresos:{key:"ingTab", items:[["general","General"]].concat((typeof ING_GW!=="undefined"?ING_GW:[]).map(g=>[g,g]))},
   egresos:{key:"egTab", items:[["general","General"],["proveedor","Por Proveedor"],["graficos","Gráficos"]]},
   costos:{key:"cosTab", items:[["lista","Lista de Costos"],["costingreso","Costos por Ingreso",{key:"cosProv",items:PNL_TABS.map(t=>[t,t])}],["pagados","Costos Pagados"],["detalle","Detalle por proveedor"],["graficos","Gráficos"]]},
@@ -3228,148 +3233,168 @@ function estadoCuentaHTML(){
       <p class="section-intro" style="margin:6px 0 0">Cada mes necesitas <b>${usd(lcTotUSD)}</b> para costos (${usd(lcFijoUSD)} fijos + ${usd(lcVarUSD)} variables) y tienes <b>${usd(pendUSD)}</b> en cuentas por pagar pendientes. <b>Total a cubrir: ${usd(totalCubrir)}</b>${RATE?` (${bob(totalCubrir)})`:""}.</p>
     </div>`;
 }
+/* V214: RESUMEN P&L rediseñado. Todas las subpestañas usan los MISMOS datos (pnlRows: ingresos de
+   pasarelas + Egresos + BitGo + Mercury, ya clasificados) y el interruptor Devengado/Caja aplica a todas.
+   Subpestañas: Resumen · Estado de Resultados · Por mes · Presupuesto · Caja. */
+const RES_TABS=[["resumen","Resumen"],["eresultados","Estado de Resultados"],["pormes","Por mes"],["presupuesto","Presupuesto"],["caja","Caja"]];
+function _resTabActual(){
+  const t=STATE.resTab||"resumen", viejo={graficos:"pormes",comparativo:"pormes",estadocuenta:"caja"};
+  const v=viejo[t]||t; return RES_TABS.some(x=>x[0]===v)?v:"resumen";
+}
+/* Separa las filas del P&L en Ingresos / Costos / Gastos (por mes y por año) */
+function _resAgg(rows){
+  const A={ing:0,cos:0,gas:0, m:{ing:Array(12).fill(0),cos:Array(12).fill(0),gas:Array(12).fill(0)}, y:{}, filas:[]};
+  rows.forEach(r=>{ if(r.dato) return;
+    const k=r.income?"ing":(esCostoNiv(r.grupo,r.subg)?"cos":"gas"), v=+r.imp||0, mi=monthIdx(r.m);
+    A[k]+=v; if(mi>=0) A.m[k][mi]+=v;
+    if(r.g!=null){ const Y=A.y[r.g]||(A.y[r.g]={ing:0,cos:0,gas:0}); Y[k]+=v; }
+    A.filas.push(Object.assign({_k:k,_mi:mi},r)); });
+  A.mb=A.ing-A.cos; A.ut=A.mb-A.gas;
+  return A;
+}
 function renderResumen(){
-  if(STATE.resBase==="presupuesto"){ renderPresupuesto(); return; }
-  const rows=egresosBaseRows();
-  const cats=pivot(rows);
-  const total = rows.reduce((s,e)=>s+(+e.imp||0),0);
-  const monthTot=Array(12).fill(0);
-  rows.forEach(e=>{const mi=monthIdx(e.m); if(mi>=0) monthTot[mi]+=(+e.imp||0);});
-  const activeMonths=monthTot.filter(x=>x>0).length;
-  const avgBurn = activeMonths? total/activeMonths : 0;
-
-  // status split (over full year, ignoring estado filter for the donut base)
-  const yearRows = STATE.egresos.filter(e=> STATE.year==="__all"||e.g===STATE.year);
-  const st=(name)=>yearRows.filter(e=>String(e.e||"").trim().toLowerCase()===name).reduce((s,e)=>s+(+e.imp||0),0);
-  const paid = st("pagado");
-  const pend = st("pendiente");
-  const presu= st("presupuestado");
-  const due = pend; // compatibilidad
-  const ingresos = STATE.ingresos.filter(e=> STATE.year==="__all"||e.g===STATE.year).reduce((s,e)=>s+(+e.imp||0),0);
-  const pnl = pnlRows();
-  const pnlTreeData = pnlTree(pnl);
-  const incomeTot = pnl.filter(r=>r.income&&!r.dato).reduce((a,r)=>a+r.imp,0);
-  const expenseTot = pnl.filter(r=>!r.income).reduce((a,r)=>a+r.imp,0);
-  const egClasif=pnl.filter(r=>!r.income&&r.src==="Egresos").reduce((a,r)=>a+r.imp,0);
-  const bgClasif=pnl.filter(r=>!r.income&&r.src==="BitGo").reduce((a,r)=>a+r.imp,0);
-  const mcClasif=pnl.filter(r=>!r.income&&r.src==="Mercury").reduce((a,r)=>a+r.imp,0);
-  const resultado = incomeTot - expenseTot;
-  // Costos = subconjunto clasificado de Egresos que coincide con Manteca/Bridge/Tesabiz.
-  // Se muestran aparte (entre Ingresos y Egresos) y se restan de "Egresos" para NO duplicar.
-  // V181: Costos = gastos cuyo Grupo/Sub Grupo del Plan de Cuentas es de costos (de cualquier fuente).
-  const _cosOf=src=>pnl.filter(r=>!r.income&&r.src===src&&esCostoNiv(r.grupo,r.subg)).reduce((a,r)=>a+r.imp,0);
-  const costosTot=pnl.filter(r=>!r.income&&esCostoNiv(r.grupo,r.subg)).reduce((a,r)=>a+r.imp,0);
-  const egSinCostos=egClasif-_cosOf("Egresos");
-  const pnlStrip = `<div class="caja">
-    <div class="c"><div class="l">Ingresos (clasif.)</div><div class="v" style="color:var(--emerald)">${pMoney(incomeTot)}</div></div>
-    <div class="c" style="background:rgba(180,35,24,.05)"><div class="l">Costos (según Plan de Cuentas)</div><div class="v neg">${pMoney(costosTot)}</div></div>
-    <div class="c"><div class="l">Egresos (sin costos)</div><div class="v neg">${pMoney(egSinCostos)}</div></div>
-    <div class="c"><div class="l">Gastos BitGo (sin costos)</div><div class="v neg">${pMoney(bgClasif-_cosOf("BitGo"))}</div></div>
-    <div class="c"><div class="l">Gastos Mercury (sin costos)</div><div class="v neg">${pMoney(mcClasif-_cosOf("Mercury"))}</div></div>
-    <div class="c hi"><div class="l">Gastos totales</div><div class="v neg">${pMoney(expenseTot)}</div></div>
-    <div class="c hi"><div class="l">Utilidad bruta</div><div class="v" style="${resultado<0?'':'color:var(--emerald)'}">${pMoney(resultado)}</div></div>
-  </div>`;
-
-  const topCat = Object.entries(cats).sort((a,b)=>b[1].total-a[1].total)[0];
-
-  // Posición de caja (cruza inversiones + préstamos - egresos pagados - devoluciones)
-  const invTot = yearFilter(STATE.inv).reduce((s,e)=>s+(+e.importe||0),0);
-  const preTot = yearFilter(STATE.pre).reduce((s,e)=>s+(+e.importe||0),0);
-  const devTot = yearFilter(STATE.dev).reduce((s,e)=>s+(+e.importe||0),0); // mezcla USD/BOB, referencial
-  const egPaid = paid;
-  const caja = invTot + preTot - egPaid - devTot;
-  const runway = avgBurn>0 ? caja/avgBurn : 0;
-  const cajaStrip = `<div class="caja">
-    <div class="c"><div class="l">Capital invertido</div><div class="v" style="color:var(--emerald)">${money(invTot)}</div></div>
-    <div class="c"><div class="l">Préstamos recibidos</div><div class="v">${money(preTot)}</div></div>
-    <div class="c"><div class="l">Egresos pagados</div><div class="v neg">${money(egPaid)}</div></div>
-    <div class="c"><div class="l">Devoluciones</div><div class="v neg">${money(devTot)}</div></div>
-    <div class="c hi"><div class="l">Caja estimada</div><div class="v">${money(caja)}</div></div>
-    <div class="c hi"><div class="l">Runway</div><div class="v">${runway>0?runway.toFixed(1)+" meses":"—"}</div></div>
-  </div>`;
-
+  const tab=_resTabActual(); STATE.resTab=tab;
+  if(STATE.resBase!=="caja") STATE.resBase="devengado";   // «Presupuesto» ya no es un modo, es una subpestaña
+  STATE.clasifHoja=false;                                   // el botón «Como antes (hojas)» se quitó
   const app=$("#app");
-  const resTab = STATE.resTab || "resumen";
   if(RESCHART){try{RESCHART.destroy();}catch(e){}RESCHART=null;}
-  const seg = `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+  const per=STATE.year==="__all"?"Todos los años":STATE.year;
+  const usaBase=(tab==="resumen"||tab==="eresultados"||tab==="pormes");
+  const baseTxt=STATE.resBase==="caja"?"Caja: cada gasto en el mes en que se PAGÓ":"Devengado: cada gasto en el mes al que CORRESPONDE";
+  const seg=`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-      <div class="seg" id="resTabs" style="flex-wrap:wrap">
-        <button data-rt="resumen" class="${resTab==='resumen'?'on':''}">Resumen</button>
-        <button data-rt="eresultados" class="${resTab==='eresultados'?'on':''}">Estado de Resultados</button>
-        <button data-rt="graficos" class="${resTab==='graficos'?'on':''}">Gráficos</button>
-        <button data-rt="comparativo" class="${resTab==='comparativo'?'on':''}">Comparativo</button>
-        <button data-rt="estadocuenta" class="${resTab==='estadocuenta'?'on':''}">Estado de Cuenta</button>
-      </div>
-      <div class="seg" id="resBase" title="Devengado = mes al que corresponde el gasto (Fecha de Contabilización) · Caja = mes en que se pagó (Fecha de Pago)">
-        <button data-b="devengado" class="${(STATE.resBase||'devengado')==='devengado'?'on':''}">Devengado</button>
+      ${usaBase?`<div class="seg" id="resBase" title="Devengado = mes al que corresponde el gasto (Fecha de Contabilización, repartido en «Meses a Distribuir») · Caja = mes en que se pagó (Fecha de Pago). BitGo, Mercury y los ingresos tienen una sola fecha, por eso no cambian.">
+        <button data-b="devengado" class="${STATE.resBase==='devengado'?'on':''}">Devengado</button>
         <button data-b="caja" class="${STATE.resBase==='caja'?'on':''}">Caja</button>
-        <button data-b="presupuesto" class="${STATE.resBase==='presupuesto'?'on':''}" title="Presupuesto del mes: promedio de los últimos 3 meses (ajustable) + cuentas por pagar">Presupuesto</button>
-      </div>
-      <div class="seg" id="resClasif" title="Sistema = la clasificación de Egresos ▸ General (Asignación automática + tus correcciones + Plan de Cuentas). Hojas = como se calculaba antes de la V178 (columnas escritas en cada hoja). Úsalo solo para comparar.">
-        <button data-c="sis" class="${STATE.clasifHoja?'':'on'}">Clasificación del sistema</button>
-        <button data-c="hoja" class="${STATE.clasifHoja?'on':''}">Como antes (hojas)</button>
-      </div>
+      </div><span class="mini">${baseTxt} · ${per} · ${CUR}</span>`
+      :`<span class="mini">${tab==="presupuesto"?"Se calcula con lo realmente pagado (caja)":"Posición de caja y lo que hay que cubrir"} · ${CUR}</span>`}
       </div>
       <button class="btn btn-icon icon-only" id="resPdf" title="Descargar PDF de lo que ves" aria-label="PDF">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
       </button>
     </div>`;
-  const _cosA=r=>ancEgreso(r);
-  const _cosBase=rows.filter(r=>{ const a=_cosA(r); return esCostoNiv(a.grupoc,a.ksubgrupo); });
-  const _cosBy={}; _cosBase.forEach(r=>{ const k=_cosA(r).cp||"(sin cuenta principal)"; _cosBy[k]=(_cosBy[k]||0)+(+r.imp||0); });
-  const _cosBars=Object.entries(_cosBy).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]); const _cosTot=_cosBase.reduce((s,r)=>s+(+r.imp||0),0);
+  const wireTop=()=>{
+    document.querySelectorAll("#resBase button").forEach(b=>b.addEventListener("click",()=>{STATE.resBase=b.dataset.b;render();}));
+    const rpb=$("#resPdf"); if(rpb) rpb.addEventListener("click",exportResumenPDF);
+  };
+  if(tab==="presupuesto"){ renderPresupuesto(seg); wireTop(); return; }
+
+  const pnl=pnlRows(), A=_resAgg(pnl);
+  const pct=(a,b)=>b?((a/b*100).toFixed(1)+"%"):"—";
+  const toUSDc=v=>CUR==="BOB"&&RATE?v/RATE:v;              // los gráficos esperan USD y convierten solos
+  STATE._resPDF={tab, year:STATE.year, cur:CUR, base:STATE.resBase, A:{ing:A.ing,cos:A.cos,gas:A.gas,mb:A.mb,ut:A.ut}};
   let content="";
-  if(resTab==="resumen"){
-    content = kpiRow(total,paid,pend,presu,avgBurn,activeMonths,ingresos,resultado,topCat) + pnlStrip + cajaStrip;
-  } else if(resTab==="eresultados"){
-    content = `<div class="card"><div class="head"><h3>Estado de Resultados · detalle</h3><span class="mini">Ingresos con Volúmenes por pasarela · toca una fila para expandir · ${STATE.year==="__all"?"Todos los años":STATE.year}</span></div><div class="tbl-scroll sticky-head" id="pnlTable"></div></div>`;
-  } else if(resTab==="graficos"){
-    content = `
-      <div class="grid cols-3-1">
-        <div class="card"><div class="head"><h3>Egresos por mes</h3><span class="mini">${STATE.year==="__all"?"Todos los años":STATE.year} · ${CUR}</span></div><div id="chartMonthly"></div></div>
-        <div class="card"><div class="head"><h3>Estado de pago</h3></div><div id="chartStatus"></div></div>
+
+  if(tab==="resumen"){
+    const sum=(arr,key)=>{ const o={}; arr.forEach(r=>{ const k=key(r)||"(sin nombre)"; o[k]=(o[k]||0)+(+r.imp||0); }); return Object.entries(o).filter(e=>Math.abs(e[1])>0.004).sort((a,b)=>b[1]-a[1]); };
+    const ingPas=sum(A.filas.filter(r=>r._k==="ing"), r=>r.subg);
+    const gasGr=sum(A.filas.filter(r=>r._k!=="ing"), r=>r.subg);
+    const top=sum(A.filas.filter(r=>r._k!=="ing"), r=>r.ca+"\u0000"+r.cp).slice(0,5);
+    const fuente=sum(A.filas.filter(r=>r._k!=="ing"), r=>({Egresos:"Hoja de Egresos",BitGo:"BitGo",Mercury:"Mercury"}[r.src]||r.src));
+    const gasTot=A.cos+A.gas;
+    const linea=(l,v,cls,nota)=>`<tr class="${cls||''}"><td style="text-align:left">${l}</td><td class="num">${pMoney(v)}</td><td class="num mini">${nota||pct(v,A.ing)}</td></tr>`;
+    STATE._resPDF.ingPas=ingPas; STATE._resPDF.gasGr=gasGr; STATE._resPDF.top=top; STATE._resPDF.fuente=fuente;
+    content=`
+      <div class="grid kpis">
+        ${kpi("Ingresos",pMoney(A.ing),"pasarelas y otros ingresos","#235347","▲")}
+        ${kpi("Costos directos",pMoney(A.cos),pct(A.cos,A.ing)+" de los ingresos","#B42318","◆")}
+        ${kpi("Gastos",pMoney(A.gas),pct(A.gas,A.ing)+" de los ingresos","#B42318","▼")}
+        ${kpi("Utilidad",pMoney(A.ut),"margen "+pct(A.ut,A.ing),A.ut<0?"#B42318":"#235347","=")}
       </div>
       <div class="grid cols-2">
-        <div class="card"><div class="head"><h3>Egresos por categoría</h3><span class="mini">${money(total)}</span></div><div id="chartBreak"></div></div>
-        <div class="card"><div class="head"><h3>Mayores gastos</h3><span class="mini">Top conceptos</span></div><div id="topList"></div></div>
+        <div class="card"><div class="head"><h3>Cómo se llega a la utilidad</h3><span class="mini">${per}</span></div>
+          <div class="tbl-scroll"><table class="res-cascada"><thead><tr><th style="text-align:left">Concepto</th><th class="num">${CUR}</th><th class="num">% ingresos</th></tr></thead><tbody>
+            ${linea("Ingresos",A.ing,"res-pos","100%")}
+            ${linea("− Costos directos",-A.cos)}
+            ${linea("= Margen bruto",A.mb,"res-sub")}
+            ${linea("− Gastos",-A.gas)}
+            ${linea("= Utilidad",A.ut,"res-tot")}
+          </tbody></table></div>
+          <p class="section-intro" style="margin:10px 0 0"><b>Costos directos</b> = lo que cuesta mover el dinero (pasarelas, comisiones; según el Plan de Cuentas). <b>Gastos</b> = todo lo demás (sueldos, oficina, marketing…).</p>
+        </div>
+        <div class="card"><div class="head"><h3>Utilidad por mes</h3><span class="mini">${STATE.year==="__all"?"suma de todos los años por mes":per}</span></div><div id="resNet" style="height:230px"></div></div>
       </div>
       <div class="grid cols-2">
-        <div class="card"><div class="head"><h3>Costos (tarjetas y comisiones)</h3><span class="mini">${money(_cosTot)} · ${_cosBase.length} mov.</span></div>${_cosBars.length?hbars(_cosBars,()=>"#B42318",money):emptyState("Sin costos (Manteca/Bridge/Tesabiz).")}</div>
-        <div class="card"><div class="head"><h3>Egresos por país</h3></div><div id="chartPais2"></div></div>
-      </div>`;
-  } else if(resTab==="estadocuenta"){
-    content = estadoCuentaHTML();
-  } else {
-    const basis=STATE.cmpBasis||"month";
-    content = `
-      <div class="toolbar" style="margin-bottom:16px"><span class="rchips-lbl" style="min-width:auto">Comparar</span>
-        <div class="seg" id="cmpBasis"><button data-c="month" class="${basis==='month'?'on':''}">vs mes anterior</button><button data-c="quarter" class="${basis==='quarter'?'on':''}">vs trimestre anterior</button><button data-c="year" class="${basis==='year'?'on':''}">vs año anterior</button></div>
+        <div class="card"><div class="head"><h3>Ingresos por pasarela</h3><span class="mini">${pMoney(A.ing)}</span></div>${ingPas.some(e=>e[1]>0)?hbars(ingPas.filter(e=>e[1]>0),()=>"#235347",pMoney):emptyState("Sin ingresos en este periodo.")}${ingPas.filter(e=>e[1]<0).map(e=>`<p class="mini" style="margin:8px 0 0;color:var(--rose)">${esc(e[0])}: ${pMoney(e[1])} (resultado negativo)</p>`).join("")}</div>
+        <div class="card"><div class="head"><h3>Gastos y costos por grupo</h3><span class="mini">${pMoney(gasTot)}</span></div>${gasGr.some(e=>e[1]>0)?hbars(gasGr.filter(e=>e[1]>0),()=>"#B42318",pMoney):emptyState("Sin gastos en este periodo.")}</div>
       </div>
-      <div class="grid kpis" id="cmpKpis"></div>
-      <div class="grid cols-2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
-        <div class="card" style="min-width:0"><div class="head"><h3>Gastos por categoría — actual vs anterior</h3></div><div class="rchart" style="height:340px;position:relative"><canvas id="cmpChart"></canvas></div></div>
-        <div class="card" style="min-width:0;overflow-x:auto"><div class="head"><h3>Detalle por Cuenta Principal</h3></div><div id="cmpTable"></div></div>
+      <div class="grid cols-2">
+        <div class="card"><div class="head"><h3>Los 5 gastos más grandes</h3><span class="mini">por cuenta analítica</span></div>
+          ${top.length?`<div class="tbl-scroll"><table><tbody>${top.map(([k,v],i)=>{ const [ca,cp]=k.split("\u0000"); return `<tr><td style="text-align:left">${i+1}. ${esc(ca)}<span class="sub2">${esc(cp)}</span></td><td class="num">${pMoney(v)}</td><td class="num mini">${pct(v,gasTot)} del gasto</td></tr>`; }).join("")}</tbody></table></div>`:emptyState("Sin gastos.")}
+        </div>
+        <div class="card"><div class="head"><h3>De dónde vienen los gastos</h3><span class="mini">por origen del dato</span></div>
+          ${fuente.some(e=>e[1]>0)?hbars(fuente.filter(e=>e[1]>0),()=>"#6F9A7D",pMoney):emptyState("Sin gastos.")}
+          <p class="section-intro" style="margin:10px 0 0">Si un origen parece demasiado alto, revisa en <b>Bancos</b> que los traspasos y fondeos estén marcados como «Traspasos Internos» y no como gasto.</p>
+        </div>
       </div>`;
+  } else if(tab==="eresultados"){
+    content=`<div class="card"><div class="head"><h3>Estado de Resultados</h3><span class="mini">Toca una fila para desplegar · las columnas cambian con Filtros ▸ Vista (Mensual / Trimestral / Anual) · ${per}</span></div><div class="tbl-scroll sticky-head" id="pnlTable"></div></div>`;
+  } else if(tab==="pormes"){
+    const annual=STATE.year==="__all";
+    let cols, val;
+    if(annual){ cols=Object.keys(A.y).map(Number).sort((a,b)=>a-b).map(y=>({l:String(y),k:y})); val=(k,c)=>(A.y[c.k]||{})[k]||0; }
+    else { let last=-1; for(let i=0;i<12;i++) if(A.m.ing[i]||A.m.cos[i]||A.m.gas[i]) last=i;
+      cols=[]; for(let i=0;i<=last;i++) cols.push({l:MONTH_ES[i],k:i}); val=(k,c)=>A.m[k][c.k]||0; }
+    const fila=(lbl,f,cls,fmtF)=>`<tr class="${cls||''}"><td style="text-align:left">${lbl}</td>${cols.map(c=>{ const v=f(c); return `<td class="num${v<0?' neg':''}">${fmtF?fmtF(v,c):(v?pMoney(v):'<span class="zero">–</span>')}</td>`; }).join("")}<td class="num"><b>${fmtF?fmtF(f(null),null):pMoney(f(null))}</b></td></tr>`;
+    const tot=k=>A[k];
+    const g=(k)=>c=>c?val(k,c):tot(k);
+    const mb=c=>c?val("ing",c)-val("cos",c):A.mb, ut=c=>c?mb(c)-val("gas",c):A.ut;
+    const prevUt=c=>{ if(!c) return null; const i=cols.indexOf(c); return i>0?ut(cols[i-1]):null; };
+    const varTxt=(v,c)=>{ if(!c) return ""; const p=prevUt(c); if(p==null) return '<span class="zero">–</span>'; const d=ut(c)-p; return `<span style="color:${d<0?'var(--danger,#B42318)':'var(--emerald)'}">${d>=0?'▲':'▼'} ${pMoney(Math.abs(d))}</span>`; };
+    // gastos por grupo (Sub Grupo) en cada periodo
+    const gg={}; A.filas.filter(r=>r._k!=="ing").forEach(r=>{ const k=r.subg||"(sin grupo)"; const o=gg[k]||(gg[k]={t:0,c:{}}); const ck=annual?r.g:r._mi; o.t+=+r.imp||0; o.c[ck]=(o.c[ck]||0)+(+r.imp||0); });
+    const ggF=Object.entries(gg).sort((a,b)=>b[1].t-a[1].t);
+    STATE._resPDF.pormes={cols:cols.map(c=>c.l), lineas:[
+      ["Ingresos",...cols.map(g("ing")),A.ing],["Costos directos",...cols.map(g("cos")),A.cos],["Margen bruto",...cols.map(mb),A.mb],
+      ["Gastos",...cols.map(g("gas")),A.gas],["Utilidad",...cols.map(ut),A.ut]], grupos:ggF.map(([k,o])=>[k,...cols.map(c=>o.c[c.k]||0),o.t])};
+    const head=`<thead><tr><th style="text-align:left">${annual?"Año":"Mes"}</th>${cols.map(c=>`<th class="num">${c.l}</th>`).join("")}<th class="num tot">Total</th></tr></thead>`;
+    content=`
+      ${annual?"":`<div class="card"><div class="head"><h3>Utilidad por mes</h3><span class="mini">${per} · verde = ganancia, rojo = pérdida</span></div><div id="resNet" style="height:230px"></div></div>`}
+      <div class="card"><div class="head"><h3>Resultado ${annual?"por año":"mes a mes"}</h3><span class="mini">${CUR}</span></div>
+        <div class="tbl-scroll sticky-head"><table class="res-mes">${head}<tbody>
+          ${fila("Ingresos",g("ing"),"res-pos")}
+          ${fila("− Costos directos",g("cos"))}
+          ${fila("= Margen bruto",mb,"res-sub")}
+          ${fila("− Gastos",g("gas"))}
+          ${fila("= Utilidad",ut,"res-tot")}
+          ${fila("Margen %",c=>c?(val("ing",c)?ut(c)/val("ing",c):null):(A.ing?A.ut/A.ing:null),"",(v)=>v==null?'<span class="zero">–</span>':(v*100).toFixed(1)+"%")}
+          ${fila("Utilidad vs "+(annual?"año":"mes")+" anterior",c=>0,"",varTxt)}
+        </tbody></table></div></div>
+      <div class="card"><div class="head"><h3>Gastos y costos por grupo</h3><span class="mini">para comparar ${annual?"año a año":"mes a mes"}</span></div>
+        <div class="tbl-scroll sticky-head"><table class="res-mes">${head}<tbody>
+          ${ggF.map(([k,o])=>`<tr><td style="text-align:left">${esc(k)}</td>${cols.map(c=>{ const v=o.c[c.k]||0; return `<td class="num">${v?pMoney(v):'<span class="zero">–</span>'}</td>`; }).join("")}<td class="num"><b>${pMoney(o.t)}</b></td></tr>`).join("")||`<tr><td colspan="${cols.length+2}">${emptyState("Sin gastos.")}</td></tr>`}
+        </tbody></table></div></div>`;
+  } else if(tab==="caja"){
+    const invTot = yearFilter(STATE.inv).reduce((s,e)=>s+(+e.importe||0),0);
+    const preTot = yearFilter(STATE.pre).reduce((s,e)=>s+(+e.importe||0),0);
+    const devTot = yearFilter(STATE.dev).reduce((s,e)=>s+(+e.importe||0),0);
+    const egPaid = (STATE.egresos||[]).filter(e=>(STATE.year==="__all"||e.g===STATE.year)&&String(e.e||"").trim().toLowerCase()==="pagado").reduce((s,e)=>s+(+e.imp||0),0);
+    const caja = invTot + preTot - egPaid - devTot;
+    const mesesAct=new Set((STATE.egresos||[]).filter(e=>(STATE.year==="__all"||e.g===STATE.year)&&String(e.e||"").trim().toLowerCase()==="pagado").map(e=>e.g+"-"+e.m)).size;
+    const burn=mesesAct?egPaid/mesesAct:0, runway=burn>0?caja/burn:0;
+    STATE._resPDF.caja={invTot,preTot,egPaid,devTot,caja,runway};
+    content=`<div class="card"><div class="head"><h3>Posición de caja</h3><span class="mini">referencial · ${per}</span></div>
+        <div class="caja">
+          <div class="c"><div class="l">Capital invertido</div><div class="v" style="color:var(--emerald)">${money(invTot)}</div></div>
+          <div class="c"><div class="l">Préstamos recibidos</div><div class="v">${money(preTot)}</div></div>
+          <div class="c"><div class="l">Egresos pagados</div><div class="v neg">${money(egPaid)}</div></div>
+          <div class="c"><div class="l">Devoluciones</div><div class="v neg">${money(devTot)}</div></div>
+          <div class="c hi"><div class="l">Caja estimada</div><div class="v">${money(caja)}</div></div>
+          <div class="c hi"><div class="l">Runway</div><div class="v">${runway>0?runway.toFixed(1)+" meses":"—"}</div></div>
+        </div>
+        <p class="section-intro" style="margin:10px 0 0"><b>Caja estimada</b> = capital + préstamos − egresos pagados − devoluciones. <b>Runway</b> = cuántos meses alcanza esa caja al ritmo de gasto promedio (${money(burn)}/mes).</p>
+      </div>
+      ${estadoCuentaHTML()}`;
   }
-  app.innerHTML = seg + content;
-  STATE._resPDF={ tab:resTab, year:STATE.year, cur:CUR,
-    kpi:{total,paid,pend,presu},
-    pnl:{incomeTot,costosTot,egSinCostos,bgClasif,mcClasif,expenseTot,resultado},
-    caja:{invTot,preTot,egPaid:paid,devTot,caja,runway},
-    tree:pnlTreeData, view:STATE.view,
-    graf:{ monthTot:monthTot.slice(), paid, pend, presu,
-      cats:Object.entries(cats).map(([k,v])=>[k,v.total]).filter(e=>e[1]).sort((a,b)=>b[1]-a[1]),
-      top:[...rows].sort((a,b)=>(+b.imp||0)-(+a.imp||0)).slice(0,15).map(r=>({con:r.con||"–",cp:catLabel(r.cp),imp:+r.imp||0})),
-      cos:_cosBars, cosTot:_cosTot,
-      pais:(function(){const b={};rows.forEach(r=>{const p=r.pais||"— sin país";b[p]=(b[p]||0)+(+r.imp||0);});return Object.entries(b).sort((a,b)=>b[1]-a[1]);})() } };
-  const rpb=$("#resPdf"); if(rpb) rpb.addEventListener("click",exportResumenPDF);
-  if(resTab==="graficos"){ drawMonthly(monthTot); drawStatus(paid,pend,presu); drawBreak(cats,total); drawTopList(rows);
-    const byPais={}; rows.forEach(r=>{const p=r.pais||"— sin país"; byPais[p]=(byPais[p]||0)+(+r.imp||0);}); const barsP=Object.entries(byPais).sort((a,b)=>b[1]-a[1]);
-    const cp2=$("#chartPais2"); if(cp2) cp2.innerHTML = barsP.length? hbars(barsP,()=>"#6F9A7D",money) : emptyState("Sin país registrado.");
+  app.innerHTML=seg+content;
+  wireTop();
+  if(tab==="resumen"||(tab==="pormes"&&STATE.year!=="__all")){
+    const net=A.m.ing.map((v,i)=>toUSDc(v-A.m.cos[i]-A.m.gas[i]));
+    mountBarChart("#resNet",{kind:"net",data:net});
   }
-  if(resTab==="eresultados"){ drawTable(pnlTreeData, incomeTot, expenseTot, resultado); }
-  if(resTab==="comparativo"){ drawComparativo(); }
-  if(resTab==="estadocuenta"){
+  if(tab==="eresultados"){ const tree=pnlTree(pnl); STATE._resPDF.tree=tree; STATE._resPDF.view=STATE.view;
+    drawTable(tree, A.ing, A.cos+A.gas, A.ut); }
+  if(tab==="caja"){
     const SEP_EC=" ▸ ";
     const getEC=arr=>arr.map(n=>({label:n.label,kids:n.children}));
     document.querySelectorAll("#ecTable .pnl-parent[data-pid]").forEach(tr=>tr.addEventListener("click",()=>{
@@ -3382,10 +3407,6 @@ function renderResumen(){
       renderKeepScroll("#ecTable", pid);
     }));
   }
-  document.querySelectorAll("#resTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.resTab=b.dataset.rt;render();}));
-  document.querySelectorAll("#resBase button").forEach(b=>b.addEventListener("click",()=>{STATE.resBase=b.dataset.b;render();}));
-  document.querySelectorAll("#resClasif button").forEach(b=>b.addEventListener("click",()=>{STATE.clasifHoja=(b.dataset.c==="hoja");render();}));
-  const cb=$("#cmpBasis"); if(cb) cb.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{STATE.cmpBasis=b.dataset.c;render();}));
 }
 
 /* ---------- generic helpers for sections ---------- */
@@ -6459,71 +6480,64 @@ function exportResumenPDF(){
   const pm=n=> V.cur==="BOB"? ("Bs "+f2(n)) : ("$"+f2(n));            // valor ya en moneda activa
   const mm=n=> V.cur==="BOB"? ("Bs "+f2(n*(RATE||0))) : ("$"+f2(n));  // USD -> moneda activa (TC hoy)
   const usd=n=>"$"+f2(n), bob=n=>"Bs "+f2(n);
-  const vistas={resumen:"Resumen",eresultados:"Estado de Resultados",graficos:"Gráficos",comparativo:"Comparativo",estadocuenta:"Estado de Cuenta"};
+  const vistas={resumen:"Resumen",eresultados:"Estado de Resultados",pormes:"Por mes",presupuesto:"Presupuesto",caja:"Caja"};
   const vista=vistas[V.tab]||"Resumen";
-  const land = V.tab==="eresultados";
-  const ctx=_pdfNew("Resumen P&L · "+vista, "NUMMEROS · "+per+" · Moneda "+V.cur+" · "+hoy, land?"landscape":"portrait"); if(!ctx) return;
-
+  const land = V.tab==="eresultados"||V.tab==="pormes"||V.tab==="presupuesto";
+  const baseTxt = V.base==="caja"?" · Caja":(V.base?" · Devengado":"");
+  const ctx=_pdfNew("Resumen P&L · "+vista, "NUMMEROS · "+per+baseTxt+" · Moneda "+V.cur+" · "+hoy, land?"landscape":"portrait"); if(!ctx) return;
+  const R={1:{halign:"right"},2:{halign:"right"}};
+  const pc=(a,b)=>b?((a/b*100).toFixed(1)+"%"):"—";
   if(V.tab==="resumen"){
-    ctx.h2("Indicadores");
-    ctx.table(["Concepto","Monto"], [["Egresos totales",mm(V.kpi.total)],["Pagado",mm(V.kpi.paid)],["Pendiente",mm(V.kpi.pend)],["Presupuestado",mm(V.kpi.presu)]], null, {0:{cellWidth:300},1:{halign:"right"}});
-    ctx.h2("P&L clasificado (Ingresos - Egresos)");
-    const p=V.pnl;
-    ctx.table(["Concepto",V.cur], [["Ingresos (clasif.)",pm(p.incomeTot)],["Costos (Manteca/Bridge/Tesabiz)",pm(p.costosTot)],["Egresos (sin costos)",pm(p.egSinCostos)],["Gastos BitGo (clasif.)",pm(p.bgClasif)],["Gastos Mercury (clasif.)",pm(p.mcClasif)]],
-      ["Utilidad bruta",pm(p.resultado)], {0:{cellWidth:300},1:{halign:"right"}});
-    ctx.h2("Posición de caja (referencial)");
-    const c=V.caja;
-    ctx.table(["Concepto","Monto"], [["Capital invertido",mm(c.invTot)],["Préstamos recibidos",mm(c.preTot)],["Egresos pagados",mm(c.egPaid)],["Devoluciones",mm(c.devTot)]],
-      ["Caja estimada",mm(c.caja)], {0:{cellWidth:300},1:{halign:"right"}});
+    const A=V.A;
+    ctx.h2("Cómo se llega a la utilidad");
+    ctx.table(["Concepto",V.cur,"% ingresos"], [["Ingresos",pm(A.ing),"100%"],["− Costos directos",pm(-A.cos),pc(A.cos,A.ing)],["= Margen bruto",pm(A.mb),pc(A.mb,A.ing)],["− Gastos",pm(-A.gas),pc(A.gas,A.ing)]],
+      ["= Utilidad",pm(A.ut),pc(A.ut,A.ing)], Object.assign({0:{cellWidth:260}},R));
+    ctx.h2("Ingresos por pasarela"); ctx.table(["Pasarela",V.cur], (V.ingPas||[]).map(e=>[e[0],pm(e[1])]), null, {1:{halign:"right"}});
+    ctx.h2("Gastos y costos por grupo"); ctx.table(["Grupo",V.cur], (V.gasGr||[]).map(e=>[e[0],pm(e[1])]), null, {1:{halign:"right"}});
+    ctx.h2("Los 5 gastos más grandes"); ctx.table(["Cuenta analítica","Cuenta principal",V.cur], (V.top||[]).map(e=>{ const [ca,cp]=e[0].split("\u0000"); return [ca,cp,pm(e[1])]; }), null, {2:{halign:"right"}});
+    ctx.h2("De dónde vienen los gastos"); ctx.table(["Origen",V.cur], (V.fuente||[]).map(e=>[e[0],pm(e[1])]), null, {1:{halign:"right"}});
   } else if(V.tab==="eresultados"){
     // Árbol P&L aplanado, con columnas del periodo (según la vista)
     const view=V.view, annual=view==="annual", q=view==="quarter";
-    let years=[]; if(annual){ (function(){const s=new Set(); (function walk(o){Object.values(o).forEach(n=>{Object.keys(n.years||{}).forEach(y=>s.add(+y)); walk(n.children||{});});})(V.tree); years=[...s].sort((a,b)=>a-b);})(); }
+    let years=[]; if(annual){ (function(){const s=new Set(); (function walk(o){Object.values(o).forEach(n=>{Object.keys(n.years||{}).forEach(y=>s.add(+y)); walk(n.children||{});});})(V.tree||{}); years=[...s].sort((a,b)=>a-b);})(); }
     const colHdr = annual? years.map(String) : (q? ["Q1","Q2","Q3","Q4"] : MONTH_ES);
     const toCols=d=>{ if(annual) return years.map(y=>(d.years&&d.years[y])||0); if(q){const qs=[0,0,0,0];(d.months||[]).forEach((v,i)=>qs[Q_OF[i]]+=v);return qs;} return d.months||[]; };
     const body=[];
     const walk=(obj,level)=>{ const ents=Object.entries(obj).sort((a,b)=> cmpByPlan(level, a[0], a[1], b[0], b[1]));
       ents.forEach(([key,node])=>{ const pad="   ".repeat(level); body.push([pad+key, ...toCols(node).map(v=>v?pm(v):"–"), pm(node.total)]);
         if(Object.keys(node.children||{}).length) walk(node.children,level+1); }); };
-    walk(V.tree,0);
+    walk(V.tree||{},0);
     ctx.h2("Estado de Resultados · detalle ("+(annual?"anual":(q?"trimestral":"mensual"))+")");
     ctx.table(["Cuenta > Grupo > Sub Grupo > Cta Principal > Cta Analitica", ...colHdr, "Total"], body,
-      ["Utilidad bruta", ...colHdr.map(()=>""), pm(V.pnl.resultado)],
+      ["Utilidad", ...colHdr.map(()=>""), pm(V.A.ut)],
       Object.assign({0:{cellWidth:200}}, colHdr.reduce((o,_,i)=>{o[i+1]={halign:"right"};return o;},{[colHdr.length+1]:{halign:"right"}})));
-  } else if(V.tab==="graficos"){
-    const g=V.graf;
-    ctx.h2("Egresos por mes");
-    ctx.table(["Mes",V.cur], g.monthTot.map((v,i)=>v?[MONTH_ES_LONG[i],mm(v)]:null).filter(Boolean), null, {1:{halign:"right"}});
-    ctx.h2("Estado de pago");
-    ctx.table(["Estado",V.cur], [["Pagado",mm(g.paid)],["Pendiente",mm(g.pend)],["Presupuestado",mm(g.presu)]], null, {1:{halign:"right"}});
-    ctx.h2("Egresos por categoría");
-    ctx.table(["Categoría",V.cur], g.cats.map(e=>[e[0],mm(e[1])]), null, {1:{halign:"right"}});
-    ctx.h2("Mayores gastos");
-    ctx.table(["Concepto","Categoría",V.cur], g.top.map(t=>[t.con,t.cp,mm(t.imp)]), null, {2:{halign:"right"}});
-    if(g.cos&&g.cos.length){ ctx.h2("Costos (tarjetas y comisiones)"); ctx.table(["Proveedor",V.cur], g.cos.map(e=>[e[0],mm(e[1])]), null, {1:{halign:"right"}}); }
-    ctx.h2("Egresos por país");
-    ctx.table(["País",V.cur], g.pais.map(e=>[e[0],mm(e[1])]), null, {1:{halign:"right"}});
-  } else if(V.tab==="comparativo"){
-    const C=STATE._resCmp;
-    if(!C){ ctx.h2("Comparativo"); ctx.table(["Info",""],[["Abre el Comparativo y reintenta",""]]); }
-    else{
-      ctx.h2("Comparativo ("+C.basisLbl+")");
-      ctx.table(["Período","Gastos"], [[C.curLbl+" (actual)",pm(C.curT)],[C.prevLbl+" (anterior)",pm(C.prevT)],["Variación",(C.delta>=0?"+":"")+pm(C.delta)+(C.pct==null?"":("  ("+(C.delta>=0?"+":"")+C.pct.toFixed(1)+"%)"))]], null, {0:{cellWidth:280},1:{halign:"right"}});
-      ctx.h2("Detalle por Cuenta Principal");
-      ctx.table(["Cuenta Principal",C.prevLbl,C.curLbl,"Δ"], C.catRows.map(r=>[r.cp,pm(r.prev),pm(r.cur),(r.d>=0?"+":"")+pm(r.d)]),
-        ["Total gastos",pm(C.prevT),pm(C.curT),(C.delta>=0?"+":"")+pm(C.delta)], {1:{halign:"right"},2:{halign:"right"},3:{halign:"right"}});
-    }
-  } else if(V.tab==="estadocuenta"){
+  } else if(V.tab==="pormes"){
+    const P=V.pormes||{cols:[],lineas:[],grupos:[]};
+    const st=Object.assign({0:{cellWidth:130}}, P.cols.reduce((o,_,i)=>{o[i+1]={halign:"right"};return o;},{[P.cols.length+1]:{halign:"right"}}));
+    ctx.h2("Resultado por periodo");
+    ctx.table(["Concepto",...P.cols,"Total"], P.lineas.map(l=>[l[0],...l.slice(1).map(v=>v?pm(v):"–")]), null, st);
+    ctx.h2("Gastos y costos por grupo");
+    ctx.table(["Grupo",...P.cols,"Total"], P.grupos.map(l=>[l[0],...l.slice(1).map(v=>v?pm(v):"–")]), null, st);
+  } else if(V.tab==="presupuesto"){
+    const P=V.presu||{lista:[],ref:[]}; const m=n=>n?pm(n):"–";
+    ctx.h2("Presupuesto de "+P.mes);
+    ctx.table(["Grupo","Cuenta",...P.ref,"Promedio","Presupuesto","Por pagar","Total"], P.lista.map(o=>[o.gr,o.ca,...o.ref.map(m),m(o.prom),m(o.bud),m(o.pend),m(o.tot)]),
+      ["Total","",...P.ref.map((_,i)=>m(P.lista.reduce((s,o)=>s+o.ref[i],0))),m(P.lista.reduce((s,o)=>s+o.prom,0)),m(P.lista.reduce((s,o)=>s+o.bud,0)),m(P.lista.reduce((s,o)=>s+o.pend,0)),m(P.lista.reduce((s,o)=>s+o.tot,0))],
+      P.ref.concat(["","","",""]).reduce((o,_,i)=>{o[i+2]={halign:"right"};return o;},{}));
+  } else if(V.tab==="caja"){
+    const c=V.caja||{};
+    ctx.h2("Posición de caja (referencial)");
+    ctx.table(["Concepto","Monto"], [["Capital invertido",mm(c.invTot)],["Préstamos recibidos",mm(c.preTot)],["Egresos pagados",mm(c.egPaid)],["Devoluciones",mm(c.devTot)],["Runway",c.runway>0?c.runway.toFixed(1)+" meses":"—"]],
+      ["Caja estimada",mm(c.caja)], {0:{cellWidth:300},1:{halign:"right"}});
     const E=STATE._resEC;
-    if(!E){ ctx.h2("Estado de Cuenta"); ctx.table(["Info",""],[["Abre el Estado de Cuenta y reintenta",""]]); }
-    else{
+    if(E){
       ctx.h2("Estado de cuenta · detalle");
       const body=[];
       const walk=(node,level)=>{ body.push([("   ".repeat(level))+node.label, node.usd?usd(node.usd):"–", (node.bob!=null&&node.bob)?bob(node.bob):"–"]);
         (node.children||[]).forEach(ch=>walk(ch,level+1)); };
       E.roots.forEach(r=>walk(r,0));
       ctx.table(["Concepto > Grupo","USD","BOB"], body,
-        ["Total a cubrir (fijos + pendiente)", usd(E.totUSD), "Bs "+f2(E.totBOB)], {1:{halign:"right"},2:{halign:"right"}});
+        ["Total a cubrir (fijos + pendiente)", usd(E.totUSD), "Bs "+f2(E.totBOB)], R);
     }
   }
   _pdfSave(ctx, "Resumen P&L PE$O", "ResumenPL_"+vista.replace(/\s+/g,"")+"_"+now.toISOString().slice(0,10)+".pdf");

@@ -1520,7 +1520,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V219";
+const APP_VERSION = "V220";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2688,6 +2688,7 @@ function billCruce(m, U){ if(!m.monto) return null; const f=new Date(m.fecha), p
 function billingCargar(forzar){
   if(STATE._billCargando) return; const dias=STATE.billDias||90;
   if(STATE.billing&&STATE.billing.dias===dias&&!forzar) return;
+  if(STATE.billErr&&!forzar) return;   // tras un error no se reintenta solo (se usa «↻ Actualizar»)
   STATE._billCargando=true; STATE.billErr=null; if(STATE.section==="billing") render();
   nmRun("billingLeer",compPin(),dias).then(res=>{ STATE._billCargando=false;
     if(!res||res.error){ const e=(res&&res.error)||"Sin respuesta del servidor.";

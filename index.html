@@ -1440,7 +1440,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
         <option value="Presupuestado">Presupuestado</option>
       </select></div></div>
     <datalist id="dl_moneda"><option value="USD"></option><option value="BOB"></option><option value="ARS"></option><option value="COP"></option><option value="BRL"></option></datalist>
-    <div class="field"><label>Cuenta Contable (Cuenta Analítica)</label><input id="f_cc" list="dl_cc" autocomplete="off" placeholder="Elige la cuenta contable de egreso…"></div>
+    <div class="field"><label>Cuenta Contable (Cuenta Analítica)</label><input id="f_cc" list="dl_cc" autocomplete="off" placeholder="Elige la cuenta contable de egreso…"><div id="f_ccSug" class="mini" style="display:none;margin-top:4px;color:#235347"></div></div>
     <div class="acct-auto">
       <div class="f2">
         <div class="field"><label>Código</label><input id="f_codc" readonly placeholder="—"></div>
@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V237";
+const APP_VERSION = "V238";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2737,7 +2737,7 @@ function compLlenarForm(c){ const ia=(c&&c.ia)||{}; const set=(id,v)=>{ const e=
   if(esFactura){ set("f_estado","Pendiente"); const cm=$("#egCompMsg"); setTimeout(()=>{ if(cm) cm.textContent="Es una factura: se guardará como Pendiente y aparecerá en Cuentas por pagar. Si ya se pagó, cambia el Estado a Pagado."; },0); }
   else if(ia.banco_origen) set("f_tipo",cuentaPagoDeBanco(ia.banco_origen));
   const co=$("#f_coment"); if(co && extra && !co.value.includes(extra)) co.value=(co.value?co.value+" · ":"")+extra;
-  STATE._compReg=c.id; }
+  STATE._compReg=c.id; egSugerirCA(); }
 function compMarcarRegistrado(datos){ const id=STATE._compReg; if(!id) return; const c=(STATE.comps||[]).find(x=>x.id===id); if(!c) return;
   c.estado="registrado"; c.registrado=new Date().toISOString(); c.egreso={fecha:datos.fechaPago, con:datos.concepto, imp:datos.importe, ben:datos.beneficiario};
   STATE._compReg=null; compGuardarLista();
@@ -2881,7 +2881,8 @@ function renderComprobantes(){
   const subiendo=STATE._compSubiendo||"";
   const filas=V.map(c=>{ const ia=c.ia||{}; return `<tr>
       <td>${!c.driveId?'<span class="comp-th comp-th-x" title="Registrado por mensaje en Slack, sin archivo">💬</span>':`<img class="comp-th" src="https://drive.google.com/thumbnail?id=${encodeURIComponent(c.driveId)}&sz=w120" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'comp-th comp-th-x',textContent:'${/pdf/.test(c.mime||"")?"PDF":"IMG"}'}))">`}</td>
-      <td>${esc(ia.fecha||"–")}</td><td style="text-align:left">${ia.tipo_documento?`<span class="tag">${esc(ia.tipo_documento)}</span> `:""}<b>${esc(ia.proveedor||"(sin proveedor)")}</b><span class="sub2">${esc(ia.concepto||c.mensaje||c.nombre||"")}</span>${c.iaErr?`<span class="sub2" style="color:var(--error)">IA: ${esc(c.iaErr)}</span>`:""}</td>
+      <td>${esc(ia.fecha||"–")}</td><td style="text-align:left">${ia.tipo_documento?`<span class="tag">${esc(ia.tipo_documento)}</span> `:""}<b>${esc(ia.proveedor||"(sin proveedor)")}</b><span class="sub2">${esc(ia.concepto||c.mensaje||c.nombre||"")}</span>${(()=>{ if(c.estado==="registrado"||c.estado==="descartado"||!(ia.proveedor||ia.concepto)) return ""; let r={}; try{ r=caSugerir(ia.proveedor||"",ia.concepto||""); }catch(_){}
+        return r.ca?`<span class="sub2" style="color:#235347" title="Cuenta analítica que el sistema sugiere${r.src==="adiv"?" (aproximada)":""}; al Registrar puedes cambiarla">💡 ${esc(r.ca)}${r.src==="adiv"?" (aprox.)":""}</span>`:""; })()}${c.iaErr?`<span class="sub2" style="color:var(--error)">IA: ${esc(c.iaErr)}</span>`:""}</td>
       <td class="num">${ia.monto!=null&&ia.monto!==""?esc((ia.moneda||"")+" "+f2(+ia.monto)):"–"}</td>
       <td><span class="tag">${c.origen==="slack"?"Slack":(c.origen==="slack-chat"?"Slack (mensaje)":(c.origen==="billing"?"Billing":"Sistema"))}</span></td>
       <td>${c.estado==="registrado"?'<span class="st activo">Registrado</span>':(c.estado==="descartado"?'<span class="st inactivo">Descartado</span>':'<span class="st bob">Pendiente</span>')}</td>
@@ -5877,8 +5878,7 @@ function costoACxP(it){
   set("f_estado","Pendiente"); set("f_concepto",base+" "+mes); set("f_ben",it.prov||"");
   set("f_importe",it.montoFijo||it.montoVar||""); set("f_moneda",it.moneda||"USD");
   set("f_coment","Desde Lista de Costos"+(it.nota?" · "+it.nota:""));
-  const H=caHistIndex(), ca=H[_normTxt(it.prov)]||H[_normTxt(it.con)]||"";
-  if(ca){ set("f_cc",ca); try{ autoFillCuenta(); }catch(_){} }
+  egSugerirCA();
   const t=$("#egFormTitle"); if(t) t.textContent="Nueva cuenta por pagar";
   const ld=$("#egFormLead"); if(ld) ld.innerHTML="Desde la Lista de Costos: <b>"+esc(base)+"</b>. Cambia el concepto si quieres (ej.: <b>"+esc(base+" "+mes)+"</b>) y el importe real de este mes. Queda como <b>Pendiente</b> en <b>Cuentas por Pagar</b>; cuando se pague, pulsa <b>Pagar</b> ahí y sube el comprobante.";
   const c=$("#f_concepto"); if(c){ c.focus(); c.select(); }
@@ -10697,6 +10697,21 @@ function autoFillCuenta(){
     ["f_codc","f_ctipo","f_grupo","f_sc","f_cp"].forEach(id=>set(id,""));
   }
 }
+/* V238: el formulario de gasto sugiere la cuenta analítica según el beneficiario y el concepto
+   (base Asignación > historial > aproximada). Si la persona escribe otra cuenta, se respeta. */
+function caSugerir(ben,con){
+  const B=asigBaseIndex(), b=B[_normTxt(ben)]||B[_normTxt(con)]; if(b) return {ca:caNombre(b), src:"auto"};
+  const H=caHistIndex(), h=H[_normTxt(ben)]||H[_normTxt(con)]; if(h) return {ca:h, src:"hist"};
+  const a=caAdivinar((ben||"")+" "+(con||"")); return a?{ca:a, src:"adiv"}:{ca:"", src:"none"}; }
+function egSugerirCA(){
+  const cc=$("#f_cc"), hint=$("#f_ccSug"); if(!cc) return;
+  if(cc.value.trim()&&cc.dataset.sug!=="1") return;   // la puso la persona: no se toca
+  const ben=($("#f_ben")||{}).value||"", con=($("#f_concepto")||{}).value||"";
+  let r={ca:""}; try{ if((ben+con).trim().length>=3) r=caSugerir(ben,con); }catch(e){ console.error("sugerir CA",e); }
+  if(r.ca){ cc.value=r.ca; cc.dataset.sug="1";
+    if(hint){ hint.style.display=""; hint.textContent="💡 Sugerida por el sistema "+(r.src==="adiv"?"(aproximada, por palabras parecidas)":r.src==="auto"?"(base Asignación)":"(según el historial)")+" · cámbiala si no es"; } }
+  else if(cc.dataset.sug==="1"){ cc.value=""; cc.dataset.sug=""; if(hint) hint.style.display="none"; }
+  try{ autoFillCuenta(); }catch(_){} }
 function abrirFormEgreso(ed){
   const hoy=new Date().toISOString().slice(0,10);
   const edit=(ed&&ed._raw&&ed._id&&STATE.egFB)?ed:null; STATE._egEdit=edit?edit._id:null;   // V216: editar un gasto existente
@@ -10705,6 +10720,7 @@ function abrirFormEgreso(ed){
   ["f_concepto","f_importe","f_sc","f_cc","f_ben","f_tipo","f_pagadopor","f_coment","f_cp","f_pais","f_codc","f_ctipo","f_grupo"].forEach(id=>{const el=$("#"+id); if(el) el.value="";});
   const est=$("#f_estado"); if(est) est.value="Pagado";
   const mon=$("#f_moneda"); if(mon) mon.value="USD";
+  { const cc=$("#f_cc"), h=$("#f_ccSug"); if(cc) cc.dataset.sug=""; if(h) h.style.display="none"; }
   poblarDatalists();
   if(edit){ const R=edit._raw, set=(id,v)=>{ const el=$("#"+id); if(el) el.value=(v==null?"":String(v)); };
     set("f_fechaPago",R.fechadepago); set("f_fechaCont",R.fechadecontabilizacion); set("f_concepto",R.concepto); set("f_importe",R.importe);
@@ -10963,7 +10979,9 @@ $("#egFormCancel").addEventListener("click",cerrarFormEgreso);
 $("#egFormSave").addEventListener("click",guardarEgreso);
 $("#egFormDel").addEventListener("click",borrarEgresoForm);
 $("#egForm").addEventListener("click",e=>{ if(e.target.id==="egForm") cerrarFormEgreso(); });
-$("#f_cc").addEventListener("input",autoFillCuenta);
+$("#f_cc").addEventListener("input",()=>{ const cc=$("#f_cc"), h=$("#f_ccSug"); cc.dataset.sug=""; if(h) h.style.display="none"; autoFillCuenta(); });
+{ let _sgT=null; ["#f_ben","#f_concepto"].forEach(sel=>{ const el=$(sel); if(!el) return;
+    el.addEventListener("input",()=>{ clearTimeout(_sgT); _sgT=setTimeout(egSugerirCA,400); }); el.addEventListener("change",egSugerirCA); }); }
 $("#f_cc").addEventListener("change",autoFillCuenta);
 poblarDatalists();
 

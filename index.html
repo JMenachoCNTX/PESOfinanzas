@@ -1570,7 +1570,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V233";
+const APP_VERSION = "V234";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -8987,6 +8987,8 @@ function planFormMontar(){
     const o={codigo:cod.value.trim(),tipo:$("#pfTipo").value,categoria:$("#pfCat").value,nombre:$("#pfNom").value.trim(),origen:$("#pfOri").value.trim()||"PESO",estado:$("#pfEst").value};
     if(!o.codigo||!o.nombre){ m.className="msg err"; m.textContent="Escribe el código y el nombre."; return; }
     const i=(STATE.plan||[]).findIndex(r=>String(r.codigo)===o.codigo);
+    // V233: si cambia el nombre, el plan recuerda el anterior (alias) para no perder los gastos ya asignados
+    if(i>=0){ const ant=STATE.plan[i], al=(ant.alias||[]).slice(); if(ant.nombre&&ant.nombre!==o.nombre&&!al.includes(ant.nombre)) al.push(ant.nombre); o.alias=al.filter(x=>x!==o.nombre); }
     if(i>=0) STATE.plan[i]=o; else STATE.plan.push(o);
     STATE.plan=STATE.plan.slice(); STATE.planForm=null;
     const p=guardarPlanCuentas(); if(p&&p.then) p.then(()=>{ render(); const mm=$("#pcMsg"); if(mm){ mm.className="msg ok"; mm.textContent=(i>=0?"Cuenta actualizada ✓ ":"Cuenta agregada ✓ ")+o.codigo+" "+o.nombre; } }); });

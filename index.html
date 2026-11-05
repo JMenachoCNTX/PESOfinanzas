@@ -1520,7 +1520,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V220";
+const APP_VERSION = "V221";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2671,8 +2671,8 @@ function billTipo(m){ const t=(m.asunto+" "+m.texto.slice(0,250)).toLowerCase();
   if(/receipt|recibo|payment (was )?successful|pago exitoso|thanks for your payment|has been paid|payment confirmation|confirmaci[oó]n de (multi)?pago/.test(t)) return "recibo";
   if(/invoice|factura|statement|estado de cuenta|billing statement|bill is ready|cobro/.test(t)) return "factura";
   return "aviso"; }
-function billProv(de){ let s=String(de||""); const via=s.match(/^\s*["']?([^"'<]+?)["']?\s+via\s+billing/i); if(via) return via[1].trim();
-  const nm=s.match(/^\s*["']?([^"'<]+?)["']?\s*</); if(nm&&!/billing@/i.test(nm[1])) return nm[1].trim();
+function billProv(de){ let s=String(de||""); const via=s.match(/^[\s"']*([^"'<]+?)[\s"']*via\s+billing/i); if(via) return via[1].trim();
+  const nm=s.match(/^[\s"']*([^"'<]+?)[\s"']*</); if(nm&&!/billing@/i.test(nm[1])) return nm[1].trim();
   const ad=s.match(/@([a-z0-9.-]+)/i); return ad?ad[1].replace(/^(mail|email|e|notify|billing|info|no-?reply)\./i,"").split(".")[0]:s; }
 function billMonto(m){ const cur=c=>/bs|bob/i.test(c||"")?"BOB":(/€|eur/i.test(c||"")?"EUR":"USD");
   const tryRe=(txt,re)=>{ const x=String(txt||"").match(re); if(!x) return null; const n=toNumLat(x[2]); return n>0&&n<1e7?{n:Math.round(n*100)/100,mon:cur(x[1]||x[3])}:null; };
@@ -2694,7 +2694,12 @@ function billingCargar(forzar){
     if(!res||res.error){ const e=(res&&res.error)||"Sin respuesta del servidor.";
       STATE.billErr=/no permitida/i.test(e)?"El servidor todavía no tiene la función de Billing. Hay que publicar la nueva versión de Apps Script (Deploy).":
         (/permission|permiso|authoriz|autoriz|gmail/i.test(e)?"Falta dar permiso al servidor para leer Gmail (ejecutar billingAutorizar una vez en Apps Script). Detalle: "+e:e); }
-    else STATE.billing={dias:res.dias||dias, leido:res.leido, mensajes:(res.mensajes||[]).map(m=>Object.assign(m,{tipo:billTipo(m), prov:billProv(m.de)})).map(m=>Object.assign(m,{monto:billMonto(m)}))};
+    else { const L=(res.mensajes||[]).map(m=>Object.assign(m,{tipo:billTipo(m), prov:billProv(m.de), monto:billMonto(m),
+        propio:/@peso-latam\.com/i.test(m.de)&&!/via\s+billing|billing@/i.test(m.de)}));
+      // Una conversación va con su proveedor (el primer remitente de afuera); las respuestas de PE$O son solo seguimiento
+      const provHilo={}; L.slice().sort((a,b)=>a.fecha<b.fecha?-1:1).forEach(m=>{ if(!m.propio&&!provHilo[m.hilo]) provHilo[m.hilo]=m.prov; });
+      L.forEach(m=>{ if(provHilo[m.hilo]) m.prov=provHilo[m.hilo]; if(m.propio){ m.tipo="aviso"; m.monto=null; } });
+      STATE.billing={dias:res.dias||dias, leido:res.leido, mensajes:L}; }
     if(STATE.section==="billing") render();
   }).catch(e=>{ STATE._billCargando=false; STATE.billErr=(e&&e.message)||String(e); if(STATE.section==="billing") render(); });
 }
@@ -2737,7 +2742,7 @@ function renderBilling(){
     <div class="seg" id="billTipos" style="margin:0 0 16px;flex-wrap:wrap">${BILL_TIPOS.map(([k,l])=>`<button data-t="${k}" class="${tipoF===k?"on":""}">${l} (${n(k)})</button>`).join("")}</div>
     ${STATE.billErr?`<div class="msg err" style="display:block;margin-bottom:12px">${esc(STATE.billErr)}</div>`:""}
     ${STATE._billMsg?`<div class="msg ${STATE._billMsg.ok?"ok":"err"}" style="display:block;margin-bottom:12px">${esc(STATE._billMsg.t)}</div>`:""}
-    ${cards||`<div class="card">${emptyState(STATE._billCargando&&!B?"Leyendo los correos de billing@… (puede tardar unos segundos)":(B?"No hay correos con estos filtros.":"Todavía no se leyeron los correos."))}</div>`}
+    ${cards||`<div class="card">${emptyState(STATE._billCargando&&!B?"Leyendo los correos de billing@… (tarda unos 20 segundos)":(B?"No hay correos con estos filtros.":"Todavía no se leyeron los correos."))}</div>`}
     <p class="gcal-note">Solo se leen los correos: el sistema no los marca, no los borra ni responde. «En el sistema» busca un gasto con el mismo monto (±1%) entre 10 días antes y 60 días después del correo, en Egresos y en Bancos.</p>`;
   const si=$("#billSearch"); if(si) si.addEventListener("input",()=>{ STATE.billSearch=si.value; STATE._focus=true; render(); });
   if(STATE._focus&&si){ si.focus(); si.setSelectionRange(si.value.length,si.value.length); STATE._focus=false; }

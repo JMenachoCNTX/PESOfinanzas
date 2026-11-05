@@ -80,5 +80,7 @@ service cloud.firestore {
     match /proveedoresPago/{id} { allow read, write: if claveOk(); }
     // V225: inventario (muebles, sillas, computadoras…), un documento por bien con sus fotos
     match /inventario/{id} { allow read, write: if claveOk(); }
+    // V231: lista de costos (antes hoja «Tabla Costos»), un documento por costo. El sistema "quita" marcando _borrado.
+    match /costos/{id} { allow read, create, update: if claveOk(); allow delete: if esAdmin(); }
   }
 }

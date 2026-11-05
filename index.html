@@ -1570,7 +1570,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V230";
+const APP_VERSION = "V231";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3409,7 +3409,7 @@ function estadoCuentaHTML(){
   // Grupo Costos fijos: Tipo -> Categoría -> ítems
   const costGroup=()=>{
     const tipos=[];
-    ["Operativo","Administrativo"].forEach(tipo=>{
+    ["Operativo","Administrativo","Marketing"].forEach(tipo=>{
       const its=lcItems.filter(i=>i.tipo===tipo); if(!its.length) return;
       const m=new Map(); its.forEach(i=>{const k=i.cat||"(Sin categoría)"; if(!m.has(k))m.set(k,[]); m.get(k).push(i);});
       const cats=[];
@@ -4302,7 +4302,7 @@ function fbWire(prefix, defs){
 /* V228: cada tabla con su propia descarga (Excel / PDF) en su encabezado.
    Se activa pestaña por pestaña (TT_SECC). Lee la tabla tal como se ve; si la tarjeta tiene data-tx,
    usa la lista completa registrada en STATE._tx (por ejemplo cuando la pantalla muestra solo 1000 filas). */
-const TT_SECC=new Set(["egresos","cxp"]);
+const TT_SECC=new Set(["egresos","cxp","costos"]);
 function ttWire(){
   if(!TT_SECC.has(STATE.section)) return;
   document.querySelectorAll("#app .card").forEach(card=>{
@@ -5648,7 +5648,7 @@ function tablaCostosRows(){
     const fac=facFrec(frecRaw);
     const conv=v=> moneda==="BOB" ? (RATE?v/RATE:v) : v;
     const mFijoM=conv(montoFijo)*fac, mVarM=conv(montoVar)*fac;
-    const tipo = normHdr(cTipo?r[cTipo]:"").includes("admin") ? "Administrativo" : "Operativo";
+    const tn=normHdr(cTipo?r[cTipo]:""), tipo = tn.includes("admin") ? "Administrativo" : (/market|mkt|comerc|public/.test(tn) ? "Marketing" : "Operativo");
     const tipoRaw = cTipo?String(r[cTipo]||""):"";
     const empRaw = cEmp?String(r[cEmp]||""):"";
     // Fijo/Variable: explícito (col L) o inferido por cuál monto tiene valor
@@ -5658,7 +5658,7 @@ function tablaCostosRows(){
     return { tipo, tipoStd:tipoStdName(tipoRaw), tipoRaw, cat:cCat?String(r[cCat]||""):"", centro:cCat?String(r[cCat]||""):"",
       empresa:empRaw, _emp:empNorm(empRaw), fv,
       prov:cProv?String(r[cProv]||""):"", con:cCon?String(r[cCon]||""):"",
-      montoFijo, montoVar, moneda, frec:frecRaw, mFijoM, mVarM, nota:cNota?String(r[cNota]||""):"" };
+      montoFijo, montoVar, moneda, frec:frecRaw, mFijoM, mVarM, nota:cNota?String(r[cNota]||""):"", _id:r._id||null, _row:r };
   }).filter(it=> (it.con||it.prov||it.cat) && (it.montoFijo||it.montoVar));
   return {ok:true, items};
 }
@@ -5725,6 +5725,106 @@ function pnlSortableCols(sheet){
   const numKeys=cols.map((c,j)=>num[j]?'n'+j:null).filter(Boolean);
   return {tcols, robjs, numKeys};
 }
+/* ============================================================
+   V231: LISTA DE COSTOS EN FIREBASE (antes: hoja «Tabla Costos»)
+   - Colección costos/{id}: un documento por costo, con las mismas columnas de la hoja + _orden, _borrado.
+   - config/costosFB {migrado, cols} indica que ya se copió; la hoja queda de respaldo.
+   - costos/_ocultas: sugerencias que el equipo decidió no agregar.
+   ============================================================ */
+const COS_TIPOS=["OPERATIVO","ADMINISTRATIVO","MARKETING"];
+const COS_FRECS=["Mensual","Anual","Trimestral","Semanal","No recurrente"];
+async function costosFB(){
+  const meta=await NMFB.cfgGet("costosFB"); if(!meta||!meta.migrado) return null;
+  const L=await NMFB.cosLeer(); const ocu=L.find(o=>o._id==="_ocultas");
+  STATE.cosOcultas=(ocu&&ocu.lista)||[];
+  return {cols:meta.cols||[], rows:L.filter(o=>o._id.charAt(0)!=="_"&&!o._borrado).sort((a,b)=>(a._orden||0)-(b._orden||0))};
+}
+/* Copia única de la hoja a Firebase (solo administrador). Agrega la columna «Fijo/Variable» si no existe. */
+async function costosMigrarAFirebase(){
+  if(!NMFB.esAdmin()) throw new Error("Solo un administrador puede pasar la lista a la nube.");
+  const meta=await NMFB.cfgGet("costosFB"); if(meta&&meta.migrado) throw new Error("La lista de costos ya está en la nube.");
+  const d=STATE.tablaCostos||{}; if(!(d.rows||[]).length) throw new Error("La hoja no tiene costos para copiar.");
+  const cols=(d.cols||[]).slice(); if(!cols.some(c=>normHdr(c).includes("fijovariable"))) cols.push("Fijo/Variable");
+  const cFV=cols.find(c=>normHdr(c).includes("fijovariable"));
+  const items=tablaCostosRows().items, fvDe=new Map(items.map(i=>[i._row,i.fv]));
+  const filas=d.rows.map((r,i)=>{ const o={}; cols.forEach(c=>o[c]=(r[c]==null?"":r[c])); if(!o[cFV]&&fvDe.get(r)) o[cFV]=fvDe.get(r)==="fijo"?"Fijo":"Variable";
+    o._id="C"+String(i+2).padStart(4,"0"); o._fila=i+2; o._orden=i+1; return o; });
+  await NMFB.cosGuardar(filas);
+  await NMFB.cfgSet("costosFB",{migrado:true,cols:cols,n:filas.length,fecha:new Date().toISOString()});
+  return filas.length;
+}
+function _cosCol(...n){ const cols=(STATE.tablaCostos&&STATE.tablaCostos.cols)||[]; for(const x of n){ const c=cols.find(k=>normHdr(k)===x); if(c) return c; } for(const x of n){ const c=cols.find(k=>normHdr(k).includes(x)); if(c) return c; } return null; }
+function costoModal(it, pre){
+  const r=Object.assign({},(it&&it._row)||{}), C={tipo:_cosCol("tipo"),centro:_cosCol("centrodecosto","centrocosto","centro","categoria"),prov:_cosCol("proveedor","beneficiario","detalle"),
+    con:_cosCol("concepto"),fijo:_cosCol("montofijo"),vari:_cosCol("montovariable"),mon:_cosCol("moneda"),frec:_cosCol("frecuencia","periodicidad"),nota:_cosCol("nota","comentario"),
+    emp:_cosCol("empresa","entidad"),fv:_cosCol("fijovariable"),nro:_cosCol("nro")};
+  const v=k=>pre&&pre[k]!=null?pre[k]:(C[k]?r[C[k]]:"");
+  const centros=[...new Set(tablaCostosRows().items.map(i=>i.centro).filter(Boolean))].sort();
+  const tipoAct=String(v("tipo")||"OPERATIVO").toUpperCase(), fvAct=_normTxt(v("fv")).indexOf("var")>-1?"Variable":"Fijo";
+  const num=x=>x===""||x==null?"":String(x).replace(".",",");
+  const ov=rhModal(it?"Editar costo":"Agregar costo",`
+    <div class="us-form" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+      <div style="grid-column:1/-1"><label>Grupo</label><div class="seg" id="cmTipo">${COS_TIPOS.map(t=>`<button type="button" data-v="${t}" class="${t===tipoAct?"on":""}">${t==="OPERATIVO"?"Operativo":t==="ADMINISTRATIVO"?"Administrativo":"Marketing"}</button>`).join("")}</div></div>
+      <div><label>Proveedor / Beneficiario</label><input id="cmProv" list="dl_ben" value="${esc(v("prov")||"")}"></div>
+      <div><label>Concepto</label><input id="cmCon" value="${esc(v("con")||"")}"></div>
+      <div><label>Centro de costo</label><input id="cmCentro" list="cmCentroL" value="${esc(v("centro")||"")}"><datalist id="cmCentroL">${centros.map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
+      <div><label>Empresa</label><select id="cmEmp">${_rhOpts(["LLC","SRL"],String(v("emp")||"LLC").toUpperCase())}</select></div>
+      <div style="grid-column:1/-1"><label>¿Fijo o variable?</label><div class="seg" id="cmFV"><button type="button" data-v="Fijo" class="${fvAct==="Fijo"?"on":""}">Fijo (siempre lo mismo)</button><button type="button" data-v="Variable" class="${fvAct==="Variable"?"on":""}">Variable (según uso)</button></div></div>
+      <div><label>Monto fijo</label><input id="cmFijo" inputmode="decimal" value="${esc(num(v("fijo")))}" placeholder="0,00"></div>
+      <div><label>Monto variable (aprox.)</label><input id="cmVar" inputmode="decimal" value="${esc(num(v("vari")))}" placeholder="0,00"></div>
+      <div><label>Moneda</label><select id="cmMon">${_rhOpts(["USD","BOB"],String(v("mon")||"USD").toUpperCase().includes("BOB")?"BOB":"USD")}</select></div>
+      <div><label>Frecuencia</label><select id="cmFrec">${_rhOpts(COS_FRECS,COS_FRECS.find(f=>_normTxt(f)===_normTxt(v("frec")))||"Mensual")}</select></div>
+      <div style="grid-column:1/-1"><label>Nota</label><input id="cmNota" value="${esc(v("nota")||"")}"></div>
+    </div>
+    <div class="modal-actions">${it?`<button class="btn ghost" id="cmBorrar" style="margin-right:auto">🗑 Quitar de la lista</button>`:""}<button class="btn" data-cerrar2>Cancelar</button><button class="btn primary" id="cmGuardar">Guardar</button></div>`,640);
+  poblarDatalists();
+  ["cmTipo","cmFV"].forEach(id=>ov.querySelectorAll("#"+id+" button").forEach(b=>b.onclick=()=>{ ov.querySelectorAll("#"+id+" button").forEach(x=>x.classList.toggle("on",x===b)); }));
+  ov.querySelector("[data-cerrar2]").onclick=()=>ov.remove();
+  const guardar=async(borrar)=>{
+    const g=id=>ov.querySelector("#"+id).value.trim(), on=id=>(ov.querySelector("#"+id+" button.on")||{}).dataset.v||"";
+    if(!borrar&&!g("cmProv")&&!g("cmCon")) return ov._msg("Escribe el proveedor o el concepto.");
+    const fila=Object.assign({},r); delete fila._id;
+    const put=(k,x)=>{ if(C[k]) fila[C[k]]=x; };
+    put("tipo",on("cmTipo")); put("prov",g("cmProv")); put("con",g("cmCon")); put("centro",g("cmCentro")); put("emp",g("cmEmp"));
+    put("fv",on("cmFV")); put("fijo",toNumLat(g("cmFijo"))||""); put("vari",toNumLat(g("cmVar"))||""); put("mon",g("cmMon")); put("frec",g("cmFrec")); put("nota",g("cmNota"));
+    if(!it){ const rows=STATE.tablaCostos.rows||[]; fila._orden=Date.now(); if(C.nro) fila[C.nro]=rows.length+1; }
+    if(borrar){ if(!confirm("¿Quitar «"+(g("cmProv")||g("cmCon"))+"» de la Lista de Costos?")) return; fila._borrado=true; }
+    const b=ov.querySelector("#cmGuardar"); b.disabled=true; b.textContent="Guardando…";
+    try{ const [id]=await NMFB.cosGuardar([Object.assign(fila,{_id:it?it._id:null})]);
+      const rows=(STATE.tablaCostos.rows||[]).filter(x=>x._id!==id); if(!borrar) rows.push(Object.assign({},fila,{_id:id}));
+      STATE.tablaCostos={cols:STATE.tablaCostos.cols,rows:rows.sort((a,b)=>(a._orden||0)-(b._orden||0))}; ov.remove(); render(); }
+    catch(e){ b.disabled=false; b.textContent="Guardar"; ov._msg(/permission|insufficient/i.test(String(e&&e.message||e))?"Todavía no se puede guardar: falta publicar la regla nueva de Firebase (costos).":"No se pudo guardar: "+((e&&e.message)||e)); }
+  };
+  ov.querySelector("#cmGuardar").onclick=()=>guardar(false);
+  const bb=ov.querySelector("#cmBorrar"); if(bb) bb.onclick=()=>guardar(true);
+}
+/* ¿Este gasto corresponde a este costo de la lista? (por proveedor) */
+function _cosClave(t){ return _normTxt(t).replace(/[^a-z0-9]/g,""); }
+function _cosCoincide(it, txt){ const p=_cosClave(it.prov); if(p.length<3) return false; if(txt.includes(p)) return true;
+  const w=_normTxt(it.prov).split(/[^a-z0-9]+/).filter(x=>x.length>=4&&!/^(peso|bolivia|srl|llc|inc|corp|limited|ltda)$/.test(x)); return !!w.length&&txt.includes(w[0]); }
+function _cosGastos(){
+  return (STATE.egresos||[]).filter(e=>e.g!=null&&monthIdx(e.m)>=0&&!/presupuest/i.test(String(e.e||""))).map(e=>{ const ca=(resolveEgreso(e)||{}).ca||"", a=ancEgreso(e)||{};
+    return {e, k:e.g*12+monthIdx(e.m), usd:e.impUSD!=null?+e.impUSD:(+e.imp||0), ben:e.ben||"", ca, cuenta:a.kcuenta||"", txt:_cosClave([e.ben,e.con,ca].join(" "))}; });
+}
+/* Pagos que se repiten en Egresos y no están en la Lista de Costos */
+function costosSugerencias(items){
+  const G=_cosGastos(), hoyK=new Date().getFullYear()*12+new Date().getMonth(), oc=new Set(STATE.cosOcultas||[]);
+  const m={};
+  G.filter(x=>x.k>hoyK-12&&x.usd>0&&x.ben&&!/^activo/i.test(x.cuenta)&&!/sueldo|salario|remunera|aguinaldo|refund|devoluc|prestamo|préstamo|aporte|inversi|impuesto|dividend/i.test(x.ca+" "+x.e.con)).forEach(x=>{
+    const k=_cosClave(x.ben); if(!k||oc.has(k)) return; const o=m[k]||(m[k]={k,ben:x.ben,meses:{},n:0,cas:{},ult:""}); o.meses[x.k]=(o.meses[x.k]||0)+x.usd; o.n++; o.cas[x.ca]=(o.cas[x.ca]||0)+1; if(String(x.e.fecha)>o.ult) o.ult=String(x.e.fecha); });
+  return Object.values(m).filter(o=>Object.keys(o.meses).length>=2&&!items.some(it=>_cosCoincide(it,o.k))).map(o=>{
+    const vals=Object.values(o.meses), prom=vals.reduce((s,v)=>s+v,0)/vals.length, dev=Math.sqrt(vals.reduce((s,v)=>s+(v-prom)*(v-prom),0)/vals.length);
+    const ca=Object.entries(o.cas).sort((a,b)=>b[1]-a[1])[0][0], t=_normTxt(o.ben+" "+ca);
+    const tipo=/ads|marketing|publici|meta|facebook|instagram|tiktok|linkedin|influenc|campa/.test(t)?"MARKETING":(/contab|legal|abogad|notari|oficina|alquiler|banco|seguro|admin/.test(t)?"ADMINISTRATIVO":"OPERATIVO");
+    return {k:o.k, ben:o.ben, ca, nMeses:vals.length, prom, fijo:prom>0&&dev/prom<0.15, tipo, ult:o.ult.slice(0,10)}; }).sort((a,b)=>b.prom-a.prom);
+}
+/* Lista de Costos (lo esperado al mes) vs lo pagado en Egresos los últimos 3 meses completos */
+function costosComparacion(items){
+  const G=_cosGastos(), hoy=new Date(), hoyK=hoy.getFullYear()*12+hoy.getMonth(), ks=[hoyK-3,hoyK-2,hoyK-1];
+  return {ks, filas:items.filter(i=>!/norecur|unic|puntual/.test(_normTxt(i.frec))).map(i=>{
+    const pag=ks.map(k=>G.filter(x=>x.k===k&&_cosCoincide(i,x.txt)).reduce((s,x)=>s+x.usd,0)), prom=pag.reduce((s,v)=>s+v,0)/ks.length;
+    return {i, esperado:i.mFijoM+i.mVarM, pag, prom, dif:prom-(i.mFijoM+i.mVarM)}; }).sort((a,b)=>Math.abs(b.dif)-Math.abs(a.dif))};
+}
 function renderCostos(){
   const tab=STATE.cosTab||"lista";
   const isPnl=(tab==="costingreso")||PNL_TABS.indexOf(tab)>=0;
@@ -5754,9 +5854,9 @@ function renderCostos(){
 
   // ---- Lista de Costos (hoja "Tabla Costos") ----
   const {ok:lcOk, items}=tablaCostosRows();
-  const op=items.filter(i=>i.tipo==="Operativo"), ad=items.filter(i=>i.tipo==="Administrativo");
+  const op=items.filter(i=>i.tipo==="Operativo"), ad=items.filter(i=>i.tipo==="Administrativo"), mk=items.filter(i=>i.tipo==="Marketing");
   const sFijo=arr=>arr.reduce((s,i)=>s+i.mFijoM,0), sVar=arr=>arr.reduce((s,i)=>s+i.mVarM,0);
-  const opM=sFijo(op), adM=sFijo(ad), totFijoM=opM+adM, totVarM=sVar(items);
+  const opM=sFijo(op), adM=sFijo(ad), mkM=sFijo(mk), totFijoM=opM+adM+mkM, totVarM=sVar(items);
   const byCat={}; items.forEach(i=>{const c=i.cat||"(Sin categoría)"; byCat[c]=(byCat[c]||0)+i.mFijoM;});
   const catBars=Object.entries(byCat).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]);
 
@@ -5869,8 +5969,9 @@ function renderCostos(){
       {label:"USD /mes",right:1,cls:"num",sortKey:"_fUSD",render:i=>i._fUSD?("$"+f2(i._fUSD)):'<span class="zero">–</span>'},
       {label:"BOB /mes",right:1,cls:"num",sortKey:"_fBOB",render:i=>(i._fBOB!=null&&i._fBOB)?("Bs "+f2(i._fBOB)):'<span class="zero">–</span>'},
     ];
+    if(STATE.cosFB) lcCols.push({label:"",render:i=>i._id?`<button class="btn ghost lc-ed" data-id="${esc(i._id)}" title="Editar este costo" style="padding:4px 8px">✎</button>`:""});
     const totUSD_F=allF.reduce((s,i)=>s+i._fUSD,0);
-    const totRowLC=["Total ("+allF.length+")","","","","","","","","","",`<b>$${f2(totUSD_F)}</b>`, RATE?`<b>Bs ${f2(totUSD_F*RATE)}</b>`:'<span class="zero">–</span>'];
+    const totRowLC=["Total ("+allF.length+")","","","","","","","","","",`<b>$${f2(totUSD_F)}</b>`, RATE?`<b>Bs ${f2(totUSD_F*RATE)}</b>`:'<span class="zero">–</span>'].concat(STATE.cosFB?[""]:[]);
     const tabla = allF.length? tbl(lcCols,sortIt(allF),totRowLC,LS,{sticky:true,viewKey:"costos_lista"}) : emptyState("Sin costos con los filtros actuales.");
     const lcFilterDefs=[
       ...(tiposL.length?[{k:"lcTipo",lbl:"Tipo",disp:v=>v,opts:tiposL.map(c=>({v:c,t:c})),ph:"Todos los tipos"}]:[]),
@@ -5879,7 +5980,29 @@ function renderCostos(){
       ...(fvsL.length?[{k:"lcFV",lbl:"Fijo/Variable",disp:v=>costoLabel(v),opts:fvsL.map(c=>({v:c,t:costoLabel(c)})),ph:"Fijo / Variable"}]:[])
     ];
     const lcFB=fbHTML("lcf", lcFilterDefs);
-    const toolbar=`<div class="toolbar" style="align-items:center">${esearch("lcSearch","Buscar proveedor o concepto…",STATE.lcSearch)}${lcFB.bar}</div>${lcFB.panel}`;
+    // V231: editar en la nube, sugerencias y comparación con lo pagado
+    const vista=STATE.lcVista||"lista", sug=costosSugerencias(items), cmp=vista==="comparar"?costosComparacion(items.filter(passF)):null;
+    const accion=STATE.cosFB?`<button class="btn primary" id="lcAdd">+ Agregar costo</button>`:(NMFB.esAdmin()&&nmFbActivo()?`<button class="btn primary" id="lcMigrar" title="Copia la hoja «Tabla Costos» a la nube del sistema; la hoja queda de respaldo">☁ Pasar la lista a la nube</button>`:"");
+    const toolbar=`<div class="toolbar" style="align-items:center">${esearch("lcSearch","Buscar proveedor o concepto…",STATE.lcSearch)}${lcFB.bar}<div class="spacer"></div>${accion}</div>${lcFB.panel}
+      ${STATE.cosFBErr?`<div class="msg err" style="display:block;margin:0 0 12px">${esc(STATE.cosFBErr)}</div>`:""}${!STATE.cosFB?`<div class="mini" style="margin:-4px 0 10px">La lista todavía se lee de la hoja «Tabla Costos». Para editarla aquí hay que pasarla a la nube.</div>`:""}`;
+    const vistaSeg=`<div class="seg" id="lcVista" style="margin:0 0 14px;flex-wrap:wrap"><button data-v="lista" class="${vista==="lista"?"on":""}">Lista</button><button data-v="sugerencias" class="${vista==="sugerencias"?"on":""}">Sugerencias (${sug.length})</button><button data-v="comparar" class="${vista==="comparar"?"on":""}">Lista vs lo pagado</button></div>`;
+    const mesK=k=>MONTH_ES[k%12]+" "+String(Math.floor(k/12)).slice(2);
+    let cuerpo;
+    if(vista==="sugerencias") cuerpo=`<div class="card"><div class="head"><h3>Pagos frecuentes que no están en la lista</h3><span class="mini">${sug.length} · se pagaron en 2 o más meses del último año</span></div>
+        <p class="section-intro">Sistemas, plataformas, suscripciones y proveedores que aparecen seguido en <b>Egresos</b> pero no en tu Lista de Costos. Decide si son <b>fijos</b> o <b>variables</b> y de qué <b>grupo</b>: <b>+ Agregar</b> los pasa a la lista (puedes cambiar los datos antes de guardar) y <b>Ocultar</b> los saca de aquí.</p>
+        ${sug.length?`<div class="tbl-scroll sticky-head"><table><thead><tr><th>Proveedor</th><th>Cuenta analítica</th><th class="num">Meses con pago</th><th class="num">Promedio /mes (USD)</th><th>Parece</th><th>Grupo sugerido</th><th>Último pago</th><th></th></tr></thead><tbody>
+        ${sug.map((x,j)=>`<tr><td><b>${esc(x.ben)}</b></td><td>${esc(x.ca||"–")}</td><td class="num">${x.nMeses}</td><td class="num">$${f2(x.prom)}</td><td><span class="tag">${x.fijo?"Fijo":"Variable"}</span></td><td>${x.tipo==="OPERATIVO"?"Operativo":x.tipo==="ADMINISTRATIVO"?"Administrativo":"Marketing"}</td><td class="mini">${esc(x.ult)}</td>
+          <td style="white-space:nowrap">${STATE.cosFB?`<button class="btn ghost lc-sug" data-j="${j}">+ Agregar</button><button class="btn ghost lc-ocu" data-j="${j}" title="No mostrar más esta sugerencia">Ocultar</button>`:""}</td></tr>`).join("")}
+        </tbody></table></div>`:emptyState("Todos los pagos frecuentes ya están en la lista.")}</div>`;
+    else if(vista==="comparar") cuerpo=`<div class="card"><div class="head"><h3>Lista vs lo pagado</h3><span class="mini">lo que dice la lista al mes (fijo + variable) contra lo pagado en Egresos · USD</span></div>
+        <p class="section-intro">Para cada costo de la lista se buscan en <b>Egresos</b> los pagos al mismo proveedor en los <b>últimos 3 meses completos</b>. <b>Diferencia</b> en rojo = se pagó más de lo esperado; en verde = menos. Si un costo sale en 0 puede que esté a otro nombre en Egresos.</p>
+        <div class="tbl-scroll sticky-head"><table><thead><tr><th>Grupo</th><th>Proveedor</th><th>Concepto</th><th class="num">Monto fijo /mes</th><th class="num">Monto variable /mes</th>${cmp.ks.map(k=>`<th class="num">${mesK(k)}</th>`).join("")}<th class="num">Promedio pagado</th><th class="num">Diferencia</th></tr></thead><tbody>
+        ${cmp.filas.map(f=>`<tr><td><span class="tag">${esc(f.i.tipo)}</span></td><td>${esc(f.i.prov||"–")}</td><td>${esc(f.i.con||"–")}</td><td class="num">${f.i.mFijoM?"$"+f2(f.i.mFijoM):'<span class="zero">–</span>'}</td><td class="num">${f.i.mVarM?"$"+f2(f.i.mVarM):'<span class="zero">–</span>'}</td>
+          ${f.pag.map(v=>`<td class="num">${v?"$"+f2(v):'<span class="zero">–</span>'}</td>`).join("")}<td class="num"><b>${f.prom?"$"+f2(f.prom):'<span class="zero">–</span>'}</b></td>
+          <td class="num" style="color:${Math.abs(f.dif)<1?"inherit":(f.dif>0?"var(--danger,#B42318)":"var(--emerald)")}">${Math.abs(f.dif)<1?"=":(f.dif>0?"+":"−")+"$"+f2(Math.abs(f.dif))}</td></tr>`).join("")}
+        </tbody><tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.i.mFijoM,0))}</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.i.mVarM,0))}</b></td>
+          ${cmp.ks.map((k,j)=>`<td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.pag[j],0))}</b></td>`).join("")}<td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.prom,0))}</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.dif,0))}</b></td></tr></tfoot></table></div></div>`;
+    else cuerpo=`<div class="card"><div class="head"><h3>Lista de Costos</h3><span class="mini">${allF.length} de ${items.length} · $${f2(totUSD_F)}/mes · clic en un encabezado para ordenar</span></div>${toolbar}${tabla}</div>`;
     app.innerHTML=`
       <p class="section-intro">Todos los costos de la empresa desde tu hoja <b>Tabla Costos</b>: clasificados por <b>Tipo</b> (función), <b>Empresa</b>, <b>Centro de Costo</b> (área) y <b>Fijo/Variable</b> (comportamiento). Los montos se llevan a base <b>mensual</b> según su frecuencia; <b>USD /mes</b> y <b>BOB /mes</b> son el costo mensual total (fijo + variable) de cada fila${RATE?` al TC del día (Bs ${fTC(RATE)}/USD)`:""}.</p>
       ${seg}
@@ -5889,13 +6012,23 @@ function renderCostos(){
         ${kpi("Total mensual","/mes "+money(totFijoM+totVarM),money((totFijoM+totVarM)*12)+" al año","#6F9A7D","◆")}
         ${kpi("Costos registrados",String(items.length),new Set(items.map(i=>i.prov).filter(Boolean)).size+" proveedores","#163832","◧")}
       </div>
-      ${toolbar}
-      <div class="card"><div class="head"><h3>Lista de Costos</h3><span class="mini">${allF.length} de ${items.length} · $${f2(totUSD_F)}/mes · clic en un encabezado para ordenar</span></div>${tabla}</div>
+      ${vistaSeg}${cuerpo}
       <div class="card" style="background:linear-gradient(135deg,rgba(35,83,71,.10),var(--surface))"><div class="head"><h3>Presupuesto mensual</h3></div>
         <p class="section-intro" style="margin:2px 0 0">Costos <b>fijos</b>: necesitas ~<b>${money(totFijoM)}</b> al mes → <b>${money(totFijoM*12)}</b> al año. Costos <b>variables</b> estimados: ~<b>${money(totVarM)}</b>/mes. Presupuesto total aprox.: <b>${money(totFijoM+totVarM)}</b>/mes.</p>
       </div>`;
     const si=$("#lcSearch"); if(si){ si.addEventListener("input",()=>{STATE.lcSearch=si.value;STATE._dynFocus="lcSearch";render();}); }
     fbWire("lcf", lcFilterDefs);
+    document.querySelectorAll("#lcVista button").forEach(b=>b.addEventListener("click",()=>{ STATE.lcVista=b.dataset.v; render(); }));
+    const la=$("#lcAdd"); if(la) la.addEventListener("click",()=>costoModal(null));
+    document.querySelectorAll(".lc-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const it=items.find(i=>i._id===b.dataset.id); if(it) costoModal(it); }));
+    document.querySelectorAll(".lc-sug").forEach(b=>b.addEventListener("click",()=>{ const x=sug[+b.dataset.j]; if(!x) return;
+      costoModal(null,{tipo:x.tipo,prov:x.ben,con:x.ca,fv:x.fijo?"Fijo":"Variable",fijo:x.fijo?Math.round(x.prom*100)/100:"",vari:x.fijo?"":Math.round(x.prom*100)/100,mon:"USD",frec:"Mensual",emp:"LLC",nota:"Sugerido desde Egresos"}); }));
+    document.querySelectorAll(".lc-ocu").forEach(b=>b.addEventListener("click",async()=>{ const x=sug[+b.dataset.j]; if(!x) return;
+      const L=(STATE.cosOcultas||[]).concat([x.k]); try{ await NMFB.cosOcultar(L); STATE.cosOcultas=L; render(); }catch(e){ alert("No se pudo ocultar: "+((e&&e.message)||e)); } }));
+    const lm=$("#lcMigrar"); if(lm) lm.addEventListener("click",async()=>{ if(!confirm("Se copiará la hoja «Tabla Costos» a la nube del sistema. Desde ahí la lista se edita aquí y la hoja queda solo de respaldo. ¿Continuar?")) return;
+      lm.disabled=true; lm.textContent="Copiando…";
+      try{ const n=await costosMigrarAFirebase(); const tc=await costosFB(); if(tc){ STATE.tablaCostos=tc; STATE.cosFB=true; STATE.cosFBErr=null; } alert("Listo: "+n+" costos copiados a la nube."); render(); }
+      catch(e){ lm.disabled=false; lm.textContent="☁ Pasar la lista a la nube"; alert(/permission|insufficient/i.test(String(e&&e.message||e))?"Todavía no se puede: falta publicar la regla nueva de Firebase (costos).":"No se pudo: "+((e&&e.message)||e)); } });
     document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
       const k=th.dataset.k;
       if(LS.key===k) STATE.lcSort={key:k,dir:LS.dir==="asc"?"desc":"asc"};
@@ -5903,7 +6036,7 @@ function renderCostos(){
       render();
     }));
     if(STATE._dynFocus==="lcSearch"){ const el=$("#lcSearch"); if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);} STATE._dynFocus=null; }
-    STATE._cosPDF={tab:"lista", opF:sortIt(op.filter(passF)), adF:sortIt(ad.filter(passF)), opM, adM, totFijoM, totVarM, opTotF:op.filter(passF).reduce((s,i)=>s+i._fUSD,0), adTotF:ad.filter(passF).reduce((s,i)=>s+i._fUSD,0)};
+    STATE._cosPDF={tab:"lista", opF:sortIt(op.filter(passF)), adF:sortIt(ad.filter(passF)), opM, adM, totFijoM, totVarM, opTotF:op.filter(passF).reduce((s,i)=>s+i._fUSD,0), adTotF:ad.filter(passF).reduce((s,i)=>s+i._fUSD,0), mkF:sortIt(mk.filter(passF)), mkTotF:mk.filter(passF).reduce((s,i)=>s+i._fUSD,0)};
     wire(); return;
   }
 
@@ -7010,6 +7143,7 @@ function exportCostosPDF(){
         {4:{halign:"center",cellWidth:30},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"},8:{halign:"right"}}); };
     det("Costos operativos", V.opF, V.opTotF);
     det("Costos administrativos", V.adF, V.adTotF);
+    det("Costos de marketing", V.mkF||[], V.mkTotF||0);
   } else {
     ctx.h2("COSTOS PAGADOS · "+usd(V.pUSD));
     ctx.table(["Por proveedor","USD"], V.kwBars.map(e=>[e[0],usd(e[1])]), null, {1:{halign:"right"}});
@@ -9662,6 +9796,15 @@ const NMFB={
   async invGuardar(id,o){ const x=Object.assign({},o); delete x._id; x.actualizado=new Date().toISOString(); x.por=(this.sesion&&this.sesion.email)||"";
     const ref=id?this.db.doc("inventario/"+id):this.db.collection("inventario").doc(); await ref.set(x); return Object.assign({_id:ref.id},x); },
   async invBorrar(id){ await this.db.doc("inventario/"+id).delete(); },
+  // V231: lista de costos (un documento por costo)
+  async cosLeer(){ const sn=await this.db.collection("costos").get(); return sn.docs.map(d=>Object.assign({_id:d.id},d.data())); },
+  async cosGuardar(filas){ const ids=[], por=(this.sesion&&this.sesion.email)||"", ahora=new Date().toISOString();
+    for(let i=0;i<filas.length;i+=400){ const b=this.db.batch();
+      filas.slice(i,i+400).forEach(f=>{ const o=Object.assign({},f); const id=o._id; delete o._id;
+        const ref=id?this.db.collection("costos").doc(String(id)):this.db.collection("costos").doc(); o.actualizado=ahora; o.por=por; b.set(ref,o); ids.push(ref.id); });
+      await b.commit(); }
+    return ids; },
+  async cosOcultar(lista){ await this.db.doc("costos/_ocultas").set({lista:lista,actualizado:new Date().toISOString(),por:(this.sesion&&this.sesion.email)||""}); },
   // V216: egresos (un documento por gasto). desdeMs = solo los cambiados después de esa hora (caché)
   async egLeer(desdeMs){ let q=this.db.collection("egresos"); if(desdeMs) q=q.where("_act",">",firebase.firestore.Timestamp.fromMillis(desdeMs));
     const sn=await q.get(); return sn.docs.map(d=>{ const o=d.data(); o._id=d.id; o._actMs=(o._act&&o._act.toMillis)?o._act.toMillis():0; delete o._act; return o; }); },
@@ -9791,6 +9934,10 @@ async function nmFbHistoricos(res){
   STATE.egFB=false; STATE.egFBErr=null;
   try{ const eg=await egresosFB(); if(eg){ res.egresos=eg; STATE.egFB=true; } }
   catch(e){ console.error("egresos Firebase",e); STATE.egFBErr=(e&&e.message)||String(e); }
+  // V231: la Lista de Costos vive en Firebase (si ya se migró); la hoja «Tabla Costos» queda de respaldo
+  STATE.cosFB=false; STATE.cosFBErr=null;
+  try{ const tc=await costosFB(); if(tc){ res.tablaCostos=tc; STATE.cosFB=true; } }
+  catch(e){ console.error("costos Firebase",e); STATE.cosFBErr=/permission|insufficient/i.test(String(e&&e.message||e))?"Falta publicar la regla nueva de Firebase (costos).":((e&&e.message)||String(e)); }
   const PRE=res._fbPre||{};
   for(const n of NM_HIST){
     if(PRE[n]){ STATE.histFB[n]=true; continue; }   // V198: ya vino de Firebase

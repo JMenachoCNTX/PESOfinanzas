@@ -1275,6 +1275,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
           <option value="Pendiente">Pendiente</option>
           <option value="Presupuestado">Presupuestado</option>
         </select></div></div>
+        <div class="gf-row" id="gfDec"><span class="gf-lbl">Decimales</span><div class="seg" id="fDec"><button data-d="2">2 decimales</button><button data-d="0">Sin decimales</button></div></div>
         <div class="gf-row" id="gfCur"><span class="gf-lbl">Moneda</span><div class="seg" id="fCur"><button data-c="USD" class="on">USD</button><button data-c="BOB">BOB</button></div></div>
         <div class="gf-row" id="gfView"><span class="gf-lbl">Vista</span><div class="seg" id="fView"><button data-v="month" class="on">Mensual</button><button data-v="quarter">Trimestral</button><button data-v="annual">Anual</button></div></div>
       </div>
@@ -1518,7 +1519,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V216";
+const APP_VERSION = "V217";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1619,9 +1620,12 @@ function monthIdx(m){
   i=MONTH_ES.findIndex(x=>x.toLowerCase()===s); if(i>=0)return i;
   return -1;
 }
-function fmt(n,dec=0){
+/* V217: todo el sistema muestra los montos con 2 decimales y el mismo formato (1,234.56).
+   Filtros ▸ Decimales permite verlos redondeados (sin decimales). Los tipos de cambio siempre van con 2 (fTC). */
+let NM_DEC=(function(){ try{ return localStorage.getItem("nm_dec")==="0"?0:2; }catch(_){ return 2; } })();
+function fmt(n){
   if(n==null||isNaN(n)) return "0";
-  const neg=n<0; n=Math.abs(n);
+  const neg=n<0; n=Math.abs(n); const dec=NM_DEC;
   let s=n.toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec});
   return (neg?"(":"")+"$"+s+(neg?")":"");
 }
@@ -3230,7 +3234,7 @@ function estadoCuentaHTML(){
     ${kpi("Total a cubrir",usd(totalCubrir),"fijos + variable + pendiente","#163832","▤")}
   </div>`;
 
-  return `<p class="section-intro">Estado de cuenta agrupado y desplegable: junta tus <b>costos fijos mensuales</b> (Lista de Costos) con tus <b>cuentas por pagar</b> pendientes. Toca cualquier fila con ▶ para desplegar sus detalles. Montos en USD y su equivalente en BOB${RATE?` al TC del día (Bs ${f2(RATE)}/USD)`:""}.</p>
+  return `<p class="section-intro">Estado de cuenta agrupado y desplegable: junta tus <b>costos fijos mensuales</b> (Lista de Costos) con tus <b>cuentas por pagar</b> pendientes. Toca cualquier fila con ▶ para desplegar sus detalles. Montos en USD y su equivalente en BOB${RATE?` al TC del día (Bs ${fTC(RATE)}/USD)`:""}.</p>
     ${kpis}
     ${treeCard}
     <div class="card" style="background:linear-gradient(135deg,rgba(35,83,71,.10),var(--surface))"><div class="head"><h3>Resumen del estado de cuenta</h3></div>${caja}
@@ -3660,7 +3664,7 @@ function renderEgresosGeneral(){
     ...(fCostos.length?[{k:"egGenCosto",lbl:"Fijo/Variable",disp:v=>costoLabel(v),opts:fCostos.map(c=>({v:c,t:costoLabel(c)})),ph:"Fijo / Variable"}]:[])
   ];
   const egGenFB=fbHTML("eggf", egGenFilterDefs);
-  const toolbar=`<div class="toolbar" style="align-items:center">${esearch("egGenSearch","Buscar concepto, beneficiario, importe, cuenta…",STATE.egGenSearch)}${egGenFB.bar}<div class="spacer"></div><button class="btn" id="egTjBtn" title="Carga varios gastos de una vez desde el Excel de la tarjeta corporativa">⬆ Importar tarjeta (Excel)</button><input type="file" id="egTjFile" accept=".xlsx,.xls" hidden></div>${egGenFB.panel}`;
+  const toolbar=`<div class="toolbar" style="align-items:center">${esearch("egGenSearch","Buscar concepto, beneficiario, importe, cuenta…",STATE.egGenSearch)}${egGenFB.bar}<div class="spacer"></div><button class="btn" id="egTjBtn" title="Carga varios gastos de una vez desde el Excel de la tarjeta corporativa o el extracto CSV de Altitude">⬆ Importar tarjeta (Excel / Altitude)</button><input type="file" id="egTjFile" accept=".xlsx,.xls,.csv" hidden></div>${egGenFB.panel}`;
   $("#app").innerHTML=`<p class="section-intro">Todos los egresos en <b>una sola lista</b>: los de <b>Egresos</b> + las <b>salidas</b> de <b>Mercury</b> y <b>BitGo</b>, con las mismas cuentas contables. <span class="mini">(No modifica la pestaña Bancos.)</span></p>
     ${kpis}${toolbar}${pills}
     <div class="card"><div class="head"><h3>Todos los egresos</h3><span class="mini">${fmt(totUSD)} · Bs ${f2(totBOB)} · clic en un encabezado para ordenar</span></div>
@@ -4164,7 +4168,7 @@ function renderEgresos(){
         ${esearch("egSearch","Buscar…",STATE.egSearch)}
         ${egFB.bar}
         <div class="spacer"></div>
-        <button class="btn" id="egTjBtn" title="Carga varios gastos de una vez desde el Excel de la tarjeta corporativa">⬆ Importar tarjeta (Excel)</button><input type="file" id="egTjFile" accept=".xlsx,.xls" hidden>
+        <button class="btn" id="egTjBtn" title="Carga varios gastos de una vez desde el Excel de la tarjeta corporativa o el extracto CSV de Altitude">⬆ Importar tarjeta (Excel / Altitude)</button><input type="file" id="egTjFile" accept=".xlsx,.xls,.csv" hidden>
         <button class="btn primary btn-icon" id="egAdd">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
           Registrar gasto
@@ -4215,7 +4219,7 @@ function renderEgresos(){
       {label:"Importe",right:1,cls:"num",sortKey:"impOrig",render:r=>f2(r.impOrig)},
       {label:"USD",right:1,cls:"num",sortKey:"impUSD",render:r=>r.impUSD!=null?fmt(r.impUSD,2):'<span class="zero">–</span>'},
       {label:"BOB",right:1,cls:"num",sortKey:"impBOB",render:r=>r.impBOB!=null?("Bs "+f2(r.impBOB)):'<span class="zero">–</span>'},
-      {label:"TC",sortKey:"rate",render:r=>{ if(!(r.rate>0)) return '<span class="zero">–</span>'; const man=r.tcFuente==="Manual"; return '<span style="font-family:var(--mono)">'+f2(r.rate)+'</span> <span class="tc-src '+(man?'tc-man':'tc-sys')+'">'+(man?'Manual':'Sistema')+'</span>'; }},
+      {label:"TC",sortKey:"rate",render:r=>{ if(!(r.rate>0)) return '<span class="zero">–</span>'; const man=r.tcFuente==="Manual"; return '<span style="font-family:var(--mono)">'+fTC(r.rate)+'</span> <span class="tc-src '+(man?'tc-man':'tc-sys')+'">'+(man?'Manual':'Sistema')+'</span>'; }},
     ];
     // Fila de totales alineada por etiqueta (robusta ante cambios de columnas)
     const egTotalRow=cols.map(c=> c.label==="Cuenta" ? "Total ("+Math.min(rows.length,600)+")" : (c.label==="USD"?fmt(totalUSD):(c.label==="BOB"?"Bs "+f2(totalBOB):"")));
@@ -5301,7 +5305,7 @@ function renderCostos(){
     const lcFB=fbHTML("lcf", lcFilterDefs);
     const toolbar=`<div class="toolbar" style="align-items:center">${esearch("lcSearch","Buscar proveedor o concepto…",STATE.lcSearch)}${lcFB.bar}</div>${lcFB.panel}`;
     app.innerHTML=`
-      <p class="section-intro">Todos los costos de la empresa desde tu hoja <b>Tabla Costos</b>: clasificados por <b>Tipo</b> (función), <b>Empresa</b>, <b>Centro de Costo</b> (área) y <b>Fijo/Variable</b> (comportamiento). Los montos se llevan a base <b>mensual</b> según su frecuencia; <b>USD /mes</b> y <b>BOB /mes</b> son el costo mensual total (fijo + variable) de cada fila${RATE?` al TC del día (Bs ${f2(RATE)}/USD)`:""}.</p>
+      <p class="section-intro">Todos los costos de la empresa desde tu hoja <b>Tabla Costos</b>: clasificados por <b>Tipo</b> (función), <b>Empresa</b>, <b>Centro de Costo</b> (área) y <b>Fijo/Variable</b> (comportamiento). Los montos se llevan a base <b>mensual</b> según su frecuencia; <b>USD /mes</b> y <b>BOB /mes</b> son el costo mensual total (fijo + variable) de cada fila${RATE?` al TC del día (Bs ${fTC(RATE)}/USD)`:""}.</p>
       ${seg}
       <div class="grid kpis">
         ${kpi("Fijo TOTAL","/mes "+money(totFijoM),"necesario cada mes","#B42318","▤")}
@@ -7316,7 +7320,46 @@ function _tjPlanDe(cc){
 }
 function tarjetaWire(){ const tjB=$("#egTjBtn"), tjF=$("#egTjFile");
   if(tjB&&tjF){ tjB.addEventListener("click",()=>tjF.click()); tjF.addEventListener("change",()=>{ const f=tjF.files&&tjF.files[0]; tjF.value=""; if(f) tarjetaImportarArchivo(f); }); } }
+/* V217: extracto de Altitude (CSV). Solo los «Card payment» con salida de dinero son gastos.
+   Los fondeos (cripto / cuenta virtual), el cashback y los pases internos entre subcuentas se muestran
+   como información y no se pueden guardar como gasto. */
+function _csvParse(t){
+  const out=[]; let row=[], v="", q=false;
+  for(let i=0;i<t.length;i++){ const ch=t[i];
+    if(q){ if(ch==='"'){ if(t[i+1]==='"'){ v+='"'; i++; } else q=false; } else v+=ch; }
+    else if(ch==='"') q=true; else if(ch===","){ row.push(v); v=""; }
+    else if(ch==="\n"||ch==="\r"){ if(ch==="\r"&&t[i+1]==="\n") i++; row.push(v); out.push(row); row=[]; v=""; }
+    else v+=ch; }
+  if(v!==""||row.length){ row.push(v); out.push(row); }
+  return out.filter(r=>r.some(x=>String(x).trim()!==""));
+}
+function altitudeImportarTexto(texto, nombre){
+  const R=_csvParse(String(texto||"").replace(/^\uFEFF/,""));
+  const h=(R[0]||[]).map(x=>String(x).trim().toLowerCase()), ix=k=>h.indexOf(k);
+  if(ix("transaction_id")<0||ix("money_out")<0){ alert("Este CSV no parece un extracto de Altitude (faltan las columnas transaction_id y money_out)."); return; }
+  const g=(r,k)=>{ const i=ix(k); return i>=0?String(r[i]==null?"":r[i]).trim():""; };
+  const fISO=r=>{ const m=g(r,"confirmed_date").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:g(r,"confirmed_at").slice(0,10); };
+  const movs=[], titulares={};
+  R.slice(1).forEach(r=>{
+    const tipoTx=g(r,"transaction_type").toLowerCase(), met=g(r,"payment_method"), de=g(r,"from"),
+      ent=toNumLat(g(r,"money_in")), sal=toNumLat(g(r,"money_out")), tx=g(r,"transaction_id"), f=fISO(r);
+    if(!f||!tx||tipoTx==="internal") return;   // pases entre «Account 1» y «Card account»: no son gasto
+    const tit=g(r,"cardholder_name"); if(tit) titulares[tit]=(titulares[tit]||0)+1;
+    const base={f, tx, tar:"Altitude", mon:"USD", orig:0, pais:"", est:"", desc:g(r,"note")};
+    if(/card payment/i.test(met) && sal>0) movs.push(Object.assign(base,{prov:g(r,"to")||"(sin nombre)", tipo:"Pago con tarjeta", usd:Math.round(sal*100)/100}));
+    else if(ent>0) movs.push(Object.assign(base,{prov:/cashback/i.test(de)?"Cashback Altitude":(de||met||"Fondeo"), tipo:/cashback/i.test(de)?"CashBack":"Fondeo",
+      usd:Math.round(ent*100)/100, nota:/cashback/i.test(de)?"CashBack (no es gasto)":"Fondeo (traspaso interno)"}));
+  });
+  if(!movs.length){ alert("El extracto no tiene movimientos."); return; }
+  const tit=Object.keys(titulares).sort((a,b)=>titulares[b]-titulares[a])[0]||"";
+  tarjetaRevisar(movs, nombre, {cuenta:"Altitude", por:/alejandro\s+teran|teran/i.test(tit)?"Alejo T.":tit,
+    titulo:"Importar extracto Altitude", tipoCol:"Tipo"});
+}
 function tarjetaImportarArchivo(file){
+  if(/\.csv$/i.test(file.name)){ const rt=new FileReader();
+    rt.onerror=()=>alert("No se pudo leer el archivo.");
+    rt.onload=()=>altitudeImportarTexto(rt.result, file.name); rt.readAsText(file,"utf-8"); return; }
   const rd=new FileReader();
   rd.onerror=()=>alert("No se pudo leer el archivo.");
   rd.onload=function(){
@@ -7340,18 +7383,19 @@ function tarjetaImportarArchivo(file){
   };
   rd.readAsArrayBuffer(file);
 }
-function tarjetaRevisar(movs, nombreArchivo){
-  poblarDatalists();
-  const st={cuenta:/jp|velasco/i.test(nombreArchivo)?"TC JP Velasco":"TC Alejo", por:/jp|velasco/i.test(nombreArchivo)?"JP Velasco":"Alejo T.", mes:"__all"};
+function tarjetaRevisar(movs, nombreArchivo, opts){
+  poblarDatalists(); opts=opts||{};
+  const st={cuenta:opts.cuenta||(/jp|velasco/i.test(nombreArchivo)?"TC JP Velasco":"TC Alejo"), por:opts.por||(/jp|velasco/i.test(nombreArchivo)?"JP Velasco":"Alejo T."), mes:"__all"};
   const dms=s=>new Date(s+"T12:00").getTime();
   // Marca cuáles ya están en Egresos (cada egreso se usa una sola vez)
   function marcar(){
     const usados=new Set(), E=(STATE.egresos||[]).filter(e=>String(e.tipo||"").trim()===st.cuenta);
-    movs.forEach(m=>{ m.ya=null;
+    movs.forEach(m=>{ m.ya=null; if(m.nota) return;
+      if(m.tx){ const k=(STATE.egresos||[]).find(e=>String(e.coment||"").indexOf("tx "+m.tx.slice(0,8))>=0); if(k){ m.ya=k; return; } }
       const i=E.findIndex((e,k)=>!usados.has(k)&&Math.abs((+e.impOrig||+e.imp||0)-m.usd)<=0.05&&Math.abs(dms(String(e.fecha).slice(0,10))-dms(m.f))<=4*864e5);
       if(i>=0){ usados.add(i); m.ya=E[i]; } });
     movs.forEach(m=>{ m.personal=TJ_PERSONAL.test(m.tipo); m.pend=/pendiente/i.test(m.est);
-      m.sel=!m.ya&&!m.personal&&!m.pend; });
+      m.sel=!m.ya&&!m.personal&&!m.pend&&!m.nota; });
   }
   // Cuenta analítica sugerida: la última usada para ese proveedor
   const porBen={}; (STATE.egresos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(e=>{
@@ -7359,8 +7403,8 @@ function tarjetaRevisar(movs, nombreArchivo){
   movs.forEach(m=>{ const s=porBen[_tjNorm(m.prov)]||porBen[_tjNorm(m.desc)]; m.cc=s?s.cc:""; m.paisSug=s?s.pais:""; m.sug=s||null; });
   marcar();
   const meses=[...new Set(movs.map(m=>m.f.slice(0,7)))].sort();
-  const cuentas=cuentasPago().filter(esCuentaTC);
-  const ov=rhModal("Importar movimientos de tarjeta",`
+  let cuentas=cuentasPago().filter(esCuentaTC); if(opts.cuenta&&cuentas.indexOf(opts.cuenta)<0) cuentas=[opts.cuenta].concat(cuentas);
+  const ov=rhModal(opts.titulo||"Importar movimientos de tarjeta",`
     <p class="section-intro" style="margin:0 0 10px">Archivo <b>${esc(nombreArchivo)}</b> · ${movs.length} movimientos. Revisa la lista: solo se guardan los marcados ☑.
       Ya vienen <b>sin marcar</b> los consumos personales, los pendientes y los que ya están registrados.</p>
     <div class="us-form" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:10px">
@@ -7370,18 +7414,18 @@ function tarjetaRevisar(movs, nombreArchivo){
     </div>
     <div class="toolbar" style="align-items:center;margin-bottom:8px"><span id="tjRes" style="font-weight:600"></span><div class="spacer"></div>
       <button class="btn" id="tjNada">Desmarcar todo</button><button class="btn primary" id="tjGuardar">Guardar marcados en Egresos</button></div>
-    <div class="tbl-scroll" style="max-height:58vh"><table class="tbl"><thead><tr><th></th><th>Fecha</th><th>Proveedor</th><th>Tipo (Excel)</th><th class="num">USD</th><th>Original</th><th>Cuenta analítica</th><th>Situación</th></tr></thead><tbody id="tjBody"></tbody></table></div>`,1100);
+    <div class="tbl-scroll" style="max-height:58vh"><table class="tbl"><thead><tr><th></th><th>Fecha</th><th>Proveedor</th><th>${opts.tipoCol||"Tipo (Excel)"}</th><th class="num">USD</th><th>Original</th><th>Cuenta analítica</th><th>Situación</th></tr></thead><tbody id="tjBody"></tbody></table></div>`,1100);
   const body=ov.querySelector("#tjBody");
   const vis=()=>movs.filter(m=>st.mes==="__all"||m.f.startsWith(st.mes));
   function resumen(){ const s=movs.filter(m=>m.sel), t=s.reduce((a,m)=>a+m.usd,0);
     ov.querySelector("#tjRes").textContent=`${s.length} marcados · $${f2(t)}`; ov.querySelector("#tjGuardar").disabled=!s.length; }
   function pintar(){
     body.innerHTML=vis().map(m=>{ const i=movs.indexOf(m);
-      const sit=m.ya?`<span class="tag">Ya registrado (${esc(String(m.ya.fecha).slice(0,10).split("-").reverse().join("/"))})</span>`
+      const sit=m.nota?`<span class="tag">${esc(m.nota)}</span>`:m.ya?`<span class="tag">Ya registrado (${esc(String(m.ya.fecha).slice(0,10).split("-").reverse().join("/"))})</span>`
         :m.personal?`<span class="tag" style="color:var(--error)">Personal</span>`
         :m.pend?`<span class="tag">Pendiente</span>`:`<span class="tag" style="color:var(--brand);font-weight:700">Nuevo</span>`;
       const orig=m.mon&&m.mon!=="USD"&&m.orig?`${f2(m.orig)} ${esc(m.mon)}`:"";
-      return `<tr style="${m.sel?"":"opacity:.55"}"><td><input type="checkbox" class="tjSel" data-i="${i}"${m.sel?" checked":""}></td>
+      return `<tr style="${m.sel?"":"opacity:.55"}"><td><input type="checkbox" class="tjSel" data-i="${i}"${m.sel?" checked":""}${m.nota?" disabled":""}></td>
         <td>${m.f.split("-").reverse().join("/")}</td><td>${esc(m.prov)}</td><td>${esc(m.tipo)}</td><td class="num">${f2(m.usd)}</td><td>${orig}</td>
         <td><input class="tjCC" data-i="${i}" list="dl_cc" value="${esc(m.cc)}" placeholder="(clasificar después)" style="min-width:180px"></td><td>${sit}</td></tr>`; }).join("")
       || `<tr><td colspan="8">${emptyState("No hay movimientos en este mes.")}</td></tr>`;
@@ -7401,7 +7445,7 @@ function tarjetaRevisar(movs, nombreArchivo){
     let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
     const lista=s.map(m=>{ let p=m.cc?_tjPlanDe(m.cc):{};
       if(m.cc&&!p.codc&&m.sug&&m.sug.cc===m.cc){ const e=m.sug.e; p={codc:e.codc||"",grupo:e.grupoc||"",sc:e.ksubgrupo||"",cp:e.cp||"",cuenta:e.kcuenta||""}; }
-      const com=["Tarjeta "+(m.tar||st.cuenta), m.desc&&m.desc!==m.prov?m.desc:"", m.mon&&m.mon!=="USD"&&m.orig?`Original: ${m.orig} ${m.mon}`:"", m.pend?"Pendiente de liquidar":""].filter(Boolean).join(" · ");
+      const com=[m.tx?`Altitude · Pago con tarjeta · tx ${m.tx.slice(0,8)}`:"Tarjeta "+(m.tar||st.cuenta), m.desc&&m.desc!==m.prov?m.desc:"", m.mon&&m.mon!=="USD"&&m.orig?`Original: ${m.orig} ${m.mon}`:"", m.pend?"Pendiente de liquidar":""].filter(Boolean).join(" · ");
       return {fechaPago:m.f,fechaCont:m.f,concepto:m.prov,importe:m.usd,moneda:"USD",estado:"Pagado",pais:m.paisSug||"",
         cuentaPrincipal:p.cp||"",subCuenta:p.sc||"",cuentaContable:m.cc||"",grupo:p.grupo||"",codigoContable:p.codc||"",cuenta:p.cuenta||"",
         comentarios:com,beneficiario:m.prov,tipoPago:st.cuenta,pagadoPor:st.por}; });
@@ -7983,7 +8027,8 @@ function renderBitgo(){
 }
 
 /* ---------- TIPOS DE CAMBIO ---------- */
-function f2(n){ return (n||n===0)? Number(n).toLocaleString("es-BO",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"; }
+function f2(n){ return (n||n===0)? Number(n).toLocaleString("en-US",{minimumFractionDigits:NM_DEC,maximumFractionDigits:NM_DEC}) : "—"; }
+function fTC(n){ return (n||n===0)? Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"; }
 function tcAvisoDudosos(){ const L=mapTC._dud||[]; const app=$("#app"); if(!L.length||!app) return;
   app.insertAdjacentHTML("afterbegin",`<div class="msg err" style="display:block;margin-bottom:14px"><b>${L.length} cotización(es) con un valor imposible</b> (más de Bs 100 por dólar, seguramente falta la coma decimal). No se usan en los cálculos ni en el gráfico: ${L.slice(0,6).map(esc).join(" · ")}${L.length>6?" …":""}</div>`); }
 function renderTC(){
@@ -7994,8 +8039,8 @@ function renderTC(){
   const compraLive= A? A.compra: (last?last.compra:null);
   const promLive  = A? A.promedio: (last?last.promedio:null);
   const liveBox = A
-    ? `<div class="tc-live"><div class="tc-big">Bs ${f2(A.venta)}<span> / USDT (venta)</span></div>
-        <div class="mini">Compra Bs ${f2(A.compra)} · Promedio Bs ${f2(A.promedio)} · ${esc(A.fuente)} · ${esc(A.actualizado)}</div></div>`
+    ? `<div class="tc-live"><div class="tc-big">Bs ${fTC(A.venta)}<span> / USDT (venta)</span></div>
+        <div class="mini">Compra Bs ${fTC(A.compra)} · Promedio Bs ${fTC(A.promedio)} · ${esc(A.fuente)} · ${esc(A.actualizado)}</div></div>`
     : (STATE._tcLoading
         ? `<div class="tc-live"><div class="mini">Consultando Binance P2P…</div></div>`
         : `<div class="tc-live"><div class="mini">${STATE._tcErr?esc(STATE._tcErr):"Cotización en vivo no disponible ahora."}</div></div>`);
@@ -8004,9 +8049,9 @@ function renderTC(){
   const ordered=[...rows].sort((a,b)=>egCmp(a,b,S.key,S.dir));
   const cols=[
     {label:"Fecha",sortKey:"fecha",render:r=>`<span class="mini">${fmtDate(r.fecha)}</span>`},
-    {label:"Venta",right:1,cls:"num",sortKey:"venta",render:r=>`<b>Bs ${f2(r.venta)}</b>`},
-    {label:"Compra",right:1,cls:"num",sortKey:"compra",render:r=>`Bs ${f2(r.compra)}`},
-    {label:"Promedio",right:1,cls:"num",sortKey:"promedio",render:r=>`Bs ${f2(r.promedio)}`},
+    {label:"Venta",right:1,cls:"num",sortKey:"venta",render:r=>`<b>Bs ${fTC(r.venta)}</b>`},
+    {label:"Compra",right:1,cls:"num",sortKey:"compra",render:r=>`Bs ${fTC(r.compra)}`},
+    {label:"Promedio",right:1,cls:"num",sortKey:"promedio",render:r=>`Bs ${fTC(r.promedio)}`},
     {label:"Fuente",sortKey:"fuente",render:r=>`<span class="mini">${esc(r.fuente||"–")}</span>`},
   ];
   // V200: el administrador corrige un día con el lápiz (se guarda en Firebase, no en Sheets)
@@ -8022,9 +8067,9 @@ function renderTC(){
       </div>
     </div>
     <div class="grid kpis">
-      ${kpi("Venta actual", ventaLive!=null?("Bs "+f2(ventaLive)):"—","por USDT","#235347","≈")}
-      ${kpi("Compra actual", compraLive!=null?("Bs "+f2(compraLive)):"—","por USDT","#235347","+")}
-      ${kpi("Promedio", promLive!=null?("Bs "+f2(promLive)):"—","compra/venta","#6F9A7D","◆")}
+      ${kpi("Venta actual", ventaLive!=null?("Bs "+fTC(ventaLive)):"—","por USDT","#235347","≈")}
+      ${kpi("Compra actual", compraLive!=null?("Bs "+fTC(compraLive)):"—","por USDT","#235347","+")}
+      ${kpi("Promedio", promLive!=null?("Bs "+fTC(promLive)):"—","compra/venta","#6F9A7D","◆")}
       ${kpi("Registros", String(H.length), H.length?("desde "+fmtDate(H[0].fecha)):"sin historial","#163832","▤")}
     </div>
     <div class="card"><div class="head"><h3>Evolución (Venta)</h3><span class="mini">Bs por USDT</span></div><div id="tcChart"></div></div>
@@ -8066,7 +8111,7 @@ function registrarCotizacionHoy(){
     google.script.run.withSuccessHandler(function(c){
         if(!c||c.error){ b.textContent="Registrar cotización de hoy"; b.disabled=false; m.className="msg err"; m.textContent=(c&&c.error)||"No se pudo obtener la cotización."; return; }
         STATE.tcActual=c;
-        tcGuardarHoyFB(c).then(f=>{ b.textContent="Registrar cotización de hoy"; b.disabled=false; m.className="msg ok"; m.textContent="Cotización de "+f.fecha+" guardada en el sistema ✓ (Venta Bs "+f2(f.venta)+")"; RATE=tcRateLatest(); render(); })
+        tcGuardarHoyFB(c).then(f=>{ b.textContent="Registrar cotización de hoy"; b.disabled=false; m.className="msg ok"; m.textContent="Cotización de "+f.fecha+" guardada en el sistema ✓ (Venta Bs "+fTC(f.venta)+")"; RATE=tcRateLatest(); render(); })
           .catch(e=>{ b.textContent="Registrar cotización de hoy"; b.disabled=false; m.className="msg err"; m.textContent=(e&&e.message)||"No se pudo guardar."; }); })
       .withFailureHandler(function(e){ b.textContent="Registrar cotización de hoy"; b.disabled=false; m.className="msg err"; m.textContent=(e&&e.message)||"Error."; })
       .obtenerCotizacion(pin);
@@ -8075,7 +8120,7 @@ function registrarCotizacionHoy(){
   google.script.run
     .withSuccessHandler(function(res){ b.textContent="Registrar cotización de hoy"; b.disabled=false;
       if(!res||res.error){ m.className="msg err"; m.textContent=(res&&res.error)||"No se pudo registrar."; return; }
-      m.className="msg ok"; m.textContent="Cotización de "+res.fecha+" guardada ✓ (Venta Bs "+f2(res.venta)+")";
+      m.className="msg ok"; m.textContent="Cotización de "+res.fecha+" guardada ✓ (Venta Bs "+fTC(res.venta)+")";
       setTimeout(actualizarDatos,700); })
     .withFailureHandler(function(e){ b.textContent="Registrar cotización de hoy"; b.disabled=false; m.className="msg err"; m.textContent=(e&&e.message)||"Error."; })
     .registrarTipoCambio(pin);
@@ -9912,6 +9957,9 @@ function buildEmpresas(){
 $("#fYear").addEventListener("change",e=>{ const v=e.target.value; STATE.year = v==="__all"?"__all":+v; render(); });
 $("#fEstado").addEventListener("change",e=>{ STATE.estado=e.target.value; render(); });
 { const fe=$("#fEmp"); if(fe) fe.addEventListener("change",e=>{ STATE.empresa=e.target.value; render(); }); }
+document.querySelectorAll("#fDec button").forEach(b=>{ b.classList.toggle("on",+b.dataset.d===NM_DEC); b.addEventListener("click",()=>{
+  NM_DEC=+b.dataset.d; try{ localStorage.setItem("nm_dec",String(NM_DEC)); }catch(_){}
+  document.querySelectorAll("#fDec button").forEach(x=>x.classList.toggle("on",x===b)); render(); }); });
 document.querySelectorAll("#fView button").forEach(b=>b.addEventListener("click",()=>{
   document.querySelectorAll("#fView button").forEach(x=>x.classList.remove("on"));
   b.classList.add("on"); STATE.view=b.dataset.v; render();

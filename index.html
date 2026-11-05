@@ -1007,6 +1007,9 @@ td.chk input,th.chk input{accent-color:var(--brand)}
 tr.res-sub td{font-weight:600;border-top:1px solid var(--border)}
 tr.res-tot td{font-weight:700;border-top:2px solid var(--text)}
 tr.res-pos td:first-child{font-weight:600}
+.grid.res-g2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.grid.res-g2>.card{min-width:0}
+@media(max-width:900px){.grid.res-g2{grid-template-columns:minmax(0,1fr)}}
 /* V213: botones arriba a la derecha y la hora debajo */
 .topbar-in>.spacer{display:none}
 .topder{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto}
@@ -3301,7 +3304,7 @@ function renderResumen(){
         ${kpi("Gastos",pMoney(A.gas),pct(A.gas,A.ing)+" de los ingresos","#B42318","▼")}
         ${kpi("Utilidad",pMoney(A.ut),"margen "+pct(A.ut,A.ing),A.ut<0?"#B42318":"#235347","=")}
       </div>
-      <div class="grid cols-2">
+      <div class="grid res-g2">
         <div class="card"><div class="head"><h3>Cómo se llega a la utilidad</h3><span class="mini">${per}</span></div>
           <div class="tbl-scroll"><table class="res-cascada"><thead><tr><th style="text-align:left">Concepto</th><th class="num">${CUR}</th><th class="num">% ingresos</th></tr></thead><tbody>
             ${linea("Ingresos",A.ing,"res-pos","100%")}
@@ -3314,11 +3317,11 @@ function renderResumen(){
         </div>
         <div class="card"><div class="head"><h3>Utilidad por mes</h3><span class="mini">${STATE.year==="__all"?"suma de todos los años por mes":per}</span></div><div id="resNet" style="height:230px"></div></div>
       </div>
-      <div class="grid cols-2">
+      <div class="grid res-g2">
         <div class="card"><div class="head"><h3>Ingresos por pasarela</h3><span class="mini">${pMoney(A.ing)}</span></div>${ingPas.some(e=>e[1]>0)?hbars(ingPas.filter(e=>e[1]>0),()=>"#235347",pMoney):emptyState("Sin ingresos en este periodo.")}${ingPas.filter(e=>e[1]<0).map(e=>`<p class="mini" style="margin:8px 0 0;color:var(--rose)">${esc(e[0])}: ${pMoney(e[1])} (resultado negativo)</p>`).join("")}</div>
         <div class="card"><div class="head"><h3>Gastos y costos por grupo</h3><span class="mini">${pMoney(gasTot)}</span></div>${gasGr.some(e=>e[1]>0)?hbars(gasGr.filter(e=>e[1]>0),()=>"#B42318",pMoney):emptyState("Sin gastos en este periodo.")}</div>
       </div>
-      <div class="grid cols-2">
+      <div class="grid res-g2">
         <div class="card"><div class="head"><h3>Los 5 gastos más grandes</h3><span class="mini">por cuenta analítica</span></div>
           ${top.length?`<div class="tbl-scroll"><table><tbody>${top.map(([k,v],i)=>{ const [ca,cp]=k.split("\u0000"); return `<tr><td style="text-align:left">${i+1}. ${esc(ca)}<span class="sub2">${esc(cp)}</span></td><td class="num">${pMoney(v)}</td><td class="num mini">${pct(v,gasTot)} del gasto</td></tr>`; }).join("")}</tbody></table></div>`:emptyState("Sin gastos.")}
         </div>

@@ -1570,7 +1570,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V234";
+const APP_VERSION = "V235";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -5847,6 +5847,21 @@ function costosSugerencias(items){
     return {k:o.k, ben:o.ben, ca, nMeses:vals.length, prom, fijo:prom>0&&dev/prom<0.15, tipo, ult:o.ult.slice(0,10)}; }).sort((a,b)=>b.prom-a.prom);
 }
 /* Lista de Costos (lo esperado al mes) vs lo pagado en Egresos los últimos 3 meses completos */
+/* V235: de la Lista de Costos a Cuentas por Pagar. Abre el formulario de gasto ya lleno como «Pendiente»
+   (ej.: «Alquiler Diciembre»); cuando se pague, en Cuentas por Pagar ▸ Pagar pasa a Pagado y se sube el comprobante. */
+function costoACxP(it){
+  abrirFormEgreso();
+  const set=(id,v)=>{ const el=$("#"+id); if(el) el.value=(v==null?"":String(v)); };
+  const mes=MONTH_ES_LONG[new Date().getMonth()], base=String(it.con||it.prov||"").trim();
+  set("f_estado","Pendiente"); set("f_concepto",base+" "+mes); set("f_ben",it.prov||"");
+  set("f_importe",it.montoFijo||it.montoVar||""); set("f_moneda",it.moneda||"USD");
+  set("f_coment","Desde Lista de Costos"+(it.nota?" · "+it.nota:""));
+  const H=caHistIndex(), ca=H[_normTxt(it.prov)]||H[_normTxt(it.con)]||"";
+  if(ca){ set("f_cc",ca); try{ autoFillCuenta(); }catch(_){} }
+  const t=$("#egFormTitle"); if(t) t.textContent="Nueva cuenta por pagar";
+  const ld=$("#egFormLead"); if(ld) ld.innerHTML="Desde la Lista de Costos: <b>"+esc(base)+"</b>. Cambia el concepto si quieres (ej.: <b>"+esc(base+" "+mes)+"</b>) y el importe real de este mes. Queda como <b>Pendiente</b> en <b>Cuentas por Pagar</b>; cuando se pague, pulsa <b>Pagar</b> ahí y sube el comprobante.";
+  const c=$("#f_concepto"); if(c){ c.focus(); c.select(); }
+}
 function costosComparacion(items){
   const G=_cosGastos(), hoy=new Date(), hoyK=hoy.getFullYear()*12+hoy.getMonth(), ks=[hoyK-3,hoyK-2,hoyK-1];
   return {ks, filas:items.filter(i=>!/norecur|unic|puntual/.test(_normTxt(i.frec))).map(i=>{
@@ -5997,9 +6012,9 @@ function renderCostos(){
       {label:"USD /mes",right:1,cls:"num",sortKey:"_fUSD",render:i=>i._fUSD?("$"+f2(i._fUSD)):'<span class="zero">–</span>'},
       {label:"BOB /mes",right:1,cls:"num",sortKey:"_fBOB",render:i=>(i._fBOB!=null&&i._fBOB)?("Bs "+f2(i._fBOB)):'<span class="zero">–</span>'},
     ];
-    if(STATE.cosFB) lcCols.push({label:"",render:i=>i._id?`<button class="btn ghost lc-ed" data-id="${esc(i._id)}" title="Editar este costo" style="padding:4px 8px">✎</button>`:""});
+    if(STATE.cosFB||STATE.egFB) lcCols.push({label:"",render:i=>`<span style="white-space:nowrap">${STATE.egFB&&i._id?`<button class="btn ghost lc-cxp" data-id="${esc(i._id)}" title="Crear una cuenta por pagar con este costo (ej.: Alquiler ${esc(MONTH_ES_LONG[new Date().getMonth()])})" style="padding:4px 8px">→ Por pagar</button>`:""}${STATE.cosFB&&i._id?`<button class="btn ghost lc-ed" data-id="${esc(i._id)}" title="Editar este costo" style="padding:4px 8px">✎</button>`:""}</span>`});
     const totUSD_F=allF.reduce((s,i)=>s+i._fUSD,0);
-    const totRowLC=["Total ("+allF.length+")","","","","","","","","","",`<b>$${f2(totUSD_F)}</b>`, RATE?`<b>Bs ${f2(totUSD_F*RATE)}</b>`:'<span class="zero">–</span>'].concat(STATE.cosFB?[""]:[]);
+    const totRowLC=["Total ("+allF.length+")","","","","","","","","","",`<b>$${f2(totUSD_F)}</b>`, RATE?`<b>Bs ${f2(totUSD_F*RATE)}</b>`:'<span class="zero">–</span>'].concat((STATE.cosFB||STATE.egFB)?[""]:[]);
     const tabla = allF.length? tbl(lcCols,sortIt(allF),totRowLC,LS,{sticky:true,viewKey:"costos_lista"}) : emptyState("Sin costos con los filtros actuales.");
     const lcFilterDefs=[
       ...(tiposL.length?[{k:"lcTipo",lbl:"Tipo",disp:v=>v,opts:tiposL.map(c=>({v:c,t:c})),ph:"Todos los tipos"}]:[]),
@@ -6049,6 +6064,7 @@ function renderCostos(){
     document.querySelectorAll("#lcVista button").forEach(b=>b.addEventListener("click",()=>{ STATE.lcVista=b.dataset.v; render(); }));
     const la=$("#lcAdd"); if(la) la.addEventListener("click",()=>costoModal(null));
     document.querySelectorAll(".lc-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const it=items.find(i=>i._id===b.dataset.id); if(it) costoModal(it); }));
+    document.querySelectorAll(".lc-cxp").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const it=items.find(i=>i._id===b.dataset.id); if(it) costoACxP(it); }));
     document.querySelectorAll(".lc-sug").forEach(b=>b.addEventListener("click",()=>{ const x=sug[+b.dataset.j]; if(!x) return;
       costoModal(null,{tipo:x.tipo,prov:x.ben,con:x.ca,fv:x.fijo?"Fijo":"Variable",fijo:x.fijo?Math.round(x.prom*100)/100:"",vari:x.fijo?"":Math.round(x.prom*100)/100,mon:"USD",frec:"Mensual",emp:"LLC",nota:"Sugerido desde Egresos"}); }));
     document.querySelectorAll(".lc-ocu").forEach(b=>b.addEventListener("click",async()=>{ const x=sug[+b.dataset.j]; if(!x) return;

@@ -1232,6 +1232,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
     <button data-s="ingresos">Ingresos</button>
     <button data-s="egresos">Egresos</button>
     <button data-s="comprobantes">Comprobantes</button>
+    <button data-s="billing">Billing</button>
     <button data-s="costos">Costos</button>
     <button data-s="cxp">Cuentas por Pagar</button>
     <button data-s="bancos">Bancos</button>
@@ -1519,7 +1520,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V218";
+const APP_VERSION = "V219";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2416,7 +2417,7 @@ function render(){
   CUR = STATE.currency||"USD";
   RATE = tcRateLatest();
   if(CUR==="BOB" && !RATE) CUR="USD";
-  const map={usuarios:renderUsuarios,archivos:renderArchivos,comprobantes:renderComprobantes,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
+  const map={usuarios:renderUsuarios,archivos:renderArchivos,comprobantes:renderComprobantes,billing:renderBilling,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
     socios:renderSociosCapital,inversiones:renderInversiones,prestamos:renderPrestamos,devoluciones:renderDevoluciones,rendiciones:renderRendiciones,ingresos:renderIngresosTab,costos:renderCostos,bancos:renderBancos,mercury:renderMercury,bitgo:renderBitgo,plan:renderPlan,tc:()=>{ renderTC(); tcAvisoDudosos(); },ia:renderIA,cierre:renderCierre,calendario:renderCalendario,tareas:renderTareas};
   try{ (map[STATE.section]||renderResumen)();
   }
@@ -2658,6 +2659,102 @@ function compRevisarSlack(forzar){
   google.script.run.withSuccessHandler(r=>{ const hora=new Date().toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit"});
       releer(r&&r.ok?("Slack revisado a las "+hora+(r.nuevos?" · "+r.nuevos+" comprobante(s) nuevo(s)":" · sin novedades")+(r.ignorados?" · "+r.ignorados+" archivo(s) que la IA no consideró comprobante":"")):(r&&/no permitida/i.test(r.error||"")?"":"Slack: "+((r&&r.error)||"sin respuesta"))); })
     .withFailureHandler(()=>releer("")).slackRevisarAhora(pin); }
+/* ============================================================
+   V219: BILLING. Correos que llegan a billing@peso-latam.com (grupo de Google), leídos por el servidor
+   (billingLeer, solo lectura). Se agrupan por proveedor, se clasifican (factura, recibo, pago fallido, aviso),
+   se detecta el monto y se cruzan con Egresos y Bancos. Un adjunto se puede pasar a Comprobantes (Drive + IA).
+   Los correos no se guardan en Firebase: se leen cada vez (quedan solo en la memoria del navegador).
+   ============================================================ */
+const BILL_TIPOS=[["todos","Todos"],["factura","Facturas"],["recibo","Recibos (pagado)"],["fallido","Pagos fallidos"],["aviso","Avisos"]];
+function billTipo(m){ const t=(m.asunto+" "+m.texto.slice(0,250)).toLowerCase();
+  if(/unsuccessful|failed|declined|could not be processed|fall[oó]|rechaz/.test(t)) return "fallido";
+  if(/receipt|recibo|payment (was )?successful|pago exitoso|thanks for your payment|has been paid|payment confirmation|confirmaci[oó]n de (multi)?pago/.test(t)) return "recibo";
+  if(/invoice|factura|statement|estado de cuenta|billing statement|bill is ready|cobro/.test(t)) return "factura";
+  return "aviso"; }
+function billProv(de){ let s=String(de||""); const via=s.match(/^\s*["']?([^"'<]+?)["']?\s+via\s+billing/i); if(via) return via[1].trim();
+  const nm=s.match(/^\s*["']?([^"'<]+?)["']?\s*</); if(nm&&!/billing@/i.test(nm[1])) return nm[1].trim();
+  const ad=s.match(/@([a-z0-9.-]+)/i); return ad?ad[1].replace(/^(mail|email|e|notify|billing|info|no-?reply)\./i,"").split(".")[0]:s; }
+function billMonto(m){ const cur=c=>/bs|bob/i.test(c||"")?"BOB":(/€|eur/i.test(c||"")?"EUR":"USD");
+  const tryRe=(txt,re)=>{ const x=String(txt||"").match(re); if(!x) return null; const n=toNumLat(x[2]); return n>0&&n<1e7?{n:Math.round(n*100)/100,mon:cur(x[1]||x[3])}:null; };
+  const pre=/(US\$|USD\s?|\$|Bs\.?\s?|BOB\s?|€|EUR\s?)\s?(\d[\d.,]*\d|\d)()/i, post=/()(\d[\d.,]*\d)\s?(USD|BOB|Bs)\b/i;
+  const kw=/(?:total|amount due|amount paid|amount|monto|importe|total a pagar)[^\d$€]{0,25}(US\$|USD\s?|\$|Bs\.?\s?|€)?\s?(\d[\d.,]*\d)()/i;
+  return tryRe(m.asunto,pre)||tryRe(m.asunto,post)||tryRe(m.texto,kw)||tryRe(m.texto,pre)||tryRe(m.texto,post); }
+function billCruce(m, U){ if(!m.monto) return null; const f=new Date(m.fecha), prov=_normTxt(m.prov).split(" ").filter(w=>w.length>2);
+  let best=null; U.forEach(r=>{ const o=Math.abs(+r.orig||0); if(Math.abs(o-m.monto.n)>Math.max(0.5,m.monto.n*0.01)) return;
+    const d=(new Date(String(r.fecha).slice(0,10)+"T12:00")-f)/864e5; if(isNaN(d)||d<-10||d>60) return;
+    const t=_normTxt([r.keytext,r.con,r.extra].join(" ")); const nom=prov.some(w=>t.indexOf(w)>=0);
+    const s=(nom?100:0)-Math.abs(d); if(!best||s>best.s) best={r,s,nom}; });
+  return best; }
+function billingCargar(forzar){
+  if(STATE._billCargando) return; const dias=STATE.billDias||90;
+  if(STATE.billing&&STATE.billing.dias===dias&&!forzar) return;
+  STATE._billCargando=true; STATE.billErr=null; if(STATE.section==="billing") render();
+  nmRun("billingLeer",compPin(),dias).then(res=>{ STATE._billCargando=false;
+    if(!res||res.error){ const e=(res&&res.error)||"Sin respuesta del servidor.";
+      STATE.billErr=/no permitida/i.test(e)?"El servidor todavía no tiene la función de Billing. Hay que publicar la nueva versión de Apps Script (Deploy).":
+        (/permission|permiso|authoriz|autoriz|gmail/i.test(e)?"Falta dar permiso al servidor para leer Gmail (ejecutar billingAutorizar una vez en Apps Script). Detalle: "+e:e); }
+    else STATE.billing={dias:res.dias||dias, leido:res.leido, mensajes:(res.mensajes||[]).map(m=>Object.assign(m,{tipo:billTipo(m), prov:billProv(m.de)})).map(m=>Object.assign(m,{monto:billMonto(m)}))};
+    if(STATE.section==="billing") render();
+  }).catch(e=>{ STATE._billCargando=false; STATE.billErr=(e&&e.message)||String(e); if(STATE.section==="billing") render(); });
+}
+function renderBilling(){
+  const app=$("#app"); if(!app) return;
+  billingCargar(false);
+  const B=STATE.billing, tipoF=STATE.billTipo||"todos", soloSin=!!STATE.billSoloSin, q=_normTxt(STATE.billSearch||"");
+  let U=[]; const sy=STATE.year; STATE.year="__all"; try{ U=egresosUnificados(); }catch(_){ } finally{ STATE.year=sy; }
+  const compDe={}; (STATE.comps||[]).forEach(c=>{ if(c.billing) compDe[c.billing]=c; });
+  const M=((B&&B.mensajes)||[]).map(m=>{ m.cruce=(m.tipo==="factura"||m.tipo==="recibo")?billCruce(m,U):null; return m; });
+  const pend=m=>(m.tipo==="factura"||m.tipo==="recibo")&&!m.cruce;
+  const V=M.filter(m=>(tipoF==="todos"||m.tipo===tipoF)&&(!soloSin||pend(m))&&(!q||_normTxt([m.prov,m.asunto,m.texto].join(" ")).indexOf(q)>=0));
+  const n=k=>M.filter(m=>k==="todos"||m.tipo===k).length;
+  const grupos=new Map(); V.forEach(m=>{ if(!grupos.has(m.prov)) grupos.set(m.prov,[]); grupos.get(m.prov).push(m); });
+  const tag={factura:'<span class="st bob">Factura</span>',recibo:'<span class="st activo">Recibo · pagado</span>',fallido:'<span class="st inactivo">Pago fallido</span>',aviso:'<span class="tag">Aviso</span>'};
+  const fila=m=>{ const c=m.cruce, mo=m.monto;
+    const cruce=(m.tipo==="factura"||m.tipo==="recibo")?(c?`<span class="st activo" title="${esc((c.r.keytext||c.r.con||"")+" · "+(c.r.cuentaPago||""))}">✓ ${esc(c.r.origen)} ${esc(fmtDate(c.r.fecha)||"")}${c.nom?"":" (mismo monto)"}</span>`:(mo?'<span class="st bob">Sin registrar</span>':'<span class="mini">sin monto</span>')):"";
+    const adj=(m.adjuntos||[]).map(a=>{ const k=m.id+":"+a.i, ya=compDe[k];
+      return ya?`<span class="tag" title="Ya está en Comprobantes">📎 ${esc(a.nombre)} ✓</span>`:`<button class="btn ghost bl-adj" data-id="${esc(m.id)}" data-i="${a.i}" title="Guardarlo en Comprobantes (Drive) y que la IA lo lea">📎 ${esc(a.nombre)} → Comprobantes</button>`; }).join(" ");
+    return `<tr><td style="white-space:nowrap">${esc(fmtDate(m.fecha.slice(0,10))||"")}</td><td>${tag[m.tipo]}</td>
+      <td style="text-align:left"><b>${esc(m.asunto||"(sin asunto)")}</b><span class="sub2">${esc(m.texto.slice(0,140))}</span>${adj?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${adj}</div>`:""}</td>
+      <td class="num" style="white-space:nowrap">${mo?esc(mo.mon)+" "+f2(mo.n):"–"}</td><td>${cruce}</td>
+      <td><a class="btn ghost" href="https://mail.google.com/mail/u/1/#all/${encodeURIComponent(m.hilo)}" target="_blank" rel="noopener" title="Abrir el correo en Gmail (cuenta PE$O)">Gmail ↗</a></td></tr>`; };
+  const cards=[...grupos.entries()].map(([p,L])=>{ const sp=L.filter(pend).length;
+    return `<div class="card"><div class="head"><h3>${esc(p)}</h3><span class="mini">${L.length} correo${L.length===1?"":"s"}${sp?` · <b style="color:var(--error)">${sp} sin registrar</b>`:""}</span></div>
+      <div class="tbl-scroll"><table class="comp-tbl"><thead><tr><th>Fecha</th><th>Tipo</th><th style="text-align:left">Asunto</th><th>Monto</th><th>En el sistema</th><th></th></tr></thead><tbody>${L.map(fila).join("")}</tbody></table></div></div>`; }).join("");
+  const kp=M.filter(pend).length, kf=M.filter(m=>m.tipo==="fallido").length;
+  app.innerHTML=`
+    <div class="grid kpis">
+      ${kpi("Correos a billing@",String(M.length),"últimos "+(STATE.billDias||90)+" días","#235347","✉")}
+      ${kpi("Facturas y recibos",String(M.filter(m=>m.tipo==="factura"||m.tipo==="recibo").length),"con monto detectado: "+M.filter(m=>m.monto&&(m.tipo==="factura"||m.tipo==="recibo")).length,"#163832","▤")}
+      ${kpi("Sin registrar",String(kp),"no se encontró el gasto en Egresos ni Bancos","#B42318","!")}
+      ${kpi("Pagos fallidos",String(kf),"revisar la tarjeta o el saldo","#8EB69B","✕")}
+    </div>
+    <div class="toolbar" style="align-items:center">${esearch("billSearch","Buscar proveedor, asunto o monto…",STATE.billSearch)}
+      <span class="select-wrap"><select id="billDias">${[30,90,180,365].map(d=>`<option value="${d}"${(STATE.billDias||90)===d?" selected":""}>Últimos ${d} días</option>`).join("")}</select></span>
+      <label class="mini" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="billSin"${soloSin?" checked":""}> Solo sin registrar</label>
+      <div class="spacer"></div>${B&&B.leido?`<span class="mini">Leído ${esc(new Date(B.leido).toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit"}))}</span>`:""}
+      <button class="btn" id="billAct"${STATE._billCargando?" disabled":""}>${STATE._billCargando?"Leyendo Gmail…":"↻ Actualizar"}</button></div>
+    <div class="seg" id="billTipos" style="margin:0 0 16px;flex-wrap:wrap">${BILL_TIPOS.map(([k,l])=>`<button data-t="${k}" class="${tipoF===k?"on":""}">${l} (${n(k)})</button>`).join("")}</div>
+    ${STATE.billErr?`<div class="msg err" style="display:block;margin-bottom:12px">${esc(STATE.billErr)}</div>`:""}
+    ${STATE._billMsg?`<div class="msg ${STATE._billMsg.ok?"ok":"err"}" style="display:block;margin-bottom:12px">${esc(STATE._billMsg.t)}</div>`:""}
+    ${cards||`<div class="card">${emptyState(STATE._billCargando&&!B?"Leyendo los correos de billing@… (puede tardar unos segundos)":(B?"No hay correos con estos filtros.":"Todavía no se leyeron los correos."))}</div>`}
+    <p class="gcal-note">Solo se leen los correos: el sistema no los marca, no los borra ni responde. «En el sistema» busca un gasto con el mismo monto (±1%) entre 10 días antes y 60 días después del correo, en Egresos y en Bancos.</p>`;
+  const si=$("#billSearch"); if(si) si.addEventListener("input",()=>{ STATE.billSearch=si.value; STATE._focus=true; render(); });
+  if(STATE._focus&&si){ si.focus(); si.setSelectionRange(si.value.length,si.value.length); STATE._focus=false; }
+  $("#billDias").addEventListener("change",e=>{ STATE.billDias=+e.target.value; billingCargar(true); });
+  $("#billSin").addEventListener("change",e=>{ STATE.billSoloSin=e.target.checked; render(); });
+  $("#billAct").addEventListener("click",()=>billingCargar(true));
+  document.querySelectorAll("#billTipos button").forEach(b=>b.addEventListener("click",()=>{ STATE.billTipo=b.dataset.t; render(); }));
+  document.querySelectorAll(".bl-adj").forEach(b=>b.addEventListener("click",()=>{
+    const m=M.find(x=>x.id===b.dataset.id), i=+b.dataset.i; if(!m) return;
+    b.disabled=true; b.textContent="Guardando y leyendo con IA…";
+    nmRun("billingAdjunto",compPin(),m.id,i).then(r=>{
+      if(!r||r.error){ STATE._billMsg={t:"No se pudo pasar a Comprobantes: "+((r&&r.error)||"sin respuesta"),ok:false}; render(); return; }
+      const c=compNuevo(r,"billing"); c.billing=m.id+":"+i; c.mensaje=m.asunto;
+      STATE.comps=(STATE.comps||[]).concat([c]);
+      return compGuardarLista().then(()=>{ STATE._billMsg={t:"Listo ✓ «"+(r.nombre||"archivo")+"» está en Comprobantes → Pendientes. Ahí pulsa Registrar (si es factura queda en Cuentas por pagar).",ok:true}; render(); });
+    }).catch(e=>{ STATE._billMsg={t:"No se pudo pasar a Comprobantes: "+((e&&e.message)||e),ok:false}; render(); });
+  }));
+}
 function renderComprobantes(){
   const app=$("#app"); if(!app) return;
   compRevisarSlack(false);
@@ -2669,7 +2766,7 @@ function renderComprobantes(){
       <td>${!c.driveId?'<span class="comp-th comp-th-x" title="Registrado por mensaje en Slack, sin archivo">💬</span>':`<img class="comp-th" src="https://drive.google.com/thumbnail?id=${encodeURIComponent(c.driveId)}&sz=w120" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'comp-th comp-th-x',textContent:'${/pdf/.test(c.mime||"")?"PDF":"IMG"}'}))">`}</td>
       <td>${esc(ia.fecha||"–")}</td><td style="text-align:left">${ia.tipo_documento?`<span class="tag">${esc(ia.tipo_documento)}</span> `:""}<b>${esc(ia.proveedor||"(sin proveedor)")}</b><span class="sub2">${esc(ia.concepto||c.mensaje||c.nombre||"")}</span>${c.iaErr?`<span class="sub2" style="color:var(--error)">IA: ${esc(c.iaErr)}</span>`:""}</td>
       <td class="num">${ia.monto!=null&&ia.monto!==""?esc((ia.moneda||"")+" "+f2(+ia.monto)):"–"}</td>
-      <td><span class="tag">${c.origen==="slack"?"Slack":(c.origen==="slack-chat"?"Slack (mensaje)":"Sistema")}</span></td>
+      <td><span class="tag">${c.origen==="slack"?"Slack":(c.origen==="slack-chat"?"Slack (mensaje)":(c.origen==="billing"?"Billing":"Sistema"))}</span></td>
       <td>${c.estado==="registrado"?'<span class="st activo">Registrado</span>':(c.estado==="descartado"?'<span class="st inactivo">Descartado</span>':'<span class="st bob">Pendiente</span>')}</td>
       <td><span class="ta-acts">${c.driveId?`<button class="btn ghost cp-ver" data-id="${c.id}">Ver</button>`:""}${c.estado!=="registrado"?`<button class="btn primary cp-reg" data-id="${c.id}" title="Crear un gasto nuevo con estos datos">Registrar</button><button class="btn ghost cp-adj" data-id="${c.id}" title="Unirlo a un pago que ya existe (factura, contrato, etc.)">Adjuntar a pago</button>`:""}${c.driveId?`<button class="btn ghost cp-ia" data-id="${c.id}" title="Volver a leer con la IA">↻ IA</button>`:""}${c.estado==="pendiente"?`<button class="btn ghost cp-desc" data-id="${c.id}" title="Descartar">✕</button>`:""}</span></td></tr>`; }).join("");
   app.innerHTML=`
@@ -3083,14 +3180,14 @@ function applyFilterVisibility(){
   const s=STATE.section;
   const showEstado = (s==="resumen");
   const showView = (s==="resumen");
-  const showYear = (s!=="rrhh" && s!=="bitgo" && s!=="plan" && s!=="tc" && s!=="inicio" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="cierre" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="usuarios");
-  const showCur = (s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="inicio" && s!=="rendiciones" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="usuarios");
+  const showYear = (s!=="rrhh" && s!=="bitgo" && s!=="plan" && s!=="tc" && s!=="inicio" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="cierre" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="billing" && s!=="usuarios");
+  const showCur = (s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="inicio" && s!=="rendiciones" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="billing" && s!=="usuarios");
   const gr=(id,on)=>{ const e=$("#"+id); if(e) e.style.display=on?"":"none"; };
   gr("gfYear",showYear); gr("gfEstado",showEstado); gr("gfCur",showCur); gr("gfView",showView);
   const anyG = showYear||showEstado||showCur||showView;
   const gb=$("#gFiltBtn"); if(gb) gb.style.display = anyG?"":"none";
   if(!anyG){ const gp=$("#gFilters"); if(gp) gp.hidden=true; }
-  const showEmp = (s!=="inicio" && s!=="flujo" && s!=="flujo2" && s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="usuarios");
+  const showEmp = (s!=="inicio" && s!=="flujo" && s!=="flujo2" && s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="billing" && s!=="usuarios");
   const eb=$("#empBtn"); if(eb) eb.style.display = showEmp?"":"none";
 }
 
@@ -6429,7 +6526,7 @@ function exportCierrePDF(Y,M){
   ctx.table(["Proveedor / Beneficiario","USD"], D.topBen.map(e=>[e[0], m0(e[1])]), null, {1:{halign:"right"}});
   _pdfSave(ctx, "Cierre de Mes · "+MONTH_ES_LONG[M]+" "+Y, "Cierre_"+MONTH_ES_LONG[M]+"_"+Y+".pdf");
 }
-const SECCION_TITULOS = {inicio:"Inicio",flujo:"Flujo",flujo2:"Flujo 2",resumen:"Resumen P&L",egresos:"Egresos",cxp:"Cuentas por Pagar",rrhh:"RRHH",inversiones:"Inversiones",prestamos:"Préstamos",devoluciones:"Devoluciones",rendiciones:"Rendiciones",ingresos:"Ingresos",costos:"Costos",bancos:"Bancos",mercury:"Mercury",bitgo:"BitGo",plan:"Plan de Cuentas",tc:"Tipos de Cambio",ia:"IA · Asistente",cierre:"Cierre de Mes",calendario:"Calendario",tareas:"Tareas",socios:"Socios y Capital"};
+const SECCION_TITULOS = {inicio:"Inicio",billing:"Billing",flujo:"Flujo",flujo2:"Flujo 2",resumen:"Resumen P&L",egresos:"Egresos",cxp:"Cuentas por Pagar",rrhh:"RRHH",inversiones:"Inversiones",prestamos:"Préstamos",devoluciones:"Devoluciones",rendiciones:"Rendiciones",ingresos:"Ingresos",costos:"Costos",bancos:"Bancos",mercury:"Mercury",bitgo:"BitGo",plan:"Plan de Cuentas",tc:"Tipos de Cambio",ia:"IA · Asistente",cierre:"Cierre de Mes",calendario:"Calendario",tareas:"Tareas",socios:"Socios y Capital"};
 
 function _limpiaTxt(s){ return String(s==null?"":s).replace(/[⇅▲▼⛶↕]/g,"").replace(/\s+/g," ").trim(); }
 function _esNumTxt(s){ const v=String(s).replace(/(Bs|USD|\$|%|\s)/g,""); return v!=="" && /\d/.test(v) && /^-?[\d.,()+-]+$/.test(v); }
@@ -6488,7 +6585,7 @@ function ensureSectionPdfButton(){
   const btn=document.getElementById("topPdfBtn"); if(!btn) return;
   const app=document.getElementById("app");
   const hayContenido = !!app && (app.querySelector("table") || app.querySelector(".card.kpi") || app.querySelector(".grid.kpis"));
-  const mostrar = STATE.section!=="inicio" && STATE.section!=="tareas" && STATE.section!=="archivos" && STATE.section!=="comprobantes" && STATE.section!=="usuarios" && hayContenido;
+  const mostrar = STATE.section!=="inicio" && STATE.section!=="tareas" && STATE.section!=="archivos" && STATE.section!=="comprobantes" && STATE.section!=="billing" && STATE.section!=="usuarios" && hayContenido;
   btn.hidden=!mostrar;
   if(!mostrar) return;
   const esCostos = (STATE.section==="costos");
@@ -10117,6 +10214,7 @@ const NAV_ICONS={
   tc:'<path d="M3 8l4-4 4 4M7 4v9a3 3 0 0 0 3 3h10"/><path d="M21 16l-4 4-4-4M17 20v-9a3 3 0 0 0-3-3H3"/>',
   calendario:'<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4M7.5 13h3M13.5 13h3M7.5 16.5h3M13.5 16.5h3"/>',
   usuarios:'<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><rect x="15" y="11" width="7" height="6" rx="1.2"/><path d="M16.5 11V9.5a2 2 0 0 1 4 0V11"/>',
+  billing:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
   comprobantes:'<path d="M6 3h9l3 3v15H6z"/><path d="M14 3v4h4"/><path d="M9 11h6M9 14.5h6M9 18h3.5"/>',
   archivos:'<path d="M3 7a2 2 0 0 1 2-2h4.5l2 2.5H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10.5h18"/>',
   tareas:'<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5l1.3 1.3L7.8 4M4 11.5l1.3 1.3L7.8 10M4 17.5l1.3 1.3L7.8 16"/>',

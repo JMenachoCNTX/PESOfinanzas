@@ -3352,7 +3352,7 @@ function renderResumen(){
       ["Gastos",...cols.map(g("gas")),A.gas],["Utilidad",...cols.map(ut),A.ut]], grupos:ggF.map(([k,o])=>[k,...cols.map(c=>o.c[c.k]||0),o.t])};
     const head=`<thead><tr><th style="text-align:left">${annual?"Año":"Mes"}</th>${cols.map(c=>`<th class="num">${c.l}</th>`).join("")}<th class="num tot">Total</th></tr></thead>`;
     content=`
-      ${annual?"":`<div class="card"><div class="head"><h3>Utilidad por mes</h3><span class="mini">${per} · verde = ganancia, rojo = pérdida</span></div><div id="resNet" style="height:230px"></div></div>`}
+      ${annual?"":`<div class="card"><div class="head"><h3>Utilidad por mes</h3><span class="mini">${per} · barra hacia arriba = ganancia, hacia abajo = pérdida</span></div><div id="resNet" style="height:230px"></div></div>`}
       <div class="card"><div class="head"><h3>Resultado ${annual?"por año":"mes a mes"}</h3><span class="mini">${CUR}</span></div>
         <div class="tbl-scroll sticky-head"><table class="res-mes">${head}<tbody>
           ${fila("Ingresos",g("ing"),"res-pos")}
@@ -3368,15 +3368,16 @@ function renderResumen(){
           ${ggF.map(([k,o])=>`<tr><td style="text-align:left">${esc(k)}</td>${cols.map(c=>{ const v=o.c[c.k]||0; return `<td class="num">${v?pMoney(v):'<span class="zero">–</span>'}</td>`; }).join("")}<td class="num"><b>${pMoney(o.t)}</b></td></tr>`).join("")||`<tr><td colspan="${cols.length+2}">${emptyState("Sin gastos.")}</td></tr>`}
         </tbody></table></div></div>`;
   } else if(tab==="caja"){
-    const invTot = yearFilter(STATE.inv).reduce((s,e)=>s+(+e.importe||0),0);
-    const preTot = yearFilter(STATE.pre).reduce((s,e)=>s+(+e.importe||0),0);
-    const devTot = yearFilter(STATE.dev).reduce((s,e)=>s+(+e.importe||0),0);
-    const egPaid = (STATE.egresos||[]).filter(e=>(STATE.year==="__all"||e.g===STATE.year)&&String(e.e||"").trim().toLowerCase()==="pagado").reduce((s,e)=>s+(+e.imp||0),0);
+    // La caja es ACUMULADA desde el inicio (no depende del año elegido)
+    const invTot = (STATE.inv||[]).reduce((s,e)=>s+(+e.importe||0),0);
+    const preTot = (STATE.pre||[]).reduce((s,e)=>s+(+e.importe||0),0);
+    const devTot = (STATE.dev||[]).reduce((s,e)=>s+(+e.importe||0),0);
+    const egPaid = (STATE.egresos||[]).filter(e=>String(e.e||"").trim().toLowerCase()==="pagado").reduce((s,e)=>s+(+e.imp||0),0);
     const caja = invTot + preTot - egPaid - devTot;
-    const mesesAct=new Set((STATE.egresos||[]).filter(e=>(STATE.year==="__all"||e.g===STATE.year)&&String(e.e||"").trim().toLowerCase()==="pagado").map(e=>e.g+"-"+e.m)).size;
+    const mesesAct=new Set((STATE.egresos||[]).filter(e=>String(e.e||"").trim().toLowerCase()==="pagado").map(e=>e.g+"-"+e.m)).size;
     const burn=mesesAct?egPaid/mesesAct:0, runway=burn>0?caja/burn:0;
     STATE._resPDF.caja={invTot,preTot,egPaid,devTot,caja,runway};
-    content=`<div class="card"><div class="head"><h3>Posición de caja</h3><span class="mini">referencial · ${per}</span></div>
+    content=`<div class="card"><div class="head"><h3>Posición de caja</h3><span class="mini">referencial · acumulado desde el inicio</span></div>
         <div class="caja">
           <div class="c"><div class="l">Capital invertido</div><div class="v" style="color:var(--emerald)">${money(invTot)}</div></div>
           <div class="c"><div class="l">Préstamos recibidos</div><div class="v">${money(preTot)}</div></div>
@@ -3385,7 +3386,7 @@ function renderResumen(){
           <div class="c hi"><div class="l">Caja estimada</div><div class="v">${money(caja)}</div></div>
           <div class="c hi"><div class="l">Runway</div><div class="v">${runway>0?runway.toFixed(1)+" meses":"—"}</div></div>
         </div>
-        <p class="section-intro" style="margin:10px 0 0"><b>Caja estimada</b> = capital + préstamos − egresos pagados − devoluciones. <b>Runway</b> = cuántos meses alcanza esa caja al ritmo de gasto promedio (${money(burn)}/mes).</p>
+        <p class="section-intro" style="margin:10px 0 0"><b>Caja estimada</b> = capital + préstamos − egresos pagados (hoja de Egresos) − devoluciones. Es una estimación: los pagos que solo están en BitGo o Mercury no se restan aquí. <b>Runway</b> = cuántos meses alcanza esa caja al ritmo de gasto promedio (${money(burn)}/mes).</p>
       </div>
       ${estadoCuentaHTML()}`;
   }

@@ -732,7 +732,7 @@ td.chk input,th.chk input{cursor:pointer;width:16px;height:16px;accent-color:var
 .matrix-tbl thead th:first-child{z-index:3;color:var(--text)}
 .matrix-tbl tr.tr-total td:first-child{background:var(--surface2)}
 /* Sub-pestañas en la barra superior (donde estaba "Protegido") */
-.topsubs{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-height:34px;flex:1 1 auto;min-width:0}
+.topsubs{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-height:34px;flex:1 1 0;min-width:0}
 .topsub{background:transparent;border:1px solid transparent;border-radius:9px;padding:6px 12px;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;transition:background .12s,color .12s}
 .topsub:hover{background:var(--surface2);color:var(--text)}
 .topsub.on{background:var(--text);color:var(--bg)}
@@ -1002,6 +1002,7 @@ td.chk input,th.chk input{accent-color:var(--brand)}
 .btn.primary,.seg button.on,.rchip.on,.topsub.on,.tsub-mi.on,.filt-btn.on,#sidenav button.on,#sidenav button.on:hover,.sidebar .ver,.ia-b.u,.iafab-btn,.iafab-send,.emp-ic{color:var(--on-brand)}
 .reloj{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1;padding:0 6px;white-space:nowrap}
 /* V213: botones arriba a la derecha y la hora debajo */
+.topbar-in>.spacer{display:none}
 .topder{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto}
 .topder-fila{display:flex;align-items:center;gap:8px}
 .topder .ctl{flex-wrap:nowrap}

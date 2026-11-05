@@ -78,5 +78,7 @@ service cloud.firestore {
     match /egresos/{id} { allow read, create, update: if claveOk(); allow delete: if esAdmin(); }
     // V218: datos de pago de cada proveedor (banco, cuenta, titular, QR) para Cuentas por pagar
     match /proveedoresPago/{id} { allow read, write: if claveOk(); }
+    // V225: inventario (muebles, sillas, computadoras…), un documento por bien con sus fotos
+    match /inventario/{id} { allow read, write: if claveOk(); }
   }
 }

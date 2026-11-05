@@ -1271,6 +1271,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
     <button data-s="calendario">Calendario</button>
     <button data-s="tareas">Tareas</button>
     <button data-s="archivos">Archivos</button>
+    <button data-s="inventario">Inventario</button>
     <button data-s="usuarios" style="display:none">Usuarios</button>
     <button data-s="plan">Plan de Cuentas</button>
     <button data-s="tc">Tipos de Cambio</button>
@@ -1555,7 +1556,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V224";
+const APP_VERSION = "V225";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2455,7 +2456,7 @@ function render(){
   CUR = STATE.currency||"USD";
   RATE = tcRateLatest();
   if(CUR==="BOB" && !RATE) CUR="USD";
-  const map={usuarios:renderUsuarios,archivos:renderArchivos,comprobantes:renderComprobantes,billing:renderBilling,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
+  const map={usuarios:renderUsuarios,inventario:renderInventario,archivos:renderArchivos,comprobantes:renderComprobantes,billing:renderBilling,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
     socios:renderSociosCapital,inversiones:renderInversiones,prestamos:renderPrestamos,devoluciones:renderDevoluciones,rendiciones:renderRendiciones,ingresos:renderIngresosTab,costos:renderCostos,bancos:renderBancos,mercury:renderMercury,bitgo:renderBitgo,plan:renderPlan,tc:()=>{ renderTC(); tcAvisoDudosos(); },ia:renderIA,cierre:renderCierre,calendario:renderCalendario,tareas:renderTareas};
   try{ (map[STATE.section]||renderResumen)();
   }
@@ -3277,14 +3278,14 @@ function applyFilterVisibility(){
   const s=STATE.section;
   const showEstado = (s==="resumen");
   const showView = (s==="resumen");
-  const showYear = (s!=="rrhh" && s!=="bitgo" && s!=="plan" && s!=="tc" && s!=="inicio" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="cierre" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="billing" && s!=="usuarios");
-  const showCur = (s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="inicio" && s!=="rendiciones" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="billing" && s!=="usuarios");
+  const showYear = (s!=="rrhh" && s!=="bitgo" && s!=="plan" && s!=="tc" && s!=="inicio" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="cierre" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="billing" && s!=="inventario" && s!=="usuarios");
+  const showCur = (s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="inicio" && s!=="rendiciones" && s!=="ingresos" && s!=="flujo" && s!=="flujo2" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="billing" && s!=="inventario" && s!=="usuarios");
   const gr=(id,on)=>{ const e=$("#"+id); if(e) e.style.display=on?"":"none"; };
   gr("gfYear",showYear); gr("gfEstado",showEstado); gr("gfCur",showCur); gr("gfView",showView);
   const anyG = showYear||showEstado||showCur||showView;
   const gb=$("#gFiltBtn"); if(gb) gb.style.display = anyG?"":"none";
   if(!anyG){ const gp=$("#gFilters"); if(gp) gp.hidden=true; }
-  const showEmp = (s!=="inicio" && s!=="flujo" && s!=="flujo2" && s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="billing" && s!=="usuarios");
+  const showEmp = (s!=="inicio" && s!=="flujo" && s!=="flujo2" && s!=="plan" && s!=="tc" && s!=="rrhh" && s!=="ia" && s!=="calendario" && s!=="tareas" && s!=="archivos" && s!=="comprobantes" && s!=="billing" && s!=="inventario" && s!=="usuarios");
   const eb=$("#empBtn"); if(eb) eb.style.display = showEmp?"":"none";
 }
 
@@ -5147,6 +5148,165 @@ function mercDataPnl(){
 }
 
 /* ---------- CUENTAS POR PAGAR (egresos con estado Pendiente) ---------- */
+/* ============================================================
+   INVENTARIO  [V225]
+   - Lista de muebles, sillas, computadoras, etc. en Firestore «inventario» (un documento por bien).
+   - Cada bien: unidades, precio unitario, moneda, ubicación, estado, responsable y hasta 4 fotos (comprimidas).
+   - «Desde Egresos»: los gastos que parecen equipos (cuenta ACTIVO o palabras como silla, laptop…) y aún
+     no están en el inventario, para agregarlos con un clic.
+   ============================================================ */
+const INV_CATS=["Muebles","Sillas","Computadoras","Monitores y pantallas","Celulares y tablets","Impresoras","Electrodomésticos","Otros equipos"];
+const INV_ESTADOS=["Bueno","Regular","Malo","De baja"];
+const INV_RX=/mueble|silla|escritorio|mesa|estante|sof[aá]|computador|laptop|notebook|macbook|imac|\bpc\b|monitor|pantalla|televisor|\btv\b|impresora|celular|iphone|tablet|ipad|teclado|mouse|aire acondicionado|refrigerador|heladera|microondas|cafetera|proyector|router|ups\b|equipo de computaci|activo fijo/i;
+function invCargar(forzar){
+  if(STATE._invCargando||(STATE.inv&&!forzar)||!nmFbActivo()) return;
+  STATE._invCargando=true;
+  NMFB.invLeer().then(L=>{ STATE.inv=L; STATE.invErr=null; })
+    .catch(e=>{ STATE.inv=[]; STATE.invErr=/permission|insufficient/i.test(String(e&&e.message||e))?"Falta publicar la regla nueva de Firebase (inventario).":String(e&&e.message||e); })
+    .then(()=>{ STATE._invCargando=false; if(STATE.section==="inventario") render(); });
+}
+function invUSD(o){ const t=(+o.unidades||0)*(+o.precio||0); if(String(o.moneda||"USD").toUpperCase()!=="BOB") return t; const r=tcRateLatest(); return r?t/r:0; }
+function invEgresoCand(){
+  const ya=new Set((STATE.inv||[]).map(o=>o.egId).filter(Boolean));
+  return (STATE.egresos||[]).filter(e=>{ if(!e._id||ya.has(e._id)) return false;
+    const a=ancEgreso(e)||{}; if(/^activo/i.test(String(a.kcuenta||"").trim())) return true;
+    return INV_RX.test([e.con,a.ca,a.cp,a.grupoc,a.ksubgrupo].join(" ")); })
+    .sort((x,y)=>String(y.fecha||"").localeCompare(String(x.fecha||"")));
+}
+function invCatDe(txt){ const t=String(txt||"");
+  if(/silla/i.test(t)) return "Sillas";
+  if(/mueble|escritorio|mesa|estante|sof[aá]/i.test(t)) return "Muebles";
+  if(/monitor|pantalla|televisor|\btv\b|proyector/i.test(t)) return "Monitores y pantallas";
+  if(/celular|iphone|tablet|ipad/i.test(t)) return "Celulares y tablets";
+  if(/impresora/i.test(t)) return "Impresoras";
+  if(/computador|laptop|notebook|macbook|imac|\bpc\b|teclado|mouse/i.test(t)) return "Computadoras";
+  if(/aire acondicionado|refrigerador|heladera|microondas|cafetera/i.test(t)) return "Electrodomésticos";
+  return "Otros equipos"; }
+function _fotoADataUrl(file){ return new Promise((ok,ko)=>{ if(!/^image\//.test(file.type)) return ko(new Error("La foto debe ser una imagen."));
+  const img=new Image(), u=URL.createObjectURL(file);
+  img.onload=()=>{ const M=900; let w=img.width,h=img.height; const k=Math.min(1,M/Math.max(w,h)); w=Math.round(w*k); h=Math.round(h*k);
+    const c=document.createElement("canvas"); c.width=w; c.height=h; const x=c.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,w,h); x.drawImage(img,0,0,w,h); URL.revokeObjectURL(u);
+    let q=0.8, d=c.toDataURL("image/jpeg",q); while(d.length>200000&&q>0.4){ q-=0.1; d=c.toDataURL("image/jpeg",q); } ok(d); };
+  img.onerror=()=>{ URL.revokeObjectURL(u); ko(new Error("No se pudo abrir la imagen.")); }; img.src=u; }); }
+function invFotosModal(o,i){
+  const F=o.fotos||[]; let k=i||0;
+  const ov=rhModal(esc(o.nombre||"Fotos"),`<div style="text-align:center"><img id="ivfBig" alt="" style="max-width:100%;max-height:70vh;border-radius:10px;background:#fff"></div>
+    <div id="ivfMini" style="display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap"></div>`,820);
+  const pinta=()=>{ ov.querySelector("#ivfBig").src=F[k]||"";
+    ov.querySelector("#ivfMini").innerHTML=F.length>1?F.map((f,j)=>`<img src="${f}" data-j="${j}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid ${j===k?"var(--accent,#235347)":"transparent"}">`).join(""):"";
+    ov.querySelectorAll("#ivfMini img").forEach(m=>m.onclick=()=>{ k=+m.dataset.j; pinta(); }); };
+  pinta();
+}
+function invModal(o){
+  o=Object.assign({nombre:"",categoria:"Otros equipos",unidades:1,precio:"",moneda:"USD",ubicacion:"",estado:"Bueno",fecha:"",responsable:"",notas:"",fotos:[]},o||{});
+  const fotos=(o.fotos||[]).slice();
+  const ov=rhModal(o._id?"Editar bien del inventario":"Agregar al inventario",`
+    ${o.egId?`<p class="section-intro" style="margin:0 0 10px">🔗 Viene de Egresos: <b>${esc(o._egTxt||"gasto registrado")}</b></p>`:""}
+    <div class="us-form" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+      <div style="grid-column:1/-1"><label>Nombre del bien</label><input id="ivNom" value="${esc(o.nombre)}" placeholder="Ej.: Silla ergonómica negra"></div>
+      <div><label>Categoría</label><select id="ivCat">${_rhOpts(INV_CATS,o.categoria)}</select></div>
+      <div><label>Estado</label><select id="ivEst">${_rhOpts(INV_ESTADOS,o.estado)}</select></div>
+      <div><label>Unidades</label><input id="ivUni" type="number" min="0" step="1" value="${esc(String(o.unidades))}"></div>
+      <div><label>Precio por unidad</label><input id="ivPre" inputmode="decimal" value="${esc(o.precio===""?"":String(o.precio).replace(".",","))}" placeholder="0,00"></div>
+      <div><label>Moneda</label><select id="ivMon">${_rhOpts(["USD","BOB"],String(o.moneda||"USD").toUpperCase())}</select></div>
+      <div><label>Fecha de compra</label><input id="ivFec" type="date" value="${esc(String(o.fecha||"").slice(0,10))}"></div>
+      <div><label>Ubicación</label><input id="ivUbi" value="${esc(o.ubicacion)}" placeholder="Ej.: Oficina, sala de reuniones…"></div>
+      <div><label>Responsable</label><input id="ivRes" value="${esc(o.responsable)}" placeholder="Quién lo tiene a cargo"></div>
+      <div style="grid-column:1/-1"><label>Notas</label><input id="ivNot" value="${esc(o.notas)}" placeholder="Marca, modelo, serie…"></div>
+      <div style="grid-column:1/-1"><label>Fotos (hasta 4)</label>
+        <div id="ivFotos" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"></div>
+        <input type="file" id="ivFile" accept="image/*" multiple hidden></div>
+    </div>
+    <div class="modal-actions"><button class="btn" data-cerrar2>Cancelar</button><button class="btn primary" id="ivGuardar">Guardar</button></div>`,680);
+  const fi=ov.querySelector("#ivFile");
+  const pinta=()=>{ ov.querySelector("#ivFotos").innerHTML=fotos.map((f,j)=>`<div style="position:relative"><img src="${f}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--line)"><button class="btn ghost" data-qf="${j}" title="Quitar foto" style="position:absolute;top:2px;right:2px;padding:0 6px;background:var(--card,#fff)">✕</button></div>`).join("")
+      +(fotos.length<4?`<button class="btn" id="ivFotoBtn">📷 Subir foto</button>`:"");
+    ov.querySelectorAll("[data-qf]").forEach(b=>b.onclick=()=>{ fotos.splice(+b.dataset.qf,1); pinta(); });
+    const b=ov.querySelector("#ivFotoBtn"); if(b) b.onclick=()=>fi.click(); };
+  pinta();
+  fi.onchange=async()=>{ const L=[...(fi.files||[])].slice(0,4-fotos.length); fi.value="";
+    for(const f of L){ try{ fotos.push(await _fotoADataUrl(f)); }catch(e){ ov._msg(e.message); } } pinta(); };
+  ov.querySelector("[data-cerrar2]").onclick=()=>ov.remove();
+  ov.querySelector("#ivGuardar").onclick=async()=>{
+    const v=id=>ov.querySelector("#"+id).value.trim();
+    if(!v("ivNom")) return ov._msg("Escribe el nombre del bien.");
+    const x={nombre:v("ivNom"),categoria:v("ivCat"),estado:v("ivEst"),unidades:Math.max(0,parseInt(v("ivUni"),10)||0),precio:toNumLat(v("ivPre"))||0,
+      moneda:v("ivMon"),fecha:v("ivFec"),ubicacion:v("ivUbi"),responsable:v("ivRes"),notas:v("ivNot"),fotos:fotos,egId:o.egId||""};
+    if(JSON.stringify(x).length>950000) return ov._msg("Las fotos pesan demasiado juntas. Quita una e inténtalo de nuevo.");
+    const b=ov.querySelector("#ivGuardar"); b.disabled=true; b.textContent="Guardando…";
+    try{ const g=await NMFB.invGuardar(o._id,x); STATE.inv=(STATE.inv||[]).filter(i=>i._id!==g._id).concat([g]); ov.remove(); render(); }
+    catch(e){ b.disabled=false; b.textContent="Guardar";
+      ov._msg(/permission|insufficient/i.test(String(e&&e.message||e))?"Todavía no se puede guardar: falta publicar la regla nueva de Firebase (inventario).":"No se pudo guardar: "+((e&&e.message)||e)); }
+  };
+}
+function invExcel(L){
+  if(typeof XLSX==="undefined") return alert("No se pudo cargar la herramienta de Excel. Recarga la página.");
+  const filas=L.map(o=>({"Nombre":o.nombre,"Categoría":o.categoria,"Estado":o.estado,"Unidades":+o.unidades||0,"Precio unitario":+o.precio||0,"Moneda":o.moneda,
+    "Total":(+o.unidades||0)*(+o.precio||0),"Total USD":Math.round(invUSD(o)*100)/100,"Fecha de compra":o.fecha||"","Ubicación":o.ubicacion||"","Responsable":o.responsable||"","Notas":o.notas||"","Fotos":(o.fotos||[]).length,"Desde Egresos":o.egId?"Sí":""}));
+  const ws=XLSX.utils.json_to_sheet(filas), wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Inventario");
+  XLSX.writeFile(wb,"Inventario_PESO.xlsx");
+}
+function renderInventario(){
+  const app=$("#app");
+  if(!nmFbActivo()){ app.innerHTML=`<div class="card">${emptyState("El inventario se guarda en Firebase. Entra con tu correo y clave para verlo.")}</div>`; return; }
+  invCargar();
+  const tab=STATE.invTab||"lista";
+  const L=(STATE.inv||[]).slice().sort((a,b)=>String(a.categoria).localeCompare(String(b.categoria))||String(a.nombre).localeCompare(String(b.nombre)));
+  const cand=STATE.egresos?invEgresoCand():[];
+  const q=String(STATE.invSearch||"").trim().toLowerCase(), cat=STATE.invCat||"__all";
+  const rows=L.filter(o=>(cat==="__all"||o.categoria===cat)&&(!q||[o.nombre,o.categoria,o.ubicacion,o.responsable,o.notas,o.estado].join(" ").toLowerCase().includes(q)));
+  const activos=rows.filter(o=>o.estado!=="De baja");
+  const uni=activos.reduce((s,o)=>s+(+o.unidades||0),0), val=activos.reduce((s,o)=>s+invUSD(o),0);
+  const cats=[...new Set(L.map(o=>o.categoria))].filter(Boolean);
+  const head=`<div class="grid kpis">
+      ${kpi("Bienes",String(rows.length),cat==="__all"?"registrados":cat,"#235347","▤")}
+      ${kpi("Unidades",nmNum(uni,0),"sin contar los de baja","#163832","◧")}
+      ${kpi("Valor (USD)","$ "+f2(val),"precio × unidades","#0B2B26","◆")}
+      ${kpi("Por revisar en Egresos",String(cand.length),"posibles equipos sin agregar","#8EB69B","↧")}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:6px 0 14px">
+      <div class="seg" id="invTabs"><button data-t="lista" class="${tab==="lista"?"on":""}">Inventario</button><button data-t="egresos" class="${tab==="egresos"?"on":""}">Desde Egresos (${cand.length})</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${tab==="lista"?`<button class="btn" id="invXls" title="Descargar esta lista en Excel">⬇ Excel</button>`:""}<button class="btn primary" id="invAdd">+ Agregar bien</button></div>
+    </div>
+    ${STATE.invErr?`<div class="msg err" style="display:block;margin:0 0 12px">${esc(STATE.invErr)}</div>`:""}`;
+  let body="";
+  if(STATE._invCargando&&!STATE.inv) body=`<div class="card"><p class="mini">Cargando inventario…</p></div>`;
+  else if(tab==="egresos"){
+    body=`<div class="card"><div class="head"><h3>Gastos que parecen equipos o muebles</h3></div>
+      <p class="section-intro">Son gastos de Egresos con cuenta <b>ACTIVO</b> o con palabras como silla, laptop, monitor… Pulsa <b>Agregar</b> para pasarlos al inventario (puedes cambiar los datos antes de guardar).</p>
+      ${cand.length?`<div class="tbl-scroll"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Proveedor</th><th>Cuenta analítica</th><th class="num">Importe</th><th></th></tr></thead><tbody>
+      ${cand.map((e,i)=>{ const a=ancEgreso(e)||{}, R=e._raw||{}; return `<tr><td>${esc(String(e.fecha||"").slice(0,10))}</td><td>${esc(e.con||"")}</td><td>${esc(e.ben||"")}</td><td>${esc(a.ca||"")}</td>
+        <td class="num">${esc(String(R.moneda||"USD").toUpperCase())} ${f2(R.importe!=null?+R.importe:(+e.imp||0))}</td><td><button class="btn ghost" data-ivc="${i}">+ Agregar</button></td></tr>`; }).join("")}
+      </tbody></table></div>`:emptyState("No hay gastos de equipos pendientes de agregar.")}</div>`;
+  } else {
+    body=`<div class="card"><div class="toolbar" style="align-items:center">${esearch("invSearch","Buscar bien, ubicación o responsable…",STATE.invSearch)}
+        <select id="invCat" style="max-width:220px"><option value="__all">Todas las categorías</option>${cats.map(c=>`<option${c===cat?" selected":""}>${esc(c)}</option>`).join("")}</select></div>
+      ${rows.length?`<div class="tbl-scroll"><table><thead><tr><th>Foto</th><th>Bien</th><th>Categoría</th><th>Ubicación</th><th>Estado</th><th class="num">Unid.</th><th class="num">Precio unit.</th><th class="num">Total</th><th></th></tr></thead><tbody>
+      ${rows.map(o=>{ const f=(o.fotos||[])[0], mon=String(o.moneda||"USD").toUpperCase();
+        return `<tr${o.estado==="De baja"?' style="opacity:.55"':""}><td>${f?`<img src="${f}" data-ivf="${esc(o._id)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:8px;cursor:pointer;display:block">${o.fotos.length>1?`<span class="mini">+${o.fotos.length-1}</span>`:""}`:`<span class="mini">—</span>`}</td>
+        <td><b>${esc(o.nombre)}</b>${o.egId?` <span class="tag" title="Viene de Egresos">Egresos</span>`:""}${o.notas?`<div class="mini">${esc(o.notas)}</div>`:""}${o.responsable?`<div class="mini">👤 ${esc(o.responsable)}</div>`:""}</td>
+        <td>${esc(o.categoria||"")}</td><td>${esc(o.ubicacion||"")}</td><td>${esc(o.estado||"")}</td><td class="num">${nmNum(+o.unidades||0,0)}</td>
+        <td class="num">${mon} ${f2(+o.precio||0)}</td><td class="num"><b>${mon} ${f2((+o.unidades||0)*(+o.precio||0))}</b></td>
+        <td style="white-space:nowrap"><button class="btn ghost" data-ive="${esc(o._id)}" title="Editar">✎</button><button class="btn ghost" data-ivd="${esc(o._id)}" title="Borrar">🗑</button></td></tr>`; }).join("")}
+      </tbody></table></div>`:emptyState(L.length?"Ningún bien coincide con la búsqueda.":"Todavía no hay bienes. Pulsa «+ Agregar bien» o revisa «Desde Egresos».")}</div>`;
+  }
+  app.innerHTML=head+body;
+  const porId=id=>L.find(o=>o._id===id);
+  document.querySelectorAll("#invTabs button").forEach(b=>b.onclick=()=>{ STATE.invTab=b.dataset.t; render(); });
+  const ad=$("#invAdd"); if(ad) ad.onclick=()=>invModal();
+  const xl=$("#invXls"); if(xl) xl.onclick=()=>invExcel(rows);
+  const cs=$("#invCat"); if(cs) cs.onchange=()=>{ STATE.invCat=cs.value; render(); };
+  const si=$("#invSearch"); if(si) si.addEventListener("input",()=>{ STATE.invSearch=si.value; STATE._focus=true; render(); });
+  if(STATE._focus){ const el=$("#invSearch"); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } STATE._focus=false; }
+  document.querySelectorAll("[data-ivf]").forEach(m=>m.onclick=()=>invFotosModal(porId(m.dataset.ivf),0));
+  document.querySelectorAll("[data-ive]").forEach(b=>b.onclick=()=>invModal(porId(b.dataset.ive)));
+  document.querySelectorAll("[data-ivd]").forEach(b=>b.onclick=async()=>{ const o=porId(b.dataset.ivd); if(!o||!confirm("¿Borrar «"+o.nombre+"» del inventario? Esto no se puede deshacer.")) return;
+    try{ await NMFB.invBorrar(o._id); STATE.inv=(STATE.inv||[]).filter(i=>i._id!==o._id); render(); }catch(e){ alert("No se pudo borrar: "+((e&&e.message)||e)); } });
+  document.querySelectorAll("[data-ivc]").forEach(b=>b.onclick=()=>{ const e=cand[+b.dataset.ivc]; if(!e) return; const a=ancEgreso(e)||{}, R=e._raw||{};
+    invModal({nombre:e.con||a.ca||"",categoria:invCatDe([e.con,a.ca,a.cp].join(" ")),unidades:1,precio:R.importe!=null?+R.importe:(+e.imp||0),
+      moneda:String(R.moneda||"USD").toUpperCase()==="BOB"?"BOB":"USD",fecha:String(e.fecha||"").slice(0,10),notas:e.ben?("Proveedor: "+e.ben):"",egId:e._id,_egTxt:[String(e.fecha||"").slice(0,10),e.con,e.ben].filter(Boolean).join(" · ")}); });
+}
+
 function renderCxP(){
   const all=STATE.egresos||[];
   const tab=STATE.cxpTab||"graficos";
@@ -6632,7 +6792,7 @@ function exportCierrePDF(Y,M){
   ctx.table(["Proveedor / Beneficiario","USD"], D.topBen.map(e=>[e[0], m0(e[1])]), null, {1:{halign:"right"}});
   _pdfSave(ctx, "Cierre de Mes · "+MONTH_ES_LONG[M]+" "+Y, "Cierre_"+MONTH_ES_LONG[M]+"_"+Y+".pdf");
 }
-const SECCION_TITULOS = {inicio:"Inicio",billing:"Billing",flujo:"Flujo",flujo2:"Flujo 2",resumen:"Resumen P&L",egresos:"Egresos",cxp:"Cuentas por Pagar",rrhh:"RRHH",inversiones:"Inversiones",prestamos:"Préstamos",devoluciones:"Devoluciones",rendiciones:"Rendiciones",ingresos:"Ingresos",costos:"Costos",bancos:"Bancos",mercury:"Mercury",bitgo:"BitGo",plan:"Plan de Cuentas",tc:"Tipos de Cambio",ia:"IA · Asistente",cierre:"Cierre de Mes",calendario:"Calendario",tareas:"Tareas",socios:"Socios y Capital"};
+const SECCION_TITULOS = {inicio:"Inicio",inventario:"Inventario",billing:"Billing",flujo:"Flujo",flujo2:"Flujo 2",resumen:"Resumen P&L",egresos:"Egresos",cxp:"Cuentas por Pagar",rrhh:"RRHH",inversiones:"Inversiones",prestamos:"Préstamos",devoluciones:"Devoluciones",rendiciones:"Rendiciones",ingresos:"Ingresos",costos:"Costos",bancos:"Bancos",mercury:"Mercury",bitgo:"BitGo",plan:"Plan de Cuentas",tc:"Tipos de Cambio",ia:"IA · Asistente",cierre:"Cierre de Mes",calendario:"Calendario",tareas:"Tareas",socios:"Socios y Capital"};
 
 function _limpiaTxt(s){ return String(s==null?"":s).replace(/[⇅▲▼⛶↕]/g,"").replace(/\s+/g," ").trim(); }
 function _esNumTxt(s){ const v=String(s).replace(/(Bs|USD|\$|%|\s)/g,""); return v!=="" && /\d/.test(v) && /^-?[\d.,()+-]+$/.test(v); }
@@ -6691,7 +6851,7 @@ function ensureSectionPdfButton(){
   const btn=document.getElementById("topPdfBtn"); if(!btn) return;
   const app=document.getElementById("app");
   const hayContenido = !!app && (app.querySelector("table") || app.querySelector(".card.kpi") || app.querySelector(".grid.kpis"));
-  const mostrar = STATE.section!=="inicio" && STATE.section!=="tareas" && STATE.section!=="archivos" && STATE.section!=="comprobantes" && STATE.section!=="billing" && STATE.section!=="usuarios" && hayContenido;
+  const mostrar = STATE.section!=="inicio" && STATE.section!=="tareas" && STATE.section!=="archivos" && STATE.section!=="comprobantes" && STATE.section!=="billing" && STATE.section!=="inventario" && STATE.section!=="usuarios" && hayContenido;
   btn.hidden=!mostrar;
   if(!mostrar) return;
   const esCostos = (STATE.section==="costos");
@@ -9392,6 +9552,11 @@ const NMFB={
   async provGuardar(o){ const id=provPagoId(o.nombre); if(!id) throw new Error("Falta el nombre del proveedor.");
     const x=Object.assign({},o); delete x._id; x.actualizado=new Date().toISOString(); x.por=(this.sesion&&this.sesion.email)||"";
     await this.db.doc("proveedoresPago/"+id).set(x); return Object.assign({_id:id},x); },
+  // V225: inventario (muebles, equipos…), un documento por bien, con fotos comprimidas
+  async invLeer(){ const sn=await this.db.collection("inventario").get(); return sn.docs.map(d=>Object.assign({_id:d.id},d.data())); },
+  async invGuardar(id,o){ const x=Object.assign({},o); delete x._id; x.actualizado=new Date().toISOString(); x.por=(this.sesion&&this.sesion.email)||"";
+    const ref=id?this.db.doc("inventario/"+id):this.db.collection("inventario").doc(); await ref.set(x); return Object.assign({_id:ref.id},x); },
+  async invBorrar(id){ await this.db.doc("inventario/"+id).delete(); },
   // V216: egresos (un documento por gasto). desdeMs = solo los cambiados después de esa hora (caché)
   async egLeer(desdeMs){ let q=this.db.collection("egresos"); if(desdeMs) q=q.where("_act",">",firebase.firestore.Timestamp.fromMillis(desdeMs));
     const sn=await q.get(); return sn.docs.map(d=>{ const o=d.data(); o._id=d.id; o._actMs=(o._act&&o._act.toMillis)?o._act.toMillis():0; delete o._act; return o; }); },
@@ -10333,6 +10498,7 @@ const NAV_ICONS={
   tc:'<path d="M3 8l4-4 4 4M7 4v9a3 3 0 0 0 3 3h10"/><path d="M21 16l-4 4-4-4M17 20v-9a3 3 0 0 0-3-3H3"/>',
   calendario:'<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4M7.5 13h3M13.5 13h3M7.5 16.5h3M13.5 16.5h3"/>',
   usuarios:'<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><rect x="15" y="11" width="7" height="6" rx="1.2"/><path d="M16.5 11V9.5a2 2 0 0 1 4 0V11"/>',
+  inventario:'<path d="M3 8l9-5 9 5v9l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v9"/>',
   billing:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
   comprobantes:'<path d="M6 3h9l3 3v15H6z"/><path d="M14 3v4h4"/><path d="M9 11h6M9 14.5h6M9 18h3.5"/>',
   archivos:'<path d="M3 7a2 2 0 0 1 2-2h4.5l2 2.5H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10.5h18"/>',

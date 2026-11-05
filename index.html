@@ -1570,7 +1570,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V231";
+const APP_VERSION = "V232";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3409,7 +3409,7 @@ function estadoCuentaHTML(){
   // Grupo Costos fijos: Tipo -> Categoría -> ítems
   const costGroup=()=>{
     const tipos=[];
-    ["Operativo","Administrativo","Marketing"].forEach(tipo=>{
+    ["Operativo","Administrativo","Comercialización"].forEach(tipo=>{
       const its=lcItems.filter(i=>i.tipo===tipo); if(!its.length) return;
       const m=new Map(); its.forEach(i=>{const k=i.cat||"(Sin categoría)"; if(!m.has(k))m.set(k,[]); m.get(k).push(i);});
       const cats=[];
@@ -3798,7 +3798,7 @@ function egresosUnificados(){
   const bobOf=(usd,fecha)=>{ const r=tcRateFor(fecha); return r? usd*r : (RATE? usd*RATE : null); };
   (STATE.egresos||[]).filter(e=>yOk(e.g)&&empPassRow(e)).forEach(e=>{
     const a=ancEgreso(e);
-    out.push({ origen:"Egresos", egId:e._id||null, fecha:e.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Egresos", hu:e._hu,
+    out.push({ origen:/altitude/i.test(String(e.tipo||""))?"Altitude":"Egresos", egId:e._id||null, fecha:e.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Egresos", hu:e._hu,
       keytext:e.ben||"", con:e.con||e.ben||"", moneda:e.moneda||"USD", usd:(e.impUSD!=null?+e.impUSD:(+e.imp||0)), bob:(e.impBOB!=null?+e.impBOB:null),
       estado:e.e||"", tipo:e.tipo||"", costo:e._costo||"", m:e.m, g:e.g, mi:monthIdx(e.m), orig:(e.impOrig!=null?+e.impOrig:+e.imp||0), cuentaPago:e.tipo||"",
       extra:[e.ben,e.coment,e.pagadopor,e.pais,e.codc].filter(Boolean).join(" ") });
@@ -3848,7 +3848,7 @@ function renderEgresosGeneral(){
   const allU=egresosUnificados();
   // V222: Fijo/Variable sale de lo marcado en Costos › Detalle (por Cuenta Analítica) si el gasto no lo trae
   desgCargar(); allU.forEach(r=>{ if(!r.costo&&r.ca&&NM_CTIPO&&NM_CTIPO[r.ca]) r.costo=costoNorm(NM_CTIPO[r.ca].nat); });
-  const srcs=[...new Set(allU.map(r=>r.origen))];
+  const srcs=[...new Set(allU.map(r=>r.origen).concat(["Altitude"]))];   // V232: Altitude siempre visible (aunque aún no haya extractos)
   const uniq=f=>[...new Set(allU.map(f).map(v=>String(v==null?"":v).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const fCuentas=uniq(r=>r.kcuenta), fGrupos=uniq(r=>r.grupoc), fSubg=uniq(r=>r.ksubgrupo), fCP=uniq(r=>r.cp), fCA=uniq(r=>r.ca);
   const fMeses=[...new Set(allU.map(r=>r.mi).filter(i=>i>=0))].sort((a,b)=>a-b);
@@ -3863,6 +3863,7 @@ function renderEgresosGeneral(){
   if(STATE.egGenCA!=="__all") rows=rows.filter(r=>STATE.egGenCA==="__sin"?!r.ca:String(r.ca||"")===STATE.egGenCA);
   if(STATE.egGenMes!=="__all") rows=rows.filter(r=>String(r.mi)===STATE.egGenMes);
   if(STATE.egGenCosto!=="__all") rows=rows.filter(r=>String(r.costo||"")===STATE.egGenCosto);
+  if(STATE.egGenAsig&&STATE.egGenAsig!=="__all") rows=rows.filter(r=>{ const x=r.casrc; return STATE.egGenAsig==="manual"?x==="manual":STATE.egGenAsig==="auto"?(x==="auto"||x==="hist"):STATE.egGenAsig==="sheet"?x==="sheet":(!r.ca); });
   const q=String(STATE.egGenSearch||"").trim().toLowerCase();
   // V205: también busca por beneficiario, comentario (N° de transferencia, cuenta destino), pagado por, tipo de pago e IMPORTE
   if(q){ const nq=egNumQuery(q); const qn=_rhNorm(q);
@@ -3902,6 +3903,7 @@ function renderEgresosGeneral(){
   const srcSeg=srcs.length>1?`<div class="seg" id="egGenSrcSeg" style="margin:0 0 12px;flex-wrap:wrap">${[["__all","Todos"]].concat(srcs.map(x=>[x,x])).map(([v,t])=>`<button data-v="${esc(v)}" class="${(STATE.egGenSrc||"__all")===v?"on":""}">${esc(t)} <span class="mini">(${v==="__all"?allU.length:allU.filter(r=>r.origen===v).length})</span></button>`).join("")}</div>`:"";
   const egGenFilterDefs=[
     {k:"egGenSrc",lbl:"Fuente",disp:v=>v,opts:srcs.map(s=>({v:s,t:s})),ph:"Todas las fuentes"},
+    {k:"egGenAsig",lbl:"Cuenta analítica puesta",seg:true,disp:v=>({manual:"A mano",auto:"Automática (sistema)",sheet:"De la hoja",sin:"Sin cuenta"}[v]||v),opts:[{v:"manual",t:"A mano"},{v:"auto",t:"Automática (sistema)"},{v:"sheet",t:"De la hoja"},{v:"sin",t:"Sin cuenta"}]},
     {k:"egGenTP",lbl:"Tipo de Pago",seg:true,disp:v=>v,opts:[...new Set(allU.map(r=>r.cuentaPago).filter(Boolean))].sort().map(v=>({v,t:v})),ph:"Todos los tipos de pago"},
     {k:"egGenMes",lbl:"Mes",seg:true,disp:v=>MONTH_ES_LONG[+v],opts:fMeses.map(i=>({v:String(i),t:MONTH_ES_LONG[i]})),ph:"Todos los meses"},
     {k:"egGenCuenta",lbl:"Cuenta",disp:v=>v,opts:fCuentas.map(c=>({v:c,t:c})),ph:"Todas las cuentas"},
@@ -4114,20 +4116,39 @@ function caMasterList(){
 /* V210: CA_SIN en la asignación manual = "quitada a propósito": el gasto queda sin cuenta analítica
    (no se usa la regla automática ni el valor de la hoja) hasta que se le asigne otra. */
 const CA_SIN="__SIN__";
-function resolveGeneric(fuente, huella, keyText, sheetCa){
-  const ov=manCa(fuente,huella); if(ov===CA_SIN) return {ca:"", src:"sin"}; if(ov) return {ca:ov, src:"manual"};
-  const base=asigBaseIndex()[_normTxt(keyText)]; if(base) return {ca:base, src:"auto"};
-  if(sheetCa && String(sheetCa).trim()) return {ca:String(sheetCa).trim(), src:"sheet"};
+function resolveGeneric(fuente, huella, keyText, sheetCa, conText){
+  const ov=manCa(fuente,huella); if(ov===CA_SIN) return {ca:"", src:"sin"}; if(ov) return {ca:caNombre(ov), src:"manual"};
+  const base=asigBaseIndex()[_normTxt(keyText)]; if(base) return {ca:caNombre(base), src:"auto"};
+  if(sheetCa && String(sheetCa).trim()) return {ca:caNombre(String(sheetCa).trim()), src:"sheet"};
+  // V232: si nadie la asignó, el sistema la deduce del historial (mismo proveedor o mismo concepto)
+  if(!STATE._histBuilding){ const H=caHistIndex(); const h=H[_normTxt(keyText)]||H[_normTxt(conText)]; if(h) return {ca:h, src:"hist"}; }
   return {ca:"", src:"none"};
+}
+/* V232: si la cuenta analítica vino como código del plan (ej. 533004001), se muestra su nombre */
+function caNombre(v){ const t=String(v||"").trim(); if(!/^\d{6,}$/.test(t)) return t;
+  if(STATE._caCodSrc!==STATE.plan){ const m={}; ((STATE.plan&&(STATE.plan.rows||STATE.plan))||[]).forEach(r=>{ if(/anal/i.test(r.categoria||"")) m[String(r.codigo).trim()]=String(r.nombre||"").trim(); }); STATE._caCod=m; STATE._caCodSrc=STATE.plan; }
+  const n=STATE._caCod[t]; return n&&!/^\d+$/.test(n)?n:t; }
+/* V232: historial de cuentas analíticas ya asignadas (a mano, por la base o en la hoja), por proveedor y por concepto.
+   Se usa solo si la cuenta más usada para ese proveedor/concepto tiene al menos el 60% de los casos. */
+function caHistIndex(){
+  const sig=[STATE.egresos,STATE.mercury,STATE.bitgo,(STATE.asigManual||[]).length,STATE.plan].map(x=>x&&x.length!=null?x.length:x);
+  if(STATE._chIdx&&STATE._chSig&&sig.every((x,i)=>x===STATE._chSig[i])&&STATE._chEg===STATE.egresos) return STATE._chIdx;
+  const cnt={}; STATE._histBuilding=true;
+  try{ egresosUnificados().forEach(r=>{ if(!r.ca||r.casrc==="sin"||r.casrc==="none"||r.casrc==="hist") return;
+      [r.keytext,r.con].forEach(k=>{ k=_normTxt(k); if(k.length<3) return; const o=cnt[k]||(cnt[k]={}); o[r.ca]=(o[r.ca]||0)+1; }); }); }
+  catch(e){ console.error("historial CA",e); }
+  finally{ STATE._histBuilding=false; }
+  const idx={}; Object.entries(cnt).forEach(([k,o])=>{ const L=Object.entries(o).sort((a,b)=>b[1]-a[1]), tot=L.reduce((s,x)=>s+x[1],0); if(L[0][1]/tot>=0.6) idx[k]=L[0][0]; });
+  STATE._chIdx=idx; STATE._chSig=sig; STATE._chEg=STATE.egresos; return idx;
 }
 function ancGeneric(res, fb){ fb=fb||{}; const j=caJer(res.ca, fb.cp)||{};
   if(j.plan) return { ca:res.ca, src:res.src, kcuenta:j.kcuenta, grupoc:j.grupoc, ksubgrupo:j.ksubgrupo, cp:j.cp, plan:true };
   return { ca:res.ca, src:res.src, kcuenta:j.kcuenta||fb.kcuenta||"", grupoc:j.grupoc||fb.grupoc||"", ksubgrupo:j.ksubgrupo||fb.ksubgrupo||"", cp:j.cp||fb.cp||"", plan:false }; }
 // Celda interactiva genérica (fuente + huella)
 function caCellHTMLg(fuente, huella, res){
-  const cls=res.src==="manual"?"ca-man":(res.src==="auto"?"ca-auto":(res.src==="sheet"?"ca-sheet":"ca-none"));
+  const cls=res.src==="manual"?"ca-man":((res.src==="auto"||res.src==="hist")?"ca-auto":(res.src==="sheet"?"ca-sheet":"ca-none"));
   const label=res.ca?esc(res.ca):"Asignar";
-  const title=res.src==="manual"?"Manual (tú la pusiste) · clic para cambiar":(res.src==="auto"?"Automática (base Asignación) · clic para cambiar":(res.src==="sheet"?"Valor de la hoja, aún no está en la base · clic para asignar":"Sin asignar · clic para asignar"));
+  const title=res.src==="manual"?"Manual (tú la pusiste) · clic para cambiar":(res.src==="auto"?"Automática (base Asignación) · clic para cambiar":res.src==="hist"?"Automática: el sistema la dedujo del historial (mismo proveedor o concepto) · clic para cambiar":(res.src==="sheet"?"Valor de la hoja, aún no está en la base · clic para asignar":"Sin asignar · clic para asignar"));
   const rev=(res.src==="manual"||res.src==="sin")?`<button type="button" class="ca-revert" data-fuente="${esc(fuente)}" data-hu="${esc(huella)}" title="Volver a automático">↻</button>`:"";
   return `<span class="ca-wrap"><button type="button" class="ca-cell ${cls}" data-fuente="${esc(fuente)}" data-hu="${esc(huella)}" title="${esc(title)}">${label}</button>${rev}</span>`;
 }
@@ -4157,7 +4178,7 @@ function ensureHuellasBitgo(){
 // Resolver la Cuenta Analítica de un egreso (Lista): manual > base > valor de hoja > nada
 function resolveEgreso(e){
   ensureHuellas();
-  return resolveGeneric("Egresos", e._hu, e.ben, e.ca);
+  return resolveGeneric("Egresos", e._hu, e.ben, e.ca, e.con);
 }
 // Jerarquía resuelta de un egreso (según su CA resuelta; cae al valor propio si no se conoce)
 function ancEgreso(e){ const res=resolveEgreso(e); const j=caJer(res.ca, e.cp)||{};
@@ -5648,7 +5669,7 @@ function tablaCostosRows(){
     const fac=facFrec(frecRaw);
     const conv=v=> moneda==="BOB" ? (RATE?v/RATE:v) : v;
     const mFijoM=conv(montoFijo)*fac, mVarM=conv(montoVar)*fac;
-    const tn=normHdr(cTipo?r[cTipo]:""), tipo = tn.includes("admin") ? "Administrativo" : (/market|mkt|comerc|public/.test(tn) ? "Marketing" : "Operativo");
+    const tn=normHdr(cTipo?r[cTipo]:""), tipo = tn.includes("admin") ? "Administrativo" : (/market|mkt|comerc|public/.test(tn) ? "Comercialización" : "Operativo");
     const tipoRaw = cTipo?String(r[cTipo]||""):"";
     const empRaw = cEmp?String(r[cEmp]||""):"";
     // Fijo/Variable: explícito (col L) o inferido por cuál monto tiene valor
@@ -5731,7 +5752,7 @@ function pnlSortableCols(sheet){
    - config/costosFB {migrado, cols} indica que ya se copió; la hoja queda de respaldo.
    - costos/_ocultas: sugerencias que el equipo decidió no agregar.
    ============================================================ */
-const COS_TIPOS=["OPERATIVO","ADMINISTRATIVO","MARKETING"];
+const COS_TIPOS=["OPERATIVO","ADMINISTRATIVO","COMERCIALIZACION"];
 const COS_FRECS=["Mensual","Anual","Trimestral","Semanal","No recurrente"];
 async function costosFB(){
   const meta=await NMFB.cfgGet("costosFB"); if(!meta||!meta.migrado) return null;
@@ -5760,11 +5781,11 @@ function costoModal(it, pre){
     emp:_cosCol("empresa","entidad"),fv:_cosCol("fijovariable"),nro:_cosCol("nro")};
   const v=k=>pre&&pre[k]!=null?pre[k]:(C[k]?r[C[k]]:"");
   const centros=[...new Set(tablaCostosRows().items.map(i=>i.centro).filter(Boolean))].sort();
-  const tipoAct=String(v("tipo")||"OPERATIVO").toUpperCase(), fvAct=_normTxt(v("fv")).indexOf("var")>-1?"Variable":"Fijo";
+  const tipoAct=(t=>/market|mkt|comerc|public/i.test(t)?"COMERCIALIZACION":/admin/i.test(t)?"ADMINISTRATIVO":"OPERATIVO")(String(v("tipo")||"")), fvAct=_normTxt(v("fv")).indexOf("var")>-1?"Variable":"Fijo";
   const num=x=>x===""||x==null?"":String(x).replace(".",",");
   const ov=rhModal(it?"Editar costo":"Agregar costo",`
     <div class="us-form" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-      <div style="grid-column:1/-1"><label>Grupo</label><div class="seg" id="cmTipo">${COS_TIPOS.map(t=>`<button type="button" data-v="${t}" class="${t===tipoAct?"on":""}">${t==="OPERATIVO"?"Operativo":t==="ADMINISTRATIVO"?"Administrativo":"Marketing"}</button>`).join("")}</div></div>
+      <div style="grid-column:1/-1"><label>Grupo</label><div class="seg" id="cmTipo">${COS_TIPOS.map(t=>`<button type="button" data-v="${t}" class="${t===tipoAct?"on":""}">${t==="OPERATIVO"?"Operativo":t==="ADMINISTRATIVO"?"Administrativo":"Comercialización (Marketing)"}</button>`).join("")}</div></div>
       <div><label>Proveedor / Beneficiario</label><input id="cmProv" list="dl_ben" value="${esc(v("prov")||"")}"></div>
       <div><label>Concepto</label><input id="cmCon" value="${esc(v("con")||"")}"></div>
       <div><label>Centro de costo</label><input id="cmCentro" list="cmCentroL" value="${esc(v("centro")||"")}"><datalist id="cmCentroL">${centros.map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
@@ -5800,8 +5821,11 @@ function costoModal(it, pre){
 }
 /* ¿Este gasto corresponde a este costo de la lista? (por proveedor) */
 function _cosClave(t){ return _normTxt(t).replace(/[^a-z0-9]/g,""); }
-function _cosCoincide(it, txt){ const p=_cosClave(it.prov); if(p.length<3) return false; if(txt.includes(p)) return true;
-  const w=_normTxt(it.prov).split(/[^a-z0-9]+/).filter(x=>x.length>=4&&!/^(peso|bolivia|srl|llc|inc|corp|limited|ltda)$/.test(x)); return !!w.length&&txt.includes(w[0]); }
+function _cosCoincide(it, txt, conToo){ const p=_cosClave(it.prov);
+  if(p.length>=3){ if(txt.includes(p)) return true;
+    const w=_normTxt(it.prov).split(/[^a-z0-9]+/).filter(x=>x.length>=4&&!/^(peso|bolivia|srl|llc|inc|corp|limited|ltda)$/.test(x)); if(w.length&&txt.includes(w[0])) return true; }
+  // para las sugerencias también cuenta el concepto completo (ej. el alquiler anotado con el nombre del dueño)
+  const c=_cosClave(it.con); return !!conToo&&c.length>=8&&txt.includes(c); }
 function _cosGastos(){
   return (STATE.egresos||[]).filter(e=>e.g!=null&&monthIdx(e.m)>=0&&!/presupuest/i.test(String(e.e||""))).map(e=>{ const ca=(resolveEgreso(e)||{}).ca||"", a=ancEgreso(e)||{};
     return {e, k:e.g*12+monthIdx(e.m), usd:e.impUSD!=null?+e.impUSD:(+e.imp||0), ben:e.ben||"", ca, cuenta:a.kcuenta||"", txt:_cosClave([e.ben,e.con,ca].join(" "))}; });
@@ -5812,10 +5836,10 @@ function costosSugerencias(items){
   const m={};
   G.filter(x=>x.k>hoyK-12&&x.usd>0&&x.ben&&!/^activo/i.test(x.cuenta)&&!/sueldo|salario|remunera|aguinaldo|refund|devoluc|prestamo|préstamo|aporte|inversi|impuesto|dividend/i.test(x.ca+" "+x.e.con)).forEach(x=>{
     const k=_cosClave(x.ben); if(!k||oc.has(k)) return; const o=m[k]||(m[k]={k,ben:x.ben,meses:{},n:0,cas:{},ult:""}); o.meses[x.k]=(o.meses[x.k]||0)+x.usd; o.n++; o.cas[x.ca]=(o.cas[x.ca]||0)+1; if(String(x.e.fecha)>o.ult) o.ult=String(x.e.fecha); });
-  return Object.values(m).filter(o=>Object.keys(o.meses).length>=2&&!items.some(it=>_cosCoincide(it,o.k))).map(o=>{
+  return Object.values(m).filter(o=>Object.keys(o.meses).length>=2&&!items.some(it=>_cosCoincide(it,o.k,true))).map(o=>{
     const vals=Object.values(o.meses), prom=vals.reduce((s,v)=>s+v,0)/vals.length, dev=Math.sqrt(vals.reduce((s,v)=>s+(v-prom)*(v-prom),0)/vals.length);
     const ca=Object.entries(o.cas).sort((a,b)=>b[1]-a[1])[0][0], t=_normTxt(o.ben+" "+ca);
-    const tipo=/ads|marketing|publici|meta|facebook|instagram|tiktok|linkedin|influenc|campa/.test(t)?"MARKETING":(/contab|legal|abogad|notari|oficina|alquiler|banco|seguro|admin/.test(t)?"ADMINISTRATIVO":"OPERATIVO");
+    const tipo=/ads|marketing|publici|meta|facebook|instagram|tiktok|linkedin|influenc|campa/.test(t)?"COMERCIALIZACION":(/contab|legal|abogad|notari|oficina|alquiler|banco|seguro|admin/.test(t)?"ADMINISTRATIVO":"OPERATIVO");
     return {k:o.k, ben:o.ben, ca, nMeses:vals.length, prom, fijo:prom>0&&dev/prom<0.15, tipo, ult:o.ult.slice(0,10)}; }).sort((a,b)=>b.prom-a.prom);
 }
 /* Lista de Costos (lo esperado al mes) vs lo pagado en Egresos los últimos 3 meses completos */
@@ -5842,7 +5866,7 @@ function renderCostos(){
   // ---- Costos Pagados (extraídos de Egresos por palabra clave) ----
   // V181: todos los pagos de Egresos ▸ General (Egresos, Mercury, BitGo) cuya cuenta es de COSTOS en el Plan de Cuentas
   const pbase=egresosUnificados().filter(r=>esCostoNiv(r.grupoc,r.ksubgrupo)&&!esTraspasoNiv(r.grupoc,r.ksubgrupo,r.cp,r.ca))
-    .map(r=>({origen:r.origen,fecha:r.fecha,con:r.con,ben:(r.origen==="Egresos"?r.keytext:""),cp:r.cp,cc:r.ca,ca:r.ca,casrc:r.casrc,m:r.m,g:r.g,moneda:r.moneda,tipo:r.tipo,
+    .map(r=>({origen:r.origen,fecha:r.fecha,con:r.con,ben:(r.fuente==="Egresos"?r.keytext:""),cp:r.cp,cc:r.ca,ca:r.ca,casrc:r.casrc,m:r.m,g:r.g,moneda:r.moneda,tipo:r.tipo,
       impOrig:r.usd, impUSD:r.usd, impBOB:r.bob, imp:(CUR==="BOB"?(r.bob!=null?r.bob:0):r.usd)}));
   const q=String(STATE.cosSearch||"").trim().toLowerCase();
   const prows=q? pbase.filter(r=>(String(r.con||"")+" "+(r.ben||"")+" "+(r.cc||"")+" "+(r.tipo||"")).toLowerCase().includes(q)) : pbase;
@@ -5854,7 +5878,7 @@ function renderCostos(){
 
   // ---- Lista de Costos (hoja "Tabla Costos") ----
   const {ok:lcOk, items}=tablaCostosRows();
-  const op=items.filter(i=>i.tipo==="Operativo"), ad=items.filter(i=>i.tipo==="Administrativo"), mk=items.filter(i=>i.tipo==="Marketing");
+  const op=items.filter(i=>i.tipo==="Operativo"), ad=items.filter(i=>i.tipo==="Administrativo"), mk=items.filter(i=>i.tipo==="Comercialización");
   const sFijo=arr=>arr.reduce((s,i)=>s+i.mFijoM,0), sVar=arr=>arr.reduce((s,i)=>s+i.mVarM,0);
   const opM=sFijo(op), adM=sFijo(ad), mkM=sFijo(mk), totFijoM=opM+adM+mkM, totVarM=sVar(items);
   const byCat={}; items.forEach(i=>{const c=i.cat||"(Sin categoría)"; byCat[c]=(byCat[c]||0)+i.mFijoM;});
@@ -5892,7 +5916,7 @@ function renderCostos(){
       {label:"Origen",sortKey:"origen",render:r=>`<span class="tag">${esc(r.origen)}</span>`},
       {label:"Concepto",sortKey:"con",render:r=>`${esc(r.con||"–")}${r.ben&&r.ben!==r.con?`<span class="sub2">${esc(r.ben)}</span>`:""}`},
       {label:"Proveedor (Cuenta Principal)",sortKey:"cp",render:r=>r.cp?`<b>${esc(r.cp)}</b>`:'<span class="zero">–</span>'},
-      {label:"Cuenta Analítica",render:r=>{const x={ca:r.ca,src:r.casrc}; return x.ca?`<span class="ca-cell ${x.src==='manual'?'ca-man':(x.src==='auto'?'ca-auto':'ca-sheet')}" style="pointer-events:none;cursor:default;max-width:180px">${esc(x.ca)}</span>`:'<span class="zero">–</span>';}},
+      {label:"Cuenta Analítica",render:r=>{const x={ca:r.ca,src:r.casrc}; return x.ca?`<span class="ca-cell ${x.src==='manual'?'ca-man':((x.src==='auto'||x.src==='hist')?'ca-auto':'ca-sheet')}" style="pointer-events:none;cursor:default;max-width:180px">${esc(x.ca)}</span>`:'<span class="zero">–</span>';}},
       {label:"Empresa (resp.)",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
       {label:"Tipo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.tipo||"");}},
       {label:"Centro de Costo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.centro||"");}},
@@ -5991,7 +6015,7 @@ function renderCostos(){
     if(vista==="sugerencias") cuerpo=`<div class="card"><div class="head"><h3>Pagos frecuentes que no están en la lista</h3><span class="mini">${sug.length} · se pagaron en 2 o más meses del último año</span></div>
         <p class="section-intro">Sistemas, plataformas, suscripciones y proveedores que aparecen seguido en <b>Egresos</b> pero no en tu Lista de Costos. Decide si son <b>fijos</b> o <b>variables</b> y de qué <b>grupo</b>: <b>+ Agregar</b> los pasa a la lista (puedes cambiar los datos antes de guardar) y <b>Ocultar</b> los saca de aquí.</p>
         ${sug.length?`<div class="tbl-scroll sticky-head"><table><thead><tr><th>Proveedor</th><th>Cuenta analítica</th><th class="num">Meses con pago</th><th class="num">Promedio /mes (USD)</th><th>Parece</th><th>Grupo sugerido</th><th>Último pago</th><th></th></tr></thead><tbody>
-        ${sug.map((x,j)=>`<tr><td><b>${esc(x.ben)}</b></td><td>${esc(x.ca||"–")}</td><td class="num">${x.nMeses}</td><td class="num">$${f2(x.prom)}</td><td><span class="tag">${x.fijo?"Fijo":"Variable"}</span></td><td>${x.tipo==="OPERATIVO"?"Operativo":x.tipo==="ADMINISTRATIVO"?"Administrativo":"Marketing"}</td><td class="mini">${esc(x.ult)}</td>
+        ${sug.map((x,j)=>`<tr><td><b>${esc(x.ben)}</b></td><td>${esc(x.ca||"–")}</td><td class="num">${x.nMeses}</td><td class="num">$${f2(x.prom)}</td><td><span class="tag">${x.fijo?"Fijo":"Variable"}</span></td><td>${x.tipo==="OPERATIVO"?"Operativo":x.tipo==="ADMINISTRATIVO"?"Administrativo":"Comercialización"}</td><td class="mini">${esc(x.ult)}</td>
           <td style="white-space:nowrap">${STATE.cosFB?`<button class="btn ghost lc-sug" data-j="${j}">+ Agregar</button><button class="btn ghost lc-ocu" data-j="${j}" title="No mostrar más esta sugerencia">Ocultar</button>`:""}</td></tr>`).join("")}
         </tbody></table></div>`:emptyState("Todos los pagos frecuentes ya están en la lista.")}</div>`;
     else if(vista==="comparar") cuerpo=`<div class="card"><div class="head"><h3>Lista vs lo pagado</h3><span class="mini">lo que dice la lista al mes (fijo + variable) contra lo pagado en Egresos · USD</span></div>
@@ -7143,7 +7167,7 @@ function exportCostosPDF(){
         {4:{halign:"center",cellWidth:30},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"},8:{halign:"right"}}); };
     det("Costos operativos", V.opF, V.opTotF);
     det("Costos administrativos", V.adF, V.adTotF);
-    det("Costos de marketing", V.mkF||[], V.mkTotF||0);
+    det("Gastos de comercialización (marketing)", V.mkF||[], V.mkTotF||0);
   } else {
     ctx.h2("COSTOS PAGADOS · "+usd(V.pUSD));
     ctx.table(["Por proveedor","USD"], V.kwBars.map(e=>[e[0],usd(e[1])]), null, {1:{halign:"right"}});

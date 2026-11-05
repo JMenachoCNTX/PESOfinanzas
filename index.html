@@ -1517,7 +1517,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V214";
+const APP_VERSION = "V215";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -8771,7 +8771,17 @@ const M_DEV={concepto:"concepto",importe:"importe",fecha:"fecha",devoluciona:"a"
 function mapDev(raw,moneda){ return raw.map(r=>{ const o=pick(r,M_DEV); o.importe=toNum(o.importe);
   const d=gd(o.fecha);o.fecha=d.iso;o.g=d.year; const mc=String(o.moneda||"").toLowerCase(); o.moneda = mc ? (/bob|boliv|bs/.test(mc)?"BOB":"USD") : (moneda||"USD"); o._emp=empNorm(o.empresa); return o; }).filter(o=>o.importe); }
 const M_MERC={dateutc:"fecha",description:"desc",amount:"monto",status:"status",sourceaccount:"cuenta",bankdescription:"bankdesc",colx:"canalitica",cuentaprincipal:"cp",cuentaanalitica:"ca",grupo:"grupoc",subgrupo:"ksubgrupo",cuenta:"kcuenta",contabilizado:"contab"};
-function mapMerc(raw){ return raw.map(r=>{ const o=pick(r,M_MERC); o.monto=toNum(o.monto);
+/* V215: número escrito con coma decimal ("-$451,50", "1.234,56") o con punto ("1,234.56").
+   Desde abril 2026 la hoja de Mercury trae montos como TEXTO con coma decimal; toNum los leía ×100. */
+function toNumLat(x){
+  if(typeof x==="number") return x;
+  let s=String(x==null?"":x).replace(/[^0-9.,\-]/g,"");
+  const c=s.lastIndexOf(","), d=s.lastIndexOf(".");
+  if(c>-1 && d>-1) s = c>d ? s.replace(/\./g,"").replace(",",".") : s.replace(/,/g,"");
+  else if(c>-1) s = (/,\d{1,2}$/.test(s) && s.indexOf(",")===c) ? s.replace(",",".") : s.replace(/,/g,"");
+  return parseFloat(s)||0;
+}
+function mapMerc(raw){ return raw.map(r=>{ const o=pick(r,M_MERC); o.monto=toNumLat(o.monto);
   const d=gdUS(o.fecha); o.fecha=d.iso; o.g=d.year; o.mi=d.mi;
   o.ctok=contabTok(o.contab); o._emp="llc"; return o; })
   // Conserva las filas "Sent" (como antes) y además cualquier fila con un valor en

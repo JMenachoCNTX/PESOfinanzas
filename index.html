@@ -1570,7 +1570,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V232";
+const APP_VERSION = "V233";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4124,10 +4124,14 @@ function resolveGeneric(fuente, huella, keyText, sheetCa, conText){
   if(!STATE._histBuilding){ const H=caHistIndex(); const h=H[_normTxt(keyText)]||H[_normTxt(conText)]; if(h) return {ca:h, src:"hist"}; }
   return {ca:"", src:"none"};
 }
-/* V232: si la cuenta analítica vino como código del plan (ej. 533004001), se muestra su nombre */
-function caNombre(v){ const t=String(v||"").trim(); if(!/^\d{6,}$/.test(t)) return t;
-  if(STATE._caCodSrc!==STATE.plan){ const m={}; ((STATE.plan&&(STATE.plan.rows||STATE.plan))||[]).forEach(r=>{ if(/anal/i.test(r.categoria||"")) m[String(r.codigo).trim()]=String(r.nombre||"").trim(); }); STATE._caCod=m; STATE._caCodSrc=STATE.plan; }
-  const n=STATE._caCod[t]; return n&&!/^\d+$/.test(n)?n:t; }
+/* V232: si la cuenta analítica vino como código del plan (ej. 533004001), se muestra su nombre.
+   V233: también con un nombre antiguo de una cuenta corregida (campo «alias» del plan, ej. «N8n Cloud1» → «N8n Cloud») */
+function caNombre(v){ const t=String(v||"").trim(); if(!t) return t;
+  if(STATE._caCodSrc!==STATE.plan){ const m={}, al={}; ((STATE.plan&&(STATE.plan.rows||STATE.plan))||[]).forEach(r=>{ if(!/anal/i.test(r.categoria||"")) return; const n=String(r.nombre||"").trim();
+      m[String(r.codigo).trim()]=n; (r.alias||[]).forEach(a=>{ if(String(a).trim()) al[_normTxt(a)]=n; }); });
+    STATE._caCod=m; STATE._caAl=al; STATE._caCodSrc=STATE.plan; }
+  if(/^\d{6,}$/.test(t)){ const n=STATE._caCod[t]; return n&&!/^\d+$/.test(n)?n:t; }
+  return STATE._caAl[_normTxt(t)]||t; }
 /* V232: historial de cuentas analíticas ya asignadas (a mano, por la base o en la hoja), por proveedor y por concepto.
    Se usa solo si la cuenta más usada para ese proveedor/concepto tiene al menos el 60% de los casos. */
 function caHistIndex(){
@@ -10359,7 +10363,7 @@ async function nmFbCargarAjustes(){
   const adm=NMFB.esAdmin();
   const [a,rx,re,gc,pc,asg]=await Promise.all(["archivos","rhExtra","rhEmpresa","gcal","planCuentas","asignacion"].map(n=>NMFB.cfgGet(n).catch(()=>null)));
   // V179: Plan de Cuentas y Asignación automática viven en Firebase (la primera vez se copian desde Sheets)
-  if(pc && Array.isArray(pc.filas) && pc.filas.length){ STATE.plan=pc.filas.map(r=>({codigo:String(r.codigo||""),tipo:r.tipo||"",categoria:r.categoria||"",nombre:r.nombre||"",origen:r.origen||"",estado:r.estado||"Activa"})); STATE.planFB=true; }
+  if(pc && Array.isArray(pc.filas) && pc.filas.length){ STATE.plan=pc.filas.map(r=>({codigo:String(r.codigo||""),tipo:r.tipo||"",categoria:r.categoria||"",nombre:r.nombre||"",origen:r.origen||"",estado:r.estado||"Activa",alias:Array.isArray(r.alias)?r.alias:[]})); STATE.planFB=true; }
   else if(adm && (STATE.plan||[]).length){ try{ await NMFB.cfgSet("planCuentas",{filas:STATE.plan}); STATE.planFB=true; }catch(_){} }
   if(asg && Array.isArray(asg.reglas)){ STATE.asignacion=asg.reglas.map(r=>({texto:String(r.texto||""),ca:String(r.ca||"")})); STATE.asigFB=true; }
   else if(adm && (STATE.asignacion||[]).length){ try{ await NMFB.cfgSet("asignacion",{reglas:STATE.asignacion}); STATE.asigFB=true; }catch(_){} }

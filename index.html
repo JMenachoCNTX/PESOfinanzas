@@ -796,6 +796,12 @@ td.chk input,th.chk input{cursor:pointer;width:16px;height:16px;accent-color:var
 /* V227: filtros generales a la vista, cada uno con sus botones */
 .gstrip{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding-top:2px}
 .gstrip[hidden]{display:none}
+.card .head .tt-btns{margin-left:auto;display:inline-flex;gap:6px;flex-wrap:wrap}
+.card .head .tt-btns .btn{padding:4px 10px;font-size:12px}
+.card .head .tt-btns + .xbtn{margin-left:0}
+.fb-seg{grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fb-seg .seg{flex-wrap:wrap}
+.fb-seg .seg button{padding:4px 10px;font-size:12px}
 .gs-grp{display:inline-flex;align-items:center;gap:7px}
 .gs-lbl{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .gstrip .seg{padding:2px}
@@ -1564,7 +1570,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V227";
+const APP_VERSION = "V228";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2476,6 +2482,7 @@ function render(){
   updateFoot();
   try{ enhanceCards(); }catch(e){}
   try{ ensureSectionPdfButton(); }catch(e){}
+  try{ ttWire(); }catch(e){}
   try{ paintTopSubtabs(); }catch(e){}
   try{ updateEmpBtn(); }catch(e){}
   try{ marcaLogos(); }catch(e){}
@@ -3886,20 +3893,21 @@ function renderEgresosGeneral(){
   const srcSeg=srcs.length>1?`<div class="seg" id="egGenSrcSeg" style="margin:0 0 12px;flex-wrap:wrap">${[["__all","Todos"]].concat(srcs.map(x=>[x,x])).map(([v,t])=>`<button data-v="${esc(v)}" class="${(STATE.egGenSrc||"__all")===v?"on":""}">${esc(t)} <span class="mini">(${v==="__all"?allU.length:allU.filter(r=>r.origen===v).length})</span></button>`).join("")}</div>`:"";
   const egGenFilterDefs=[
     {k:"egGenSrc",lbl:"Fuente",disp:v=>v,opts:srcs.map(s=>({v:s,t:s})),ph:"Todas las fuentes"},
-    {k:"egGenTP",lbl:"Tipo de Pago",disp:v=>v,opts:[...new Set(allU.map(r=>r.cuentaPago).filter(Boolean))].sort().map(v=>({v,t:v})),ph:"Todos los tipos de pago"},
-    {k:"egGenMes",lbl:"Mes",disp:v=>MONTH_ES_LONG[+v],opts:fMeses.map(i=>({v:String(i),t:MONTH_ES_LONG[i]})),ph:"Todos los meses"},
+    {k:"egGenTP",lbl:"Tipo de Pago",seg:true,disp:v=>v,opts:[...new Set(allU.map(r=>r.cuentaPago).filter(Boolean))].sort().map(v=>({v,t:v})),ph:"Todos los tipos de pago"},
+    {k:"egGenMes",lbl:"Mes",seg:true,disp:v=>MONTH_ES_LONG[+v],opts:fMeses.map(i=>({v:String(i),t:MONTH_ES_LONG[i]})),ph:"Todos los meses"},
     {k:"egGenCuenta",lbl:"Cuenta",disp:v=>v,opts:fCuentas.map(c=>({v:c,t:c})),ph:"Todas las cuentas"},
     {k:"egGenGrupo",lbl:"Grupo",disp:v=>v,opts:fGrupos.map(c=>({v:c,t:c})),ph:"Todos los grupos"},
     {k:"egGenSubg",lbl:"Sub grupo",disp:v=>v,opts:fSubg.map(c=>({v:c,t:c})),ph:"Todos los sub grupos"},
     {k:"egGenCP",lbl:"Cuenta principal",disp:v=>v,opts:fCP.map(c=>({v:c,t:c})),ph:"Todas las cuentas principales"},
     {k:"egGenCA",lbl:"Cuenta analítica",disp:v=>v==="__sin"?"(sin cuenta analítica)":v,opts:[{v:"__sin",t:"(sin cuenta analítica)"}].concat(fCA.map(c=>({v:c,t:c}))),ph:"Todas las cuentas analíticas"},
-    ...(fCostos.length?[{k:"egGenCosto",lbl:"Fijo/Variable",disp:v=>costoLabel(v),opts:fCostos.map(c=>({v:c,t:costoLabel(c)})),ph:"Fijo / Variable"}]:[])
+    ...(fCostos.length?[{k:"egGenCosto",lbl:"Fijo/Variable",seg:true,disp:v=>costoLabel(v),opts:fCostos.map(c=>({v:c,t:costoLabel(c)})),ph:"Fijo / Variable"}]:[])
   ];
   const egGenFB=fbHTML("eggf", egGenFilterDefs);
   const toolbar=`<div class="toolbar" style="align-items:center">${esearch("egGenSearch","Buscar concepto, beneficiario, importe, cuenta…",STATE.egGenSearch)}${egGenFB.bar}<div class="spacer"></div><button class="btn" id="egTjBtn" title="Carga varios gastos de una vez desde el Excel de la tarjeta corporativa o el extracto CSV de Altitude">⬆ Importar tarjeta (Excel / Altitude)</button><input type="file" id="egTjFile" accept=".xlsx,.xls,.csv" hidden></div>${egGenFB.panel}`;
   $("#app").innerHTML=`<p class="section-intro">Todos los egresos en <b>una sola lista</b>: los de <b>Egresos</b> + las <b>salidas</b> de <b>Mercury</b> y <b>BitGo</b>, con las mismas cuentas contables. <span class="mini">(No modifica la pestaña Bancos.)</span></p>
-    ${kpis}${srcSeg}${toolbar}${pills}
-    <div class="card"><div class="head"><h3>Todos los egresos</h3><span class="mini">${fmt(totUSD)} · Bs ${f2(totBOB)} · clic en un encabezado para ordenar</span></div>
+    ${kpis}${pills}
+    <div class="card" data-tx="eggen"><div class="head"><h3>Todos los egresos</h3><span class="mini">${fmt(totUSD)} · Bs ${f2(totBOB)} · clic en un encabezado para ordenar</span></div>
+      ${srcSeg}${toolbar}
       <div class="mini" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:-2px 0 12px">Cuenta Analítica:
         <span class="ca-cell ca-auto" style="cursor:default;pointer-events:none">Automática</span>
         <span class="ca-cell ca-man" style="cursor:default;pointer-events:none">Manual</span>
@@ -3907,6 +3915,7 @@ function renderEgresosGeneral(){
         <span style="color:var(--muted)">· Clic en la cuenta para cambiarla o dejar el gasto <b>sin cuenta</b> (filtro «sin cuenta analítica» para reasignarlos). La columna <b>Concepto</b> muestra Beneficiario · Description · COMMENTS según la fuente.</span></div>
       ${rows.length?tbl(cols,sorted.slice(0,1000),totRow,S,{sticky:true}):emptyState("No hay egresos con los filtros actuales.")}
       ${rows.length>1000?`<div class="mini" style="margin-top:10px">Mostrando 1000 de ${rows.length}. Usa la búsqueda o filtros.</div>`:""}</div>`;
+  STATE._tx=Object.assign(STATE._tx||{},{eggen:{cols,rows:sorted,tot:totRow}});
   const si=$("#egGenSearch"); if(si){ si.addEventListener("input",()=>{STATE.egGenSearch=si.value;STATE._focus=true;render();}); }
   fbWire("eggf", egGenFilterDefs);
   document.querySelectorAll("#egGenSrcSeg button").forEach(b=>b.addEventListener("click",()=>{ STATE.egGenSrc=b.dataset.v; render(); }));
@@ -4268,7 +4277,9 @@ function fbHTML(prefix, defs){
   const active=fbActive(defs);
   const open=STATE[prefix+"_open"];
   const chips=active.map(d=>`<span class="fchip">${d.lbl}: <b>${esc(d.disp?d.disp(STATE[d.k]):STATE[d.k])}</b><button type="button" class="fchip-x" data-k="${esc(d.k)}">✕</button></span>`).join("");
-  const panel=`<div class="filt-panel" id="${prefix}_panel"${open?"":" hidden"}>${defs.filter(d=>d.opts&&d.opts.length).map(d=>selHTML(d.k,d.ph||d.lbl,STATE[d.k],d.opts)).join("")}</div>`;
+  // V228: los filtros con pocas opciones (seg:true) se muestran como botones de encendido/apagado
+  const segF=d=>`<div class="fb-seg"><span class="gs-lbl">${esc(d.lbl)}</span><div class="seg">${[{v:"__all",t:"Todos"}].concat(d.opts).map(o=>`<button type="button" data-fbk="${esc(d.k)}" data-fbv="${esc(o.v)}" class="${String(STATE[d.k]||"__all")===String(o.v)?"on":""}">${esc(o.t)}</button>`).join("")}</div></div>`;
+  const panel=`<div class="filt-panel" id="${prefix}_panel"${open?"":" hidden"}>${defs.filter(d=>d.opts&&d.opts.length).map(d=>d.seg?segF(d):selHTML(d.k,d.ph||d.lbl,STATE[d.k],d.opts)).join("")}</div>`;
   const bar=`<button type="button" class="btn filt-btn${open?' on':''}" id="${prefix}_btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M6 12h12M10 19h4"/></svg>Filtros${active.length?` · ${active.length}`:""}</button>${chips}${active.length?`<button type="button" class="btn ghost" id="${prefix}_clear">Limpiar</button>`:""}`;
   return {bar, panel};
 }
@@ -4277,6 +4288,54 @@ function fbWire(prefix, defs){
   const bt=$("#"+prefix+"_btn"); if(bt) bt.addEventListener("click",()=>{ STATE[prefix+"_open"]=!STATE[prefix+"_open"]; const pn=$("#"+prefix+"_panel"); if(pn) pn.hidden=!STATE[prefix+"_open"]; bt.classList.toggle("on",STATE[prefix+"_open"]); });
   document.querySelectorAll("#app .fchip-x").forEach(x=>{ if(x._w) return; x._w=1; x.addEventListener("click",()=>{ STATE[x.dataset.k]="__all"; render(); }); });
   const cl=$("#"+prefix+"_clear"); if(cl) cl.addEventListener("click",()=>{ defs.forEach(d=>STATE[d.k]="__all"); render(); });
+  document.querySelectorAll("#"+prefix+"_panel [data-fbk]").forEach(b=>b.addEventListener("click",()=>{ STATE[b.dataset.fbk]=b.dataset.fbv; render(); }));
+}
+/* V228: cada tabla con su propia descarga (Excel / PDF) en su encabezado.
+   Se activa pestaña por pestaña (TT_SECC). Lee la tabla tal como se ve; si la tarjeta tiene data-tx,
+   usa la lista completa registrada en STATE._tx (por ejemplo cuando la pantalla muestra solo 1000 filas). */
+const TT_SECC=new Set(["egresos"]);
+function ttWire(){
+  if(!TT_SECC.has(STATE.section)) return;
+  document.querySelectorAll("#app .card").forEach(card=>{
+    const hd=card.querySelector(":scope > .head"); if(!hd||hd.querySelector(".tt-btns")||!card.querySelector("table")) return;
+    const sp=document.createElement("span"); sp.className="tt-btns";
+    sp.innerHTML=`<button type="button" class="btn ghost" data-tt="xlsx" title="Descargar esta tabla en Excel">⬇ Excel</button><button type="button" class="btn ghost" data-tt="pdf" title="Descargar esta tabla en PDF">⬇ PDF</button>`;
+    const xb=hd.querySelector(".xbtn"); if(xb) hd.insertBefore(sp,xb); else hd.appendChild(sp);
+    sp.querySelectorAll("[data-tt]").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation();
+      try{ ttExport(card,b.dataset.tt); }catch(e){ alert("No se pudo descargar: "+((e&&e.message)||e)); } }));
+  });
+}
+function _ttTxt(x){ const t=String(x==null?"":x).replace(/\s+/g," ").trim(); return t==="–"||t==="-"?"":t; }
+function _ttNum(t){ let x=String(t).replace(/Bs\.?|\$|USD|BOB|\s/g,""); const neg=/^\(.*\)$/.test(x); x=x.replace(/[()]/g,"");
+  if(!/^-?[\d.]+(,\d+)?$/.test(x)) return null; const n=parseFloat(x.replace(/\./g,"").replace(",",".")); return isFinite(n)?(neg?-n:n):null; }
+function ttDatos(card){
+  const tx=card.dataset.tx&&STATE._tx&&STATE._tx[card.dataset.tx];
+  if(tx){ const d=document.createElement("div"), T=h=>{ d.innerHTML=h==null?"":String(h); return _ttTxt(d.textContent); };
+    const C=tx.cols.filter(c=>!c.sel&&T(c.label));
+    return {head:C.map(c=>T(c.label)), body:tx.rows.map(r=>C.map(c=>T(c.render(r)))),
+      foot:tx.tot?C.map(c=>T(tx.tot[tx.cols.indexOf(c)])):null}; }
+  const tb=card.querySelector("table"), hr=[...tb.querySelectorAll("thead tr")].pop();
+  const fila=tr=>[...tr.children].map(td=>_ttTxt(td.textContent));
+  let head=hr?fila(hr):[], body=[...tb.querySelectorAll("tbody tr")].filter(tr=>tr.offsetParent!==null||!tr.hidden).map(fila);
+  const ft=tb.querySelector("tfoot tr"); let foot=ft?fila(ft):null;
+  // quita columnas sin título y vacías (casillas, botones ✎)
+  const keep=head.map((h,i)=>!!h||body.some(r=>r[i])); const k=a=>a&&a.filter((_,i)=>keep[i]);
+  return {head:k(head), body:body.map(k), foot:k(foot)};
+}
+function ttExport(card,kind){
+  const titulo=_ttTxt((card.querySelector(".head h3")||{}).textContent)||"Tabla";
+  const D=ttDatos(card); if(!D.body.length) return alert("La tabla está vacía.");
+  const nom=(SECCION_TITULOS[STATE.section]||"")+"_"+titulo, arch=nom.replace(/[^\wáéíóúñÁÉÍÓÚÑ]+/g,"_").replace(/_+/g,"_").slice(0,60)+"_"+new Date().toISOString().slice(0,10);
+  if(kind==="xlsx"){
+    if(typeof XLSX==="undefined") return alert("No se pudo cargar la herramienta de Excel. Recarga la página.");
+    const conv=r=>r.map(t=>{ const n=_ttNum(t); return n==null?t:n; });
+    const aoa=[D.head].concat(D.body.map(conv)); if(D.foot) aoa.push(conv(D.foot));
+    const ws=XLSX.utils.aoa_to_sheet(aoa), wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,titulo.replace(/[\\\/?*\[\]:]/g," ").slice(0,31));
+    XLSX.writeFile(wb,arch+".xlsx"); return; }
+  const per=STATE.year==="__all"?"Todos los años":("Año "+STATE.year);
+  const ctx=_pdfNew(titulo,"NUMMEROS · PE$O · "+(SECCION_TITULOS[STATE.section]||"")+" · "+per+" · "+D.body.length+" filas · "+new Date().toLocaleDateString("es-BO"),D.head.length>6?"landscape":"portrait"); if(!ctx) return;
+  ctx.table(D.head,D.body,D.foot);
+  _pdfSave(ctx,titulo,arch+".pdf");
 }
 // Celda derivada de solo lectura (verde=auto de Tabla Costos, gris=no encontrado)
 function dimAuto(val){ return val?`<span class="ca-cell ca-auto" style="cursor:default;pointer-events:none;max-width:200px">${esc(val)}</span>`:'<span class="zero">–</span>'; }
@@ -6877,7 +6936,7 @@ function ensureSectionPdfButton(){
   const btn=document.getElementById("topPdfBtn"); if(!btn) return;
   const app=document.getElementById("app");
   const hayContenido = !!app && (app.querySelector("table") || app.querySelector(".card.kpi") || app.querySelector(".grid.kpis"));
-  const mostrar = STATE.section!=="inicio" && STATE.section!=="tareas" && STATE.section!=="archivos" && STATE.section!=="comprobantes" && STATE.section!=="billing" && STATE.section!=="inventario" && STATE.section!=="usuarios" && hayContenido;
+  const mostrar = STATE.section!=="inicio" && STATE.section!=="tareas" && STATE.section!=="archivos" && STATE.section!=="comprobantes" && STATE.section!=="billing" && STATE.section!=="inventario" && STATE.section!=="usuarios" && !TT_SECC.has(STATE.section) && hayContenido;
   btn.hidden=!mostrar;
   if(!mostrar) return;
   const esCostos = (STATE.section==="costos");

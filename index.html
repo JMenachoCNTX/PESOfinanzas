@@ -1519,7 +1519,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V217";
+const APP_VERSION = "V218";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2620,7 +2620,10 @@ function compLlenarForm(c){ const ia=(c&&c.ia)||{}; const set=(id,v)=>{ const e=
   set("f_ben",ia.proveedor); set("f_pagadopor",ia.pagado_por); set("f_pais",ia.pais);
   const ruta=[ia.banco_origen,ia.banco_destino].filter(Boolean).join(" → ");
   const extra=[ia.numero_factura?"Factura N° "+ia.numero_factura:"", ia.nit?"NIT "+ia.nit:"", ia.referencia?"Transf. N° "+ia.referencia:"", ruta, ia.cuenta_destino?"Cta. destino "+ia.cuenta_destino:""].filter(Boolean).join(" · ");
-  if(ia.banco_origen) set("f_tipo",cuentaPagoDeBanco(ia.banco_origen));
+  // V218: una factura (o proforma) todavía no está pagada: entra como Pendiente y aparece en Cuentas por pagar
+  const esFactura=/factura|invoice|proforma|cuenta de cobro|nota de cobro/i.test(ia.tipo_documento||"") && !/comprobante|transferencia|recibo de pago|voucher/i.test(ia.tipo_documento||"");
+  if(esFactura){ set("f_estado","Pendiente"); const cm=$("#egCompMsg"); setTimeout(()=>{ if(cm) cm.textContent="Es una factura: se guardará como Pendiente y aparecerá en Cuentas por pagar. Si ya se pagó, cambia el Estado a Pagado."; },0); }
+  else if(ia.banco_origen) set("f_tipo",cuentaPagoDeBanco(ia.banco_origen));
   const co=$("#f_coment"); if(co && extra && !co.value.includes(extra)) co.value=(co.value?co.value+" · ":"")+extra;
   STATE._compReg=c.id; }
 function compMarcarRegistrado(datos){ const id=STATE._compReg; if(!id) return; const c=(STATE.comps||[]).find(x=>x.id===id); if(!c) return;
@@ -2690,7 +2693,7 @@ function renderComprobantes(){
   const bsl=$("#cpSlack"); if(bsl) bsl.addEventListener("click",()=>compRevisarSlack(true));
   const C=id=>(STATE.comps||[]).find(x=>x.id===id);
   document.querySelectorAll(".cp-ver").forEach(b=>b.addEventListener("click",()=>compVer(C(b.dataset.id))));
-  document.querySelectorAll(".cp-reg").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); abrirFormEgreso(); compLlenarForm(c); const m=$("#egCompMsg"); if(m) m.textContent="Datos leídos del comprobante · revisa y completa"; }));
+  document.querySelectorAll(".cp-reg").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); abrirFormEgreso(); const m=$("#egCompMsg"); if(m) m.textContent="Datos leídos del comprobante · revisa y completa"; compLlenarForm(c); }));
   document.querySelectorAll(".cp-adj").forEach(b=>b.addEventListener("click",()=>compAdjuntarAPago(C(b.dataset.id))));
   document.querySelectorAll(".cp-desc").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); if(!c||!confirm("¿Descartar este comprobante? (queda en Drive)")) return; c.estado="descartado"; compGuardarLista().then(render); }));
   document.querySelectorAll(".cp-ia").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); if(!c) return; b.textContent="Leyendo…"; b.disabled=true;
@@ -4973,10 +4976,12 @@ function renderCxP(){
     {k:"cxpMes",lbl:"Mes",disp:v=>mesES(v),opts:mesesP.map(m=>({v:m,t:mesES(m)})),ph:"Todos los meses"}
   ];
   const cxpFB=fbHTML("cxpf", cxpFilterDefs);
+  const puedeEd=!!STATE.egFB&&nmFbActivo();
   const toolbarHTML=`<div class="toolbar" style="align-items:center">
         ${esearch("cxpSearch","Buscar proveedor o concepto…",STATE.cxpSearch)}
-        ${cxpFB.bar}
-      </div>${cxpFB.panel}`;
+        ${cxpFB.bar}<div class="spacer"></div>
+        ${puedeEd?`<button class="btn primary" id="cxpAdd">+ Agregar ${isPresu?"presupuestado":"cuenta por pagar"}</button>`:""}
+      </div>${cxpFB.panel}${puedeEd&&STATE.provPagoErr?`<div class="msg err" style="display:block;margin:-4px 0 12px">🏦 Datos de pago: ${esc(STATE.provPagoErr)}</div>`:""}`;
   const pillsHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div class="seg" id="cxpTabs" style="flex-wrap:wrap">
         <button data-t="graficos" class="${tab==='graficos'?'on':''}">Gráficos</button>
@@ -4993,7 +4998,7 @@ function renderCxP(){
   const monthTot=Array(12).fill(0); rows.forEach(r=>{const mi=monthIdx(r.m); if(mi>=0)monthTot[mi]+=(+r.imp||0);});
 
   const cols=[
-    {label:"Proveedor",sortKey:"ben",render:r=>esc(r.ben||"(Sin proveedor)")},
+    {label:"Proveedor",sortKey:"ben",render:r=>esc(r.ben||"(Sin proveedor)")+(provPagoDe(r.ben)?` <span class="tag" title="Tiene datos de pago guardados">🏦</span>`:"")},
     {label:"Concepto",sortKey:"con",render:r=>esc(r.con||"–")},
     {label:"Categoría",sortKey:"cp",render:r=>`<span class="tw" style="display:inline-block;background:${catColor(r.cp)};margin-right:7px"></span>${esc(catLabel(r.cp))}`},
     {label:"Moneda",sortKey:"moneda",render:r=>String(r.moneda||"USD").toUpperCase()==="BOB"?'<span class="st bob">BOB</span>':'<span class="st usd">USD</span>'},
@@ -5002,12 +5007,13 @@ function renderCxP(){
     {label:"Importe",right:1,cls:"num",sortKey:"imp",render:r=>fmt(r.imp,2)},
     {label:"BOB",right:1,cls:"num",sortKey:"impBOB",render:r=>r.impBOB!=null?("Bs "+f2(r.impBOB)):'<span class="zero">–</span>'},
   ];
+  if(puedeEd) cols.push({label:"",render:r=>r._id?`<span class="ta-acts" style="white-space:nowrap">${isPresu?"":`<button class="btn primary cxp-pagar" data-id="${esc(r._id)}" title="Registrar que ya se pagó">Pagar</button>`}<button class="btn ghost cxp-dp" data-ben="${esc(r.ben||"")}" title="Banco, cuenta y QR del proveedor">🏦</button><button class="btn ghost cxp-ed" data-id="${esc(r._id)}" title="Editar">✎</button></span>`:""});
   const S=STATE.cxpSort;
   const sorted=[...rows].sort(mkCmp(S.key,S.dir,["imp","impBOB"],["fecha"]));
   const tableHTML=`<div class="card">
       <div class="head"><h3>${isPresu?"Lista de presupuesto":"Lista de cuentas por pagar"}</h3><span class="mini">${rows.length} ${isPresu?"presupuestados":"por pagar"} · ${fmt(total)} · Bs ${f2(totalBOB)}</span></div>
       <div class="count" style="margin:-4px 0 10px">clic en un encabezado para ordenar</div>
-      ${tbl(cols,sorted.slice(0,600),["Total","","","","","",fmt(total),"Bs "+f2(totalBOB)],S,{sticky:true})}
+      ${tbl(cols,sorted.slice(0,600),["Total","","","","","",fmt(total),"Bs "+f2(totalBOB)].concat(puedeEd?[""]:[]),S,{sticky:true})}
       ${rows.length>600?`<div class="mini" style="margin-top:12px">Mostrando los primeros 600 de ${rows.length}. Usa la búsqueda o filtros para acotar.</div>`:""}
     </div>`;
 
@@ -5015,7 +5021,7 @@ function renderCxP(){
   if(!rows.length){
     const msg = isPresu
       ? "No hay egresos presupuestados. Registra egresos con Estado <b>Presupuestado</b> en tu hoja para verlos aquí."
-      : "No hay cuentas por pagar. Registra egresos con Estado <b>Pendiente</b> en tu hoja para verlos aquí.";
+      : "No hay cuentas por pagar. Usa <b>+ Agregar cuenta por pagar</b>, o registra una factura en <b>Comprobantes</b>: queda como Pendiente hasta que se pague.";
     contentHTML=`<div class="card">${emptyState(msg)}</div>`;
   } else if(isGraf){
     contentHTML=`
@@ -5052,6 +5058,119 @@ function renderCxP(){
     render();
   }));
   if(STATE._focus){const el=$("#cxpSearch"); if(el){el.focus(); el.setSelectionRange(el.value.length,el.value.length);} STATE._focus=false;}
+  const ad=$("#cxpAdd"); if(ad) ad.addEventListener("click",()=>{ abrirFormEgreso(); const es=$("#f_estado"); if(es) es.value=isPresu?"Presupuestado":"Pendiente";
+    const t=$("#egFormTitle"); if(t) t.textContent=isPresu?"Nuevo gasto presupuestado":"Nueva cuenta por pagar";
+    const ld=$("#egFormLead"); if(ld) ld.innerHTML="Queda como <b>"+(isPresu?"Presupuestado":"Pendiente")+"</b>. Cuando se pague, pulsa <b>Pagar</b> en la lista de Cuentas por pagar."; });
+  const E=id=>all.find(x=>x._id===id);
+  document.querySelectorAll(".cxp-pagar").forEach(b=>b.addEventListener("click",()=>cxpPagarModal(E(b.dataset.id))));
+  document.querySelectorAll(".cxp-ed").forEach(b=>b.addEventListener("click",()=>{ const e=E(b.dataset.id); if(e) abrirFormEgreso(e); }));
+  document.querySelectorAll(".cxp-dp").forEach(b=>b.addEventListener("click",()=>provPagoModal(b.dataset.ben)));
+  if(puedeEd) provPagoCargar();
+}
+/* ============================================================
+   V218: CUENTAS POR PAGAR
+   - Datos de pago por proveedor (banco, cuenta, titular, QR) en Firestore «proveedoresPago».
+   - «Pagar»: pasa el gasto de Pendiente a Pagado con fecha, cuenta, quién pagó y (opcional) el comprobante.
+   ============================================================ */
+function provPagoId(nombre){ return _normTxt(nombre).replace(/[\/#?\[\]]/g,"-").slice(0,120); }
+function provPagoDe(nombre){ const id=provPagoId(nombre); return id&&STATE.provPago?STATE.provPago[id]||null:null; }
+function provPagoCargar(forzar){
+  if(STATE._provCargando||(STATE.provPago&&!forzar)||!nmFbActivo()) return;
+  STATE._provCargando=true;
+  NMFB.provLeer().then(L=>{ const m={}; L.forEach(o=>m[o._id]=o); STATE.provPago=m; STATE.provPagoErr=null; })
+    .catch(e=>{ STATE.provPago={}; STATE.provPagoErr=/permission|insufficient/i.test(String(e&&e.message||e))?"Falta publicar la regla nueva de Firebase (proveedoresPago).":String(e&&e.message||e); })
+    .then(()=>{ STATE._provCargando=false; if(STATE.section==="cxp") render(); });
+}
+function provPagoHTML(p, nombre){
+  if(!p) return `<div class="card" style="padding:12px;margin:0 0 12px"><span class="mini">${esc(nombre||"Este proveedor")} no tiene datos de pago guardados.</span> <button class="btn ghost" data-dp-edit>🏦 Agregar datos de pago</button></div>`;
+  const fila=(l,v)=>v?`<div><span class="mini">${l}</span><div style="font-weight:600;user-select:all">${esc(v)}</div></div>`:"";
+  return `<div class="card" style="padding:12px;margin:0 0 12px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+    ${p.qr?`<img src="${p.qr}" alt="QR de pago" style="width:180px;height:180px;object-fit:contain;background:#fff;border-radius:10px;border:1px solid var(--line)">`:""}
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;flex:1;min-width:220px">
+      ${fila("Banco",p.banco)}${fila("N° de cuenta",p.cuenta)}${fila("Titular",p.titular)}${fila("CI / NIT",p.doc)}${fila("Moneda",p.moneda)}${fila("Notas",p.notas)}
+    </div><button class="btn ghost" data-dp-edit title="Cambiar los datos de pago">✎</button></div>`;
+}
+function _qrADataUrl(file){ return new Promise((ok,ko)=>{ if(!/^image\//.test(file.type)) return ko(new Error("El QR debe ser una imagen (foto o captura)."));
+  const img=new Image(), u=URL.createObjectURL(file);
+  img.onload=()=>{ const M=700; let w=img.width,h=img.height; const k=Math.min(1,M/Math.max(w,h)); w=Math.round(w*k); h=Math.round(h*k);
+    const c=document.createElement("canvas"); c.width=w; c.height=h; const x=c.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,w,h); x.drawImage(img,0,0,w,h); URL.revokeObjectURL(u);
+    let d=c.toDataURL("image/png"); if(d.length>600000) d=c.toDataURL("image/jpeg",0.9); ok(d); };
+  img.onerror=()=>{ URL.revokeObjectURL(u); ko(new Error("No se pudo abrir la imagen.")); }; img.src=u; }); }
+function provPagoModal(nombre, alGuardar){
+  const p=Object.assign({nombre:nombre||""},provPagoDe(nombre)||{});
+  const ov=rhModal("Datos de pago del proveedor",`
+    <p class="section-intro" style="margin:0 0 10px">Se guardan para que cualquiera del equipo los tenga a mano al pagar. Copia el número con un clic o escanea el QR.</p>
+    <div class="us-form" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+      <div style="grid-column:1/-1"><label>Proveedor</label><input id="dpNom" list="dl_ben" value="${esc(p.nombre)}"></div>
+      <div><label>Banco</label><input id="dpBanco" value="${esc(p.banco||"")}" placeholder="Ej.: BNB, Banco Ganadero…"></div>
+      <div><label>N° de cuenta</label><input id="dpCuenta" value="${esc(p.cuenta||"")}"></div>
+      <div><label>Titular</label><input id="dpTit" value="${esc(p.titular||"")}"></div>
+      <div><label>CI / NIT</label><input id="dpDoc" value="${esc(p.doc||"")}"></div>
+      <div><label>Moneda</label><input id="dpMon" list="dl_moneda" value="${esc(p.moneda||"")}" placeholder="BOB / USD"></div>
+      <div><label>Notas</label><input id="dpNotas" value="${esc(p.notas||"")}" placeholder="Ej.: cuenta en dólares, wallet USDT…"></div>
+      <div style="grid-column:1/-1"><label>QR de pago</label>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><img id="dpQrImg" alt="" style="width:140px;height:140px;object-fit:contain;background:#fff;border-radius:10px;border:1px solid var(--line);${p.qr?"":"display:none"}" src="${p.qr||""}">
+          <button class="btn" id="dpQrBtn">📷 ${p.qr?"Cambiar QR":"Subir QR"}</button><input type="file" id="dpQrFile" accept="image/*" hidden>
+          <button class="btn ghost" id="dpQrDel" style="${p.qr?"":"display:none"}">Quitar QR</button></div></div>
+    </div>
+    <div class="modal-actions"><button class="btn" data-cerrar2>Cancelar</button><button class="btn primary" id="dpGuardar">Guardar datos de pago</button></div>`,640);
+  poblarDatalists();
+  let qr=p.qr||"";
+  const img=ov.querySelector("#dpQrImg"), del=ov.querySelector("#dpQrDel"), fi=ov.querySelector("#dpQrFile");
+  ov.querySelector("[data-cerrar2]").onclick=()=>ov.remove();
+  ov.querySelector("#dpQrBtn").onclick=()=>fi.click();
+  fi.onchange=()=>{ const f=fi.files&&fi.files[0]; fi.value=""; if(!f) return;
+    _qrADataUrl(f).then(d=>{ qr=d; img.src=d; img.style.display=""; del.style.display=""; ov._msg(""); }).catch(e=>ov._msg(e.message)); };
+  del.onclick=()=>{ qr=""; img.style.display="none"; del.style.display="none"; };
+  ov.querySelector("#dpGuardar").onclick=async()=>{
+    const v=id=>ov.querySelector("#"+id).value.trim(), nom=v("dpNom");
+    if(!nom) return ov._msg("Escribe el nombre del proveedor.");
+    const b=ov.querySelector("#dpGuardar"); b.disabled=true; b.textContent="Guardando…";
+    try{ const o=await NMFB.provGuardar({nombre:nom,banco:v("dpBanco"),cuenta:v("dpCuenta"),titular:v("dpTit"),doc:v("dpDoc"),moneda:v("dpMon").toUpperCase(),notas:v("dpNotas"),qr:qr});
+      STATE.provPago=STATE.provPago||{}; STATE.provPago[o._id]=o; ov.remove(); if(alGuardar) alGuardar(o); else render(); }
+    catch(e){ b.disabled=false; b.textContent="Guardar datos de pago";
+      ov._msg(/permission|insufficient/i.test(String(e&&e.message||e))?"Todavía no se puede guardar: falta publicar la regla nueva de Firebase (proveedoresPago).":"No se pudo guardar: "+((e&&e.message)||e)); }
+  };
+  return ov;
+}
+function cxpPagarModal(e){
+  if(!e||!e._id||!e._raw) return alert("No se encontró el gasto.");
+  poblarDatalists();
+  const R=e._raw, hoy=new Date().toISOString().slice(0,10), mon=String(R.moneda||"USD").toUpperCase();
+  const ov=rhModal("Registrar pago",`
+    <p class="lead" style="margin:0 0 12px"><b>${esc(e.ben||"(Sin proveedor)")}</b> · ${esc(e.con||"")} · <b>${esc(mon)} ${f2(+R.importe||0)}</b></p>
+    <div id="cpgDatos"></div>
+    <div class="us-form" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+      <div><label>Fecha de pago</label><input type="date" id="cpgFecha" value="${hoy}"></div>
+      <div><label>Pagado desde (cuenta)</label><input id="cpgCuenta" list="dl_tipo" value="${esc(R.tipodepago||"")}" placeholder="CIDRE, Tesabiz, BitGo…"></div>
+      <div><label>Pagado por</label><input id="cpgPor" list="dl_pagadopor" value="${esc(R.pagadopor||"")}"></div>
+      <div style="grid-column:1/-1"><label>Comprobante de pago (opcional)</label>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" id="cpgFileBtn">📎 Elegir comprobante</button><input type="file" id="cpgFile" accept="image/*,application/pdf" hidden><span class="mini" id="cpgFileNom">Foto o PDF de la transferencia. Se guarda en Google Drive.</span></div></div>
+    </div>
+    <div class="modal-actions"><button class="btn" data-cerrar2>Cancelar</button><button class="btn primary" id="cpgOk">Confirmar pago</button></div>`,760);
+  const pintarDatos=()=>{ const box=ov.querySelector("#cpgDatos"); box.innerHTML=provPagoHTML(provPagoDe(e.ben), e.ben);
+    const ed=box.querySelector("[data-dp-edit]"); if(ed) ed.onclick=()=>provPagoModal(e.ben, ()=>pintarDatos()); };
+  pintarDatos();
+  let archivo=null; const fi=ov.querySelector("#cpgFile");
+  ov.querySelector("[data-cerrar2]").onclick=()=>ov.remove();
+  ov.querySelector("#cpgFileBtn").onclick=()=>fi.click();
+  fi.onchange=()=>{ archivo=fi.files&&fi.files[0]||null; ov.querySelector("#cpgFileNom").textContent=archivo?("✓ "+archivo.name):"Foto o PDF de la transferencia. Se guarda en Google Drive."; };
+  ov.querySelector("#cpgOk").onclick=async()=>{
+    const f=ov.querySelector("#cpgFecha").value, cta=ov.querySelector("#cpgCuenta").value.trim(), por=ov.querySelector("#cpgPor").value.trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(f)) return ov._msg("Elige la fecha de pago.");
+    if(!cta) return ov._msg("Escribe desde qué cuenta se pagó.");
+    const b=ov.querySelector("#cpgOk"); b.disabled=true;
+    try{
+      if(archivo){ b.textContent="Subiendo comprobante…"; const r=await compSubirUno(archivo,false); const c=compNuevo(r,"sistema");
+        c.estado="registrado"; c.registrado=new Date().toISOString(); c.egreso={fecha:f, con:R.concepto, imp:R.importe, ben:R.beneficiario};
+        STATE.comps=(STATE.comps||[]).concat([c]); await compGuardarLista(); }
+      b.textContent="Guardando…";
+      const cambios={estado:"Pagado", fechadepago:f, tipodepago:cta, pagadopor:por};
+      if(!R.fechadecontabilizacion) cambios.fechadecontabilizacion=R.fechadepago||f;   // el gasto se sigue contando en el mes de la factura
+      await egresoActualizar(e._id, cambios, false);
+      ov._msg("Pago registrado ✓ Ya no figura en Cuentas por pagar.",true); setTimeout(()=>{ ov.remove(); render(); },900);
+    }catch(err){ b.disabled=false; b.textContent="Confirmar pago"; ov._msg("No se pudo guardar: "+((err&&err.message)||err)); }
+  };
 }
 /* ---------- COSTOS (extraídos de Egresos por palabras clave) ---------- */
 function tablaCostosRows(){
@@ -9053,6 +9172,11 @@ const NMFB={
     const o={id:id,tarea:String(t.tarea||""),estado:String(t.estado||"Pendiente"),prioridad:String(t.prioridad||"Media"),vence:String(t.vence||"").slice(0,10),notas:String(t.notas||""),creado:String(t.creado||_isoHoy()),actualizado:new Date().toISOString(),por:this.sesion.email};
     await this.db.doc("tareas/"+id).set(o); return o; },
   async tareaBorrar(id){ await this.db.doc("tareas/"+String(id).replace(/\//g,"-")).delete(); },
+  // V218: datos de pago de cada proveedor (banco, cuenta, QR) para tenerlos a mano al pagar
+  async provLeer(){ const sn=await this.db.collection("proveedoresPago").get(); return sn.docs.map(d=>Object.assign({_id:d.id},d.data())); },
+  async provGuardar(o){ const id=provPagoId(o.nombre); if(!id) throw new Error("Falta el nombre del proveedor.");
+    const x=Object.assign({},o); delete x._id; x.actualizado=new Date().toISOString(); x.por=(this.sesion&&this.sesion.email)||"";
+    await this.db.doc("proveedoresPago/"+id).set(x); return Object.assign({_id:id},x); },
   // V216: egresos (un documento por gasto). desdeMs = solo los cambiados después de esa hora (caché)
   async egLeer(desdeMs){ let q=this.db.collection("egresos"); if(desdeMs) q=q.where("_act",">",firebase.firestore.Timestamp.fromMillis(desdeMs));
     const sn=await q.get(); return sn.docs.map(d=>{ const o=d.data(); o._id=d.id; o._actMs=(o._act&&o._act.toMillis)?o._act.toMillis():0; delete o._act; return o; }); },

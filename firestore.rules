@@ -76,5 +76,7 @@ service cloud.firestore {
     // V216: egresos (antes hoja HistorialEgresos), un documento por gasto. El sistema "borra" marcando _borrado;
     // borrar el documento de verdad solo lo puede el administrador.
     match /egresos/{id} { allow read, create, update: if claveOk(); allow delete: if esAdmin(); }
+    // V218: datos de pago de cada proveedor (banco, cuenta, titular, QR) para Cuentas por pagar
+    match /proveedoresPago/{id} { allow read, write: if claveOk(); }
   }
 }

@@ -1281,8 +1281,8 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
     <button data-s="socios">Socios y Capital</button>
     <button data-s="flujo">Flujo</button>
     <button data-s="rrhh">RRHH</button>
-    <button data-s="calendario">Calendario</button>
-    <button data-s="tareas">Tareas</button>
+    <button data-s="calendario">Calendario y Tareas</button>
+    <button data-s="tareas" style="display:none">Tareas</button>
     <button data-s="archivos">Archivos</button>
     <button data-s="inventario">Inventario</button>
     <button data-s="usuarios" style="display:none">Usuarios</button>
@@ -1570,7 +1570,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V229";
+const APP_VERSION = "V230";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2466,12 +2466,15 @@ async function exportReportePDF(){
    RENDER — despachador de secciones
    ============================================================ */
 function render(){
+  // V230: Calendario y Tareas viven juntos (Tareas es una subpestaña de Calendario)
+  if(STATE.section==="tareas"){ STATE.section="calendario"; STATE.calTab="tareas"; document.querySelectorAll("#sidenav button").forEach(x=>x.classList.toggle("on",x.dataset.s==="calendario")); }
+  if(STATE.section==="bancos"&&STATE.bancosTab==="cidre"){ STATE.bancosTab="tesabiz"; STATE.cidreSub="concil"; }
   applyFilterVisibility();
   CUR = STATE.currency||"USD";
   RATE = tcRateLatest();
   if(CUR==="BOB" && !RATE) CUR="USD";
   const map={usuarios:renderUsuarios,inventario:renderInventario,archivos:renderArchivos,comprobantes:renderComprobantes,billing:renderBilling,inicio:renderInicio,flujo:renderFlujo,resumen:renderResumen,reportes:renderReportes,egresos:renderEgresos,cxp:renderCxP,rrhh:renderRRHH,
-    socios:renderSociosCapital,inversiones:renderInversiones,prestamos:renderPrestamos,devoluciones:renderDevoluciones,rendiciones:renderRendiciones,ingresos:renderIngresosTab,costos:renderCostos,bancos:renderBancos,mercury:renderMercury,bitgo:renderBitgo,plan:renderPlan,tc:()=>{ renderTC(); tcAvisoDudosos(); },ia:renderIA,cierre:renderCierre,calendario:renderCalendario,tareas:renderTareas};
+    socios:renderSociosCapital,inversiones:renderInversiones,prestamos:renderPrestamos,devoluciones:renderDevoluciones,rendiciones:renderRendiciones,ingresos:renderIngresosTab,costos:renderCostos,bancos:renderBancos,mercury:renderMercury,bitgo:renderBitgo,plan:renderPlan,tc:()=>{ renderTC(); tcAvisoDudosos(); },ia:renderIA,cierre:renderCierre,calendario:()=>STATE.calTab==="tareas"?renderTareas():renderCalendario(),tareas:renderTareas};
   try{ (map[STATE.section]||renderResumen)();
   }
   catch(err){
@@ -3017,8 +3020,9 @@ function SUBTABS_MAP(){ return {
   ingresos:{key:"ingTab", items:[["general","General"]].concat((typeof ING_GW!=="undefined"?ING_GW:[]).map(g=>[g,g]))},
   egresos:{key:"egTab", items:[["general","General"],["proveedor","Por Proveedor"],["graficos","Gráficos"]]},
   costos:{key:"cosTab", items:[["lista","Lista de Costos"],["costingreso","Costos por Ingreso",{key:"cosProv",items:PNL_TABS.map(t=>[t,t])}],["pagados","Costos Pagados"],["detalle","Detalle por proveedor"],["graficos","Gráficos"]]},
+  calendario:{key:"calTab", items:[["cal","Calendario"],["tareas","Tareas"]]},
   cxp:{key:"cxpTab", items:[["graficos","Gráficos"],["lista","Lista"],["presupuesto","Presupuesto"]]},
-  bancos:{key:"bancosTab", items:[["mercury","Mercury"],["bitgo","BitGo"],["tesabiz","Tesabiz"],["cidre","Conciliación CIDRE"],["otras","Otras Cuentas"]]},
+  bancos:{key:"bancosTab", items:[["mercury","Mercury"],["bitgo","BitGo"],["tesabiz","CIDRE"],["altitude","Altitude"],["otras","Pagos Externos"]]},
   reportes:{key:"repTop", items:[["reportes","Reportes"],["cierre","Cierre de Mes"]]},
   flujo:{key:"flujoTab", items:[["uno","Flujo"],["dos","Flujo 2"]]},
   socios:{key:"socioTab", items:[["inversiones","Inversiones"],["prestamos","Préstamos"],["egsocios","Egresos de socios"],["devoluciones","Devoluciones"],["rendiciones","Rendiciones"]]},
@@ -3589,6 +3593,13 @@ function renderResumen(){
     // gastos por grupo (Sub Grupo) en cada periodo
     const gg={}; A.filas.filter(r=>r._k!=="ing").forEach(r=>{ const k=r.subg||"(sin grupo)"; const o=gg[k]||(gg[k]={t:0,c:{}}); const ck=(r.g!=null&&r._mi>=0)?r.g*12+r._mi:-1; o.t+=+r.imp||0; o.c[ck]=(o.c[ck]||0)+(+r.imp||0); });
     const ggF=Object.entries(gg).sort((a,b)=>b[1].t-a[1].t);
+    // V230: ingresos por grupo (pasarela / fuente) en cada periodo
+    const gi={}; A.filas.filter(r=>r._k==="ing").forEach(r=>{ const k=r.cp||r.subg||"(sin grupo)"; const o=gi[k]||(gi[k]={t:0,c:{}}); const ck=(r.g!=null&&r._mi>=0)?r.g*12+r._mi:-1; o.t+=+r.imp||0; o.c[ck]=(o.c[ck]||0)+(+r.imp||0); });
+    const giF=Object.entries(gi).sort((a,b)=>b[1].t-a[1].t);
+    const grTbl=(L,vacio)=>`<div class="tbl-scroll sticky-head"><table class="res-mes">${head}<tbody>
+          ${L.map(([k,o])=>`<tr><td style="text-align:left">${esc(k)}</td>${cols.map(c=>{ const v=o.c[c.k]||0; return `<td class="num">${v?pMoney(v):'<span class="zero">–</span>'}</td>`; }).join("")}<td class="num"><b>${pMoney(o.t)}</b></td></tr>`).join("")||`<tr><td colspan="${cols.length+2}">${emptyState(vacio)}</td></tr>`}
+          ${L.length?`<tr class="res-tot"><td style="text-align:left">Total</td>${cols.map(c=>{ const v=L.reduce((s,[,o])=>s+(o.c[c.k]||0),0); return `<td class="num">${v?pMoney(v):'<span class="zero">–</span>'}</td>`; }).join("")}<td class="num"><b>${pMoney(L.reduce((s,[,o])=>s+o.t,0))}</b></td></tr>`:""}
+        </tbody></table></div>`;
     STATE._resPDF.pormes={cols:cols.map(c=>c.l), lineas:[
       ["Ingresos",...cols.map(g("ing")),A.ing],["Costos directos",...cols.map(g("cos")),A.cos],["Margen bruto",...cols.map(mb),A.mb],
       ["Gastos",...cols.map(g("gas")),A.gas],["Utilidad",...cols.map(ut),A.ut]], grupos:ggF.map(([k,o])=>[k,...cols.map(c=>o.c[c.k]||0),o.t])};
@@ -3604,10 +3615,8 @@ function renderResumen(){
           ${fila("Margen %",c=>c?(val("ing",c)?ut(c)/val("ing",c):null):(A.ing?A.ut/A.ing:null),"",(v)=>v==null?'<span class="zero">–</span>':(v*100).toFixed(1)+"%")}
           ${fila("Utilidad vs "+(annual?"año":"mes")+" anterior",c=>0,"",varTxt)}
         </tbody></table></div></div>
-      <div class="card"><div class="head"><h3>Gastos y costos por grupo</h3><span class="mini">para comparar ${annual?"año a año":"mes a mes"}</span></div>
-        <div class="tbl-scroll sticky-head"><table class="res-mes">${head}<tbody>
-          ${ggF.map(([k,o])=>`<tr><td style="text-align:left">${esc(k)}</td>${cols.map(c=>{ const v=o.c[c.k]||0; return `<td class="num">${v?pMoney(v):'<span class="zero">–</span>'}</td>`; }).join("")}<td class="num"><b>${pMoney(o.t)}</b></td></tr>`).join("")||`<tr><td colspan="${cols.length+2}">${emptyState("Sin gastos.")}</td></tr>`}
-        </tbody></table></div></div>`;
+      <div class="card"><div class="head"><h3>Ingresos por grupo</h3><span class="mini">de dónde viene el ingreso, ${annual?"año a año":"mes a mes"}</span></div>${grTbl(giF,"Sin ingresos.")}</div>
+      <div class="card"><div class="head"><h3>Gastos y costos por grupo</h3><span class="mini">para comparar ${annual?"año a año":"mes a mes"}</span></div>${grTbl(ggF,"Sin gastos.")}</div>`;
   } else if(tab==="caja"){
     // La caja es ACUMULADA desde el inicio (no depende del año elegido)
     const invTot = (STATE.inv||[]).reduce((s,e)=>s+(+e.importe||0),0);
@@ -6554,7 +6563,7 @@ function renderCalendario(){
   $("#calHoy").addEventListener("click",()=>{ const n=new Date(); STATE.calY=n.getFullYear();STATE.calM=n.getMonth();STATE.calDay=_isoHoy();render(); });
   document.querySelectorAll("#calGrid .cal-cell[data-iso]").forEach(cell=>cell.addEventListener("click",()=>{ STATE.calDay=(STATE.calDay===cell.dataset.iso)?null:cell.dataset.iso; render(); }));
   document.querySelectorAll("#app .rhcal-f").forEach(b=>b.addEventListener("click",()=>{ STATE.section="rrhh"; STATE.rhTab="datos"; STATE.rhFicha=b.dataset.n; STATE.rhFichaTab=b.dataset.k; document.querySelectorAll("#sidenav button").forEach(x=>x.classList.toggle("on",x.dataset.s==="rrhh")); render(); try{window.scrollTo(0,0);}catch(_){} }));
-  const nt=$("#calNuevaTarea"); if(nt) nt.addEventListener("click",()=>{ STATE.taForm={t:"",prio:"Media",vence:STATE.calDay,notas:""}; STATE.taEdit=null; const b=document.querySelector('#sidenav button[data-s="tareas"]'); if(b) b.click(); setTimeout(()=>{ const i=$("#taT"); if(i) i.focus(); },60); });
+  const nt=$("#calNuevaTarea"); if(nt) nt.addEventListener("click",()=>{ STATE.taForm={t:"",prio:"Media",vence:STATE.calDay,notas:""}; STATE.taEdit=null; STATE.calTab="tareas"; render(); setTimeout(()=>{ const i=$("#taT"); if(i) i.focus(); },60); });
 }
 function renderGoogleCal(app,segV){
   const ids=gcalIds(); const modo=STATE.gcModo||"MONTH";
@@ -6877,7 +6886,7 @@ function exportCierrePDF(Y,M){
   ctx.table(["Proveedor / Beneficiario","USD"], D.topBen.map(e=>[e[0], m0(e[1])]), null, {1:{halign:"right"}});
   _pdfSave(ctx, "Cierre de Mes · "+MONTH_ES_LONG[M]+" "+Y, "Cierre_"+MONTH_ES_LONG[M]+"_"+Y+".pdf");
 }
-const SECCION_TITULOS = {inicio:"Inicio",inventario:"Inventario",billing:"Billing",flujo:"Flujo",flujo2:"Flujo 2",resumen:"Resumen P&L",egresos:"Egresos",cxp:"Cuentas por Pagar",rrhh:"RRHH",inversiones:"Inversiones",prestamos:"Préstamos",devoluciones:"Devoluciones",rendiciones:"Rendiciones",ingresos:"Ingresos",costos:"Costos",bancos:"Bancos",mercury:"Mercury",bitgo:"BitGo",plan:"Plan de Cuentas",tc:"Tipos de Cambio",ia:"IA · Asistente",cierre:"Cierre de Mes",calendario:"Calendario",tareas:"Tareas",socios:"Socios y Capital"};
+const SECCION_TITULOS = {inicio:"Inicio",inventario:"Inventario",billing:"Billing",flujo:"Flujo",flujo2:"Flujo 2",resumen:"Resumen P&L",egresos:"Egresos",cxp:"Cuentas por Pagar",rrhh:"RRHH",inversiones:"Inversiones",prestamos:"Préstamos",devoluciones:"Devoluciones",rendiciones:"Rendiciones",ingresos:"Ingresos",costos:"Costos",bancos:"Bancos",mercury:"Mercury",bitgo:"BitGo",plan:"Plan de Cuentas",tc:"Tipos de Cambio",ia:"IA · Asistente",cierre:"Cierre de Mes",calendario:"Calendario y Tareas",tareas:"Tareas",socios:"Socios y Capital"};
 
 function _limpiaTxt(s){ return String(s==null?"":s).replace(/[⇅▲▼⛶↕]/g,"").replace(/\s+/g," ").trim(); }
 function _esNumTxt(s){ const v=String(s).replace(/(Bs|USD|\$|%|\s)/g,""); return v!=="" && /\d/.test(v) && /^-?[\d.,()+-]+$/.test(v); }
@@ -7796,20 +7805,21 @@ function renderRendiciones(){
 /* ---------- BANCOS (contenedor con sub-pestañas: Mercury / BitGo / Tesabiz / Otras Cuentas) ---------- */
 function renderBancos(){
   const tab=STATE.bancosTab||"mercury";
-  const subs={ mercury:renderMercury, bitgo:renderBitgo, tesabiz:renderBancosTesabiz, cidre:renderCidre, altitude:()=>renderBancosLista('Pagos hechos desde la cuenta <b>Altitude</b> (Tipo de Pago = Altitude). Cuando tengamos el extracto de Altitude, aquí se verán también los abonos.'), otras:renderOtrasCuentas };
+  const subs={ mercury:renderMercury, bitgo:renderBitgo, tesabiz:()=>STATE.cidreSub==="concil"?renderCidre():renderBancosTesabiz(), cidre:renderCidre, altitude:()=>renderBancosLista('Pagos hechos desde la cuenta <b>Altitude</b> (Tipo de Pago = Altitude). Cuando tengamos el extracto de Altitude, aquí se verán también los abonos.'), otras:renderOtrasCuentas };
   (subs[tab]||renderMercury)();          // llena #app con el diseño existente de cada sección
   const seg=`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div class="seg" id="bancosTabs" style="flex-wrap:wrap">
         <button data-t="mercury" class="${tab==='mercury'?'on':''}">Mercury</button>
         <button data-t="bitgo" class="${tab==='bitgo'?'on':''}">BitGo</button>
-        <button data-t="tesabiz" class="${tab==='tesabiz'?'on':''}">CIDRE - Peso Liquidez</button>
-        <button data-t="cidre" class="${tab==='cidre'?'on':''}">Conciliación CIDRE</button>
+        <button data-t="tesabiz" class="${tab==='tesabiz'?'on':''}">CIDRE</button>
         <button data-t="altitude" class="${tab==='altitude'?'on':''}">Altitude</button>
-        <button data-t="otras" class="${tab==='otras'?'on':''}">Otras Cuentas</button>
+        <button data-t="otras" class="${tab==='otras'?'on':''}">Pagos Externos</button>
       </div>
+      ${tab==='tesabiz'?`<div class="seg" id="cidreSub"><button data-c="pagos" class="${STATE.cidreSub!=='concil'?'on':''}">Pagos CIDRE</button><button data-c="concil" class="${STATE.cidreSub==='concil'?'on':''}">Conciliación CIDRE</button></div>`:''}
       ${tab==='bitgo'?`<button class="btn primary" id="bgImportBtn" title="Elige el CSV tal como lo descargas de BitGo">⬆ Importar extracto BitGo</button><input type="file" id="bgImportFile" accept=".csv,text/csv" hidden>`:''}
     </div>`;
-  const app=$("#app"); if(app){ app.insertAdjacentHTML("afterbegin", seg+((tab==="tesabiz"||tab==="otras"||tab==="altitude")?bancosResumenHTML(tab):""));
+  const app=$("#app"); if(app){ app.insertAdjacentHTML("afterbegin", seg+(((tab==="tesabiz"&&STATE.cidreSub!=="concil")||tab==="otras"||tab==="altitude")?bancosResumenHTML(tab):""));
+    document.querySelectorAll("#cidreSub button").forEach(b=>b.addEventListener("click",()=>{STATE.cidreSub=b.dataset.c;render();}));
     document.querySelectorAll("#bancosTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.bancosTab=b.dataset.t;render();}));
     const ib=$("#bgImportBtn"), fi=$("#bgImportFile");
     if(ib&&fi){ ib.addEventListener("click",()=>fi.click()); fi.addEventListener("change",()=>{ const f=fi.files&&fi.files[0]; fi.value=""; if(f) bitgoImportarArchivo(f); }); } }
@@ -8254,7 +8264,17 @@ function bancosResumenHTML(tab){
   return `<div class="caja" style="margin-bottom:16px"><div class="c"><div class="l">Abonos (+) · entradas</div><div class="v" style="color:var(--emerald)">${usd(ab)}</div></div>
     <div class="c"><div class="l">Débitos (−) · salidas</div><div class="v neg">${usd(de)}</div></div>
     <div class="c hi"><div class="l">Neto del período</div><div class="v${ab-de<0?" neg":""}">${usd(ab-de)}</div></div>
-    <div class="c"><div class="l">Movimientos</div><div class="v">${n}</div></div></div>`;
+    <div class="c"><div class="l">Movimientos</div><div class="v">${n}</div></div></div>${tab==="otras"?pagosExternosSociosHTML():""}`;
+}
+// V230: Pagos Externos = gastos que no salieron de CIDRE ni Altitude; casi todos los pagó un socio con su tarjeta o dinero
+function pagosExternosSociosHTML(){
+  const yOk=g=>STATE.year==="__all"||g===STATE.year, m={}; let tot=0;
+  (STATE.egresos||[]).filter(r=>yOk(r.g)&&bancoListaFiltro(r,"otras")).forEach(r=>{ const v=r.impUSD!=null?(+r.impUSD||0):(+r.imp||0); tot+=v;
+    const k=egSocioDe(r._raw||r)||egSocioDe(r)||"La empresa / sin socio"; m[k]=(m[k]||0)+v; });
+  const L=Object.entries(m).sort((a,b)=>b[1]-a[1]); if(!L.length) return "";
+  const soc=L.filter(([k])=>k!=="La empresa / sin socio").reduce((s,[,v])=>s+v,0);
+  return `<div class="caja" style="margin:-6px 0 16px">${L.slice(0,5).map(([k,v])=>`<div class="c${k==="La empresa / sin socio"?"":" hi"}"><div class="l">${k==="La empresa / sin socio"?esc(k):"Pagado por "+esc(k)}</div><div class="v">$${f2(v)}</div><div class="mini">${tot?Math.round(v/tot*100):0}% del total</div></div>`).join("")}
+    <div class="c"><div class="l">Pagado por socios</div><div class="v">${tot?Math.round(soc/tot*100):0}%</div><div class="mini">$${f2(soc)} de $${f2(tot)}</div></div></div>`;
 }
 function renderBancosTesabiz(){ renderBancosLista('Pagos hechos desde <b>CIDRE - Peso Liquidez</b> (Tipo de Pago = CIDRE). Están en <b>bolivianos</b>. Todos son <b>débitos</b> (salidas); cuando tengamos el extracto de CIDRE se verán también los abonos.'); }
 function renderBancosTesabizViejo(){
@@ -8262,7 +8282,7 @@ function renderBancosTesabizViejo(){
     <p class="section-intro">Cuenta <b>Tesabiz</b> como <b>banco</b>: aquí irá el detalle de <b>lo que ingresa</b> y <b>lo que sale</b> de esta cuenta (movimientos de la cuenta), no las ganancias. Es distinto a la pestaña <b>Ingresos → Tesabiz</b>, que solo muestra el ingreso por ganancia.</p>`+
     emptyState('Aún no está conectado el <b>extracto de la cuenta Tesabiz</b> (entradas y salidas). Dime de qué <b>hoja del Google Sheet</b> leer los movimientos de esta cuenta (y qué columnas son fecha, concepto, entrada/salida) y lo conecto con el mismo diseño de Mercury/BitGo.');
 }
-function renderOtrasCuentas(){ renderBancosLista('<b>Otras cuentas</b>: los pagos de tu lista de Egresos que no salieron de CIDRE ni Altitude (tarjetas de los socios TC Alejo / TC JP Velasco, etc.). Aquí registras y clasificas esos gastos.'); }
+function renderOtrasCuentas(){ renderBancosLista('<b>Pagos externos</b>: los gastos de tu lista de Egresos que <b>no salieron de CIDRE ni de Altitude</b>. En su mayoría los pagó un <b>socio</b> con su tarjeta o su dinero (TC Alejo, TC JP Velasco, etc.). Aquí registras y clasificas esos gastos.'); }
 function renderOtrasCuentasViejo(){
   $("#app").innerHTML=`
     <p class="section-intro">Otras cuentas bancarias o de pago.</p>`+

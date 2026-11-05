@@ -398,6 +398,7 @@ body.nav-rail #sidenav button .nav-lbl{display:-webkit-box;-webkit-line-clamp:2;
 .nm-upd .x{background:transparent;color:#DAF1DE;padding:4px 8px}
 .cfg-pop{position:absolute;right:0;top:calc(100% + 8px);z-index:300;background:var(--card,#fff);border:1px solid var(--border);border-radius:14px;padding:12px;min-width:240px;box-shadow:0 14px 40px -12px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:8px}
 .cfg-pop .gf-lbl{font-size:12px;color:var(--muted)}
+.cfg-pop[hidden]{display:none}
 body.nav-rail #sidenav button .nav-ic{display:inline-flex}
 body.nav-rail .sidebar .side-top .logo-full{display:none}
 body.nav-rail .sidebar .side-top .logo-mark{display:block;height:30px;margin:0 auto}
@@ -1554,7 +1555,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V223";
+const APP_VERSION = "V224";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1990,7 +1991,8 @@ function cmpByPlan(depth, aKey, aNode, bKey, bNode){
 function pnlTree(rows){
   const root={};
   for(const e of rows){
-    const path=[e.cuenta,e.grupo,e.subg,e.cp,e.ca]; const mi=monthIdx(e.m); let cur=root;
+    // V223: la cuenta madre se agrupa sin importar mayúsculas («Egresos» y «EGRESOS» son la misma)
+    const path=[String(e.cuenta==null?"":e.cuenta).trim().toUpperCase(),e.grupo,e.subg,e.cp,e.ca]; const mi=monthIdx(e.m); let cur=root;
     path.forEach((key,depth)=>{
       if(!cur[key]) cur[key]={total:0,months:Array(12).fill(0),years:{},children:{},income:e.income,dato:false,datoCur:null};
       const n=cur[key];

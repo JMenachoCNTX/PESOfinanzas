@@ -386,7 +386,18 @@ body.nav-rail .sidebar .side-top{justify-content:center;padding:15px 0}
 body.nav-rail #sidenav{padding:12px 0;align-items:center}
 body.nav-rail #sidenav button{width:46px;justify-content:center;padding:11px 0;gap:0}
 body.nav-rail #sidenav button::before{display:none}
-body.nav-rail #sidenav button .nav-lbl{display:none}
+/* V222: menú oculto con el nombre pequeño debajo de cada ícono */
+body.nav-rail .sidebar{width:78px}
+body.nav-rail .main{margin-left:78px}
+body.nav-rail #sidenav button{width:70px;flex-direction:column;padding:8px 2px 7px;gap:3px}
+body.nav-rail #sidenav button .nav-lbl{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:9.5px;line-height:1.15;text-align:center;letter-spacing:0;font-weight:600;max-width:68px;white-space:normal}
+.nm-tip{position:fixed;z-index:9999;background:#051F20;color:#fff;padding:5px 9px;border-radius:7px;font-size:12px;font-weight:600;white-space:nowrap;pointer-events:none;opacity:0;transform:translate(-50%,0);transition:opacity .12s}
+.nm-tip.show{opacity:1}
+.nm-upd{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9998;background:#235347;color:#fff;border-radius:999px;padding:9px 10px 9px 18px;display:flex;gap:12px;align-items:center;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px -8px rgba(0,0,0,.45)}
+.nm-upd button{background:#DAF1DE;color:#051F20;border:0;border-radius:999px;padding:6px 14px;font-weight:700;cursor:pointer}
+.nm-upd .x{background:transparent;color:#DAF1DE;padding:4px 8px}
+.cfg-pop{position:absolute;right:0;top:calc(100% + 8px);z-index:300;background:var(--card,#fff);border:1px solid var(--border);border-radius:14px;padding:12px;min-width:240px;box-shadow:0 14px 40px -12px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:8px}
+.cfg-pop .gf-lbl{font-size:12px;color:var(--muted)}
 body.nav-rail #sidenav button .nav-ic{display:inline-flex}
 body.nav-rail .sidebar .side-top .logo-full{display:none}
 body.nav-rail .sidebar .side-top .logo-mark{display:block;height:30px;margin:0 auto}
@@ -1276,7 +1287,6 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
           <option value="Pendiente">Pendiente</option>
           <option value="Presupuestado">Presupuestado</option>
         </select></div></div>
-        <div class="gf-row" id="gfDec"><span class="gf-lbl">Decimales</span><div class="seg" id="fDec"><button data-d="2">2 decimales</button><button data-d="0">Sin decimales</button></div></div>
         <div class="gf-row" id="gfCur"><span class="gf-lbl">Moneda</span><div class="seg" id="fCur"><button data-c="USD" class="on">USD</button><button data-c="BOB">BOB</button></div></div>
         <div class="gf-row" id="gfView"><span class="gf-lbl">Vista</span><div class="seg" id="fView"><button data-v="month" class="on">Mensual</button><button data-v="quarter">Trimestral</button><button data-v="annual">Anual</button></div></div>
       </div>
@@ -1291,9 +1301,16 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
       <button class="btn btn-icon icon-only" id="btnConnect" title="Actualizar datos" aria-label="Actualizar">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
       </button>
-      <button class="btn btn-icon icon-only" id="btnMiClave" title="Cambiar mi clave" aria-label="Cambiar mi clave" style="display:none">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M16 7l3 3M14 9l2 2"/></svg>
+      <span style="position:relative;display:inline-flex"><button class="btn btn-icon icon-only" id="btnCfg" title="Configuración" aria-label="Configuración">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
       </button>
+      <div class="cfg-pop" id="cfgPop" hidden>
+        <b>Configuración</b>
+        <button class="btn" id="btnMiClave" style="display:none;justify-content:flex-start">🔑 Cambiar mi clave</button>
+        <button class="btn" id="cfgUsuarios" style="display:none;justify-content:flex-start">👥 Usuarios y accesos</button>
+        <span class="gf-lbl">Decimales en los montos</span>
+        <div class="seg" id="fDec"><button data-d="2">2 decimales</button><button data-d="0">Sin decimales</button></div>
+      </div></span>
       <button class="btn btn-icon icon-only" id="btnLogout" title="Cerrar sesión" aria-label="Salir">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M4.5 12H15"/></svg>
       </button>
@@ -1520,7 +1537,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V221";
+const APP_VERSION = "V222";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1624,16 +1641,18 @@ function monthIdx(m){
 /* V217: todo el sistema muestra los montos con 2 decimales y el mismo formato (1,234.56).
    Filtros ▸ Decimales permite verlos redondeados (sin decimales). Los tipos de cambio siempre van con 2 (fTC). */
 let NM_DEC=(function(){ try{ return localStorage.getItem("nm_dec")==="0"?0:2; }catch(_){ return 2; } })();
+/* V222: formato boliviano 1.000,00 (punto para miles, coma para decimales) en todo el sistema */
+function nmNum(n,dec){ return Number(n).toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec}).replace(/[.,]/g,c=>c==="."?",":"."); }
 function fmt(n){
   if(n==null||isNaN(n)) return "0";
   const neg=n<0; n=Math.abs(n); const dec=NM_DEC;
-  let s=n.toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec});
+  let s=nmNum(n,dec);
   return (neg?"(":"")+"$"+s+(neg?")":"");
 }
 function fmtK(n){
   const a=Math.abs(n);
-  if(a>=1e6) return "$"+(n/1e6).toFixed(a>=1e7?0:1)+"M";
-  if(a>=1e3) return "$"+(n/1e3).toFixed(a>=1e4?0:1)+"k";
+  if(a>=1e6) return "$"+(n/1e6).toFixed(a>=1e7?0:1).replace(".",",")+"M";
+  if(a>=1e3) return "$"+(n/1e3).toFixed(a>=1e4?0:1).replace(".",",")+"k";
   return "$"+Math.round(n);
 }
 /* ---------- moneda (toggle USD/BOB) ---------- */
@@ -2509,7 +2528,7 @@ function renderPresupuesto(pre){
    ============================================================ */
 let NM_DESG=null, NM_CTIPO=null;
 function desgCargar(){ if(NM_DESG||!nmFbActivo()) return; NM_DESG={}; NM_CTIPO={};
-  Promise.all([NMFB.cfgGet("costosDesglose"),NMFB.cfgGet("costosTipo")]).then(([a,b])=>{ NM_DESG=(a&&a.items)||{}; NM_CTIPO=(b&&b.tipos)||{}; if(STATE.section==="costos") render(); }).catch(()=>{}); }
+  Promise.all([NMFB.cfgGet("costosDesglose"),NMFB.cfgGet("costosTipo")]).then(([a,b])=>{ NM_DESG=(a&&a.items)||{}; NM_CTIPO=(b&&b.tipos)||{}; if(STATE.section==="costos"||STATE.section==="egresos") render(); }).catch(()=>{}); }
 function desgKey(r){ return (r.origen||"")+"|"+(r.hu||""); }
 function renderCostosDetalle(app, seg, pbase0){
   desgCargar(); const D=NM_DESG||{}, CT=NM_CTIPO||{};
@@ -3529,7 +3548,7 @@ function renderResumen(){
 /* ---------- generic helpers for sections ---------- */
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function fmtBs(n){ if(n==null||isNaN(n))return "Bs 0"; const neg=n<0;n=Math.abs(n);
-  return (neg?"(":"")+"Bs "+n.toLocaleString("en-US",{maximumFractionDigits:0})+(neg?")":""); }
+  return (neg?"(":"")+"Bs "+nmNum(n,0)+(neg?")":""); }
 /* Convierte un valor de fecha en un Date LOCAL. Clave: una fecha "AAAA-MM-DD" (sin hora)
    la interpretamos en hora local, NO en UTC, para que no se corra un día en zonas como Bolivia (UTC-4). */
 function parseLocalDate(s){
@@ -3706,6 +3725,8 @@ function renderEgresosGeneral(){
       <button data-t="proveedor">Por Proveedor</button>
     </div>`;
   const allU=egresosUnificados();
+  // V222: Fijo/Variable sale de lo marcado en Costos › Detalle (por Cuenta Analítica) si el gasto no lo trae
+  desgCargar(); allU.forEach(r=>{ if(!r.costo&&r.ca&&NM_CTIPO&&NM_CTIPO[r.ca]) r.costo=costoNorm(NM_CTIPO[r.ca].nat); });
   const srcs=[...new Set(allU.map(r=>r.origen))];
   const uniq=f=>[...new Set(allU.map(f).map(v=>String(v==null?"":v).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const fCuentas=uniq(r=>r.kcuenta), fGrupos=uniq(r=>r.grupoc), fSubg=uniq(r=>r.ksubgrupo), fCP=uniq(r=>r.cp), fCA=uniq(r=>r.ca);
@@ -3751,13 +3772,13 @@ function renderEgresosGeneral(){
   const fijoUSD=rows.filter(r=>r.costo==="fijo").reduce((s,r)=>s+(+r.usd||0),0);
   const varUSD=rows.filter(r=>r.costo==="variable").reduce((s,r)=>s+(+r.usd||0),0);
   const kpis=`<div class="grid kpis">
-    ${kpiCol(
-      kpi("Egresos totales (USD)",fmt(totUSD),rows.length+" movimientos","#235347","◆"),
-      kpi("Equivalente (BOB)","Bs "+f2(totBOB),"al TC por fecha","#235347","≈"))}
-    ${kpiCol(
-      kpi("Costos fijos (USD)",fmt(fijoUSD),"marcados Fijo","#B42318","▮"),
-      kpi("Costos variables (USD)",fmt(varUSD),"marcados Variable","#6F9A7D","▯"))}
+      ${kpi("Egresos totales (USD)",fmt(totUSD),rows.length+" movimientos","#235347","◆")}
+      ${kpi("Equivalente (BOB)","Bs "+f2(totBOB),"al TC por fecha","#235347","≈")}
+      ${kpi("Costos fijos (USD)",fmt(fijoUSD),"marcados Fijo en Costos","#B42318","▮")}
+      ${kpi("Costos variables (USD)",fmt(varUSD),"marcados Variable en Costos","#6F9A7D","▯")}
   </div>`;
+  // V222: botones de origen (Egresos, Mercury, BitGo…) para filtrar con un clic
+  const srcSeg=srcs.length>1?`<div class="seg" id="egGenSrcSeg" style="margin:0 0 12px;flex-wrap:wrap">${[["__all","Todos"]].concat(srcs.map(x=>[x,x])).map(([v,t])=>`<button data-v="${esc(v)}" class="${(STATE.egGenSrc||"__all")===v?"on":""}">${esc(t)} <span class="mini">(${v==="__all"?allU.length:allU.filter(r=>r.origen===v).length})</span></button>`).join("")}</div>`:"";
   const egGenFilterDefs=[
     {k:"egGenSrc",lbl:"Fuente",disp:v=>v,opts:srcs.map(s=>({v:s,t:s})),ph:"Todas las fuentes"},
     {k:"egGenTP",lbl:"Tipo de Pago",disp:v=>v,opts:[...new Set(allU.map(r=>r.cuentaPago).filter(Boolean))].sort().map(v=>({v,t:v})),ph:"Todos los tipos de pago"},
@@ -3772,7 +3793,7 @@ function renderEgresosGeneral(){
   const egGenFB=fbHTML("eggf", egGenFilterDefs);
   const toolbar=`<div class="toolbar" style="align-items:center">${esearch("egGenSearch","Buscar concepto, beneficiario, importe, cuenta…",STATE.egGenSearch)}${egGenFB.bar}<div class="spacer"></div><button class="btn" id="egTjBtn" title="Carga varios gastos de una vez desde el Excel de la tarjeta corporativa o el extracto CSV de Altitude">⬆ Importar tarjeta (Excel / Altitude)</button><input type="file" id="egTjFile" accept=".xlsx,.xls,.csv" hidden></div>${egGenFB.panel}`;
   $("#app").innerHTML=`<p class="section-intro">Todos los egresos en <b>una sola lista</b>: los de <b>Egresos</b> + las <b>salidas</b> de <b>Mercury</b> y <b>BitGo</b>, con las mismas cuentas contables. <span class="mini">(No modifica la pestaña Bancos.)</span></p>
-    ${kpis}${toolbar}${pills}
+    ${kpis}${srcSeg}${toolbar}${pills}
     <div class="card"><div class="head"><h3>Todos los egresos</h3><span class="mini">${fmt(totUSD)} · Bs ${f2(totBOB)} · clic en un encabezado para ordenar</span></div>
       <div class="mini" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:-2px 0 12px">Cuenta Analítica:
         <span class="ca-cell ca-auto" style="cursor:default;pointer-events:none">Automática</span>
@@ -3783,6 +3804,7 @@ function renderEgresosGeneral(){
       ${rows.length>1000?`<div class="mini" style="margin-top:10px">Mostrando 1000 de ${rows.length}. Usa la búsqueda o filtros.</div>`:""}</div>`;
   const si=$("#egGenSearch"); if(si){ si.addEventListener("input",()=>{STATE.egGenSearch=si.value;STATE._focus=true;render();}); }
   fbWire("eggf", egGenFilterDefs);
+  document.querySelectorAll("#egGenSrcSeg button").forEach(b=>b.addEventListener("click",()=>{ STATE.egGenSrc=b.dataset.v; render(); }));
   tarjetaWire(); wireCaCells();
   document.querySelectorAll(".eg-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const e=(STATE.egresos||[]).find(x=>x._id===b.dataset.id); if(e) abrirFormEgreso(e); }));
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
@@ -5866,7 +5888,7 @@ function renderFlujoDos(){
 /* ============================================================
    IA · ASISTENTE (DeepSeek) — chat que conoce los datos del sistema
    ============================================================ */
-function r0(n){ return Math.round(+n||0).toLocaleString("en-US"); }
+function r0(n){ return nmNum(Math.round(+n||0),0); }
 /* Construye un RESUMEN de todos los datos para dárselo a la IA (consolidado, todos los años). */
 function buildContextoIA(){
   const save={year:STATE.year, empresa:STATE.empresa, cur:CUR, resBase:STATE.resBase};
@@ -7034,7 +7056,7 @@ var ING_EXTRA_CFG = {
   ],
 };
 /* Formatea un valor seg\u00fan la moneda de la m\u00e9trica */
-function _fmtMetric(cur,v){ if(cur==="INT") return Math.round(v||0).toLocaleString("es-BO"); if(cur==="BOB") return "Bs "+f2(v); return "$"+f2(v); }
+function _fmtMetric(cur,v){ if(cur==="INT") return nmNum(Math.round(v||0),0); if(cur==="BOB") return "Bs "+f2(v); return "$"+f2(v); }
 /* Lee las columnas extra configuradas de una pasarela y las agrega por mes.
    Devuelve un array de m\u00e9tricas presentes: {..cfg.., idx, series[12], tot, has}. */
 function _ingExtraSeries(gw, gwSheet){
@@ -7575,8 +7597,10 @@ function altitudeImportarTexto(texto, nombre){
   });
   if(!movs.length){ alert("El extracto no tiene movimientos."); return; }
   const tit=Object.keys(titulares).sort((a,b)=>titulares[b]-titulares[a])[0]||"";
-  tarjetaRevisar(movs, nombre, {cuenta:"Altitude", por:/alejandro\s+teran|teran/i.test(tit)?"Alejo T.":tit,
-    titulo:"Importar extracto Altitude", tipoCol:"Tipo"});
+  // V222: lo pagado con Altitude lo gestiona Alejo T.; Google por Altitude es Google Ads (Workspace se paga de otra cuenta)
+  const caAds=(STATE.plan||[]).map(r=>String(r.nombre||"")).find(n=>/google\s*ads/i.test(n))||"Google Ads";
+  tarjetaRevisar(movs, nombre, {cuenta:"Altitude", por:"Alejo T.", titulo:"Importar extracto Altitude", tipoCol:"Tipo",
+    caDe:m=>/google/i.test(m.prov)?caAds:null});
 }
 function tarjetaImportarArchivo(file){
   if(/\.csv$/i.test(file.name)){ const rt=new FileReader();
@@ -7622,7 +7646,8 @@ function tarjetaRevisar(movs, nombreArchivo, opts){
   // Cuenta analítica sugerida: la última usada para ese proveedor
   const porBen={}; (STATE.egresos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(e=>{
     const cc=e.ca||e.cc; if(!cc) return; [e.ben,e.con].forEach(x=>{ const k=_tjNorm(x); if(k) porBen[k]={cc,pais:e.pais,e}; }); });
-  movs.forEach(m=>{ const s=porBen[_tjNorm(m.prov)]||porBen[_tjNorm(m.desc)]; m.cc=s?s.cc:""; m.paisSug=s?s.pais:""; m.sug=s||null; });
+  movs.forEach(m=>{ const s=porBen[_tjNorm(m.prov)]||porBen[_tjNorm(m.desc)]; m.cc=s?s.cc:""; m.paisSug=s?s.pais:""; m.sug=s||null;
+    const c=opts.caDe&&opts.caDe(m); if(c&&c!==m.cc){ m.cc=c; m.sug=null; } });
   marcar();
   const meses=[...new Set(movs.map(m=>m.f.slice(0,7)))].sort();
   let cuentas=cuentasPago().filter(esCuentaTC); if(opts.cuenta&&cuentas.indexOf(opts.cuenta)<0) cuentas=[opts.cuenta].concat(cuentas);
@@ -8249,8 +8274,8 @@ function renderBitgo(){
 }
 
 /* ---------- TIPOS DE CAMBIO ---------- */
-function f2(n){ return (n||n===0)? Number(n).toLocaleString("en-US",{minimumFractionDigits:NM_DEC,maximumFractionDigits:NM_DEC}) : "—"; }
-function fTC(n){ return (n||n===0)? Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"; }
+function f2(n){ return (n||n===0)? nmNum(n,NM_DEC) : "—"; }
+function fTC(n){ return (n||n===0)? nmNum(n,2) : "—"; }
 function tcAvisoDudosos(){ const L=mapTC._dud||[]; const app=$("#app"); if(!L.length||!app) return;
   app.insertAdjacentHTML("afterbegin",`<div class="msg err" style="display:block;margin-bottom:14px"><b>${L.length} cotización(es) con un valor imposible</b> (más de Bs 100 por dólar, seguramente falta la coma decimal). No se usan en los cálculos ni en el gráfico: ${L.slice(0,6).map(esc).join(" · ")}${L.length>6?" …":""}</div>`); }
 function renderTC(){
@@ -9882,7 +9907,8 @@ function nmSetupInicialUI(){
   };
 }
 function nmMostrarUsuariosNav(){ const b=document.querySelector('#sidenav button[data-s="usuarios"]'); if(b) b.style.display=NMFB.esAdmin()?"":"none";
-  const k=$("#btnMiClave"); if(k) k.style.display=nmFbActivo()?"":"none"; }
+  const k=$("#btnMiClave"); if(k) k.style.display=nmFbActivo()?"":"none";
+  const u=$("#cfgUsuarios"); if(u) u.style.display=NMFB.esAdmin()?"":"none"; }
 /* ---------- Cambiar mi clave (cualquier usuario) ---------- */
 function nmCambiarMiClaveUI(){
   if(!nmFbActivo()) return;
@@ -10303,7 +10329,33 @@ $("#btnConnect").addEventListener("click",actualizarDatos);
 { const gb=$("#gFiltBtn"); if(gb) gb.addEventListener("click",e=>{ e.stopPropagation(); const gp=$("#gFilters"); if(gp){ gp.hidden=!gp.hidden; gb.classList.toggle("on",!gp.hidden); } });
   document.addEventListener("mousedown",e=>{ const gp=$("#gFilters"),gb2=$("#gFiltBtn"); if(gp&&!gp.hidden){ if(gp.contains(e.target)||(gb2&&gb2.contains(e.target)))return; gp.hidden=true; if(gb2)gb2.classList.remove("on"); } },true); }
 $("#btnLogout").addEventListener("click",cerrarSesion);
-$("#btnMiClave").addEventListener("click",nmCambiarMiClaveUI);
+$("#btnMiClave").addEventListener("click",()=>{ $("#cfgPop").hidden=true; nmCambiarMiClaveUI(); });
+// V222: menú de Configuración (clave, usuarios, decimales)
+$("#btnCfg").addEventListener("click",ev=>{ ev.stopPropagation(); const p=$("#cfgPop"); p.hidden=!p.hidden; });
+document.addEventListener("click",ev=>{ const p=$("#cfgPop"); if(p&&!p.hidden&&!ev.target.closest("#cfgPop")&&!ev.target.closest("#btnCfg")) p.hidden=true; });
+$("#cfgUsuarios").addEventListener("click",()=>{ $("#cfgPop").hidden=true; const b=document.querySelector('#sidenav button[data-s="usuarios"]'); if(b) b.click(); });
+/* V222: nombre del botón al pasar el cursor (botones que solo tienen ícono) */
+const nmTip=document.createElement("div"); nmTip.className="nm-tip"; document.body.appendChild(nmTip); let _nmTipB=null;
+document.addEventListener("mouseover",ev=>{ const b=ev.target.closest&&ev.target.closest("button,a.btn,.btn,.xbtn,.comp-clip");
+  if(!b||b===_nmTipB||b.closest("#sidenav")) return; if(/[A-Za-zÁÉÍÓÚáéíóúñÑ0-9]{3}/.test(b.textContent||"")) return;
+  const t=b.getAttribute("title")||b.dataset.nmtip||b.getAttribute("aria-label"); if(!t) return;
+  if(b.hasAttribute("title")){ b.dataset.nmtip=t; b.removeAttribute("title"); }
+  _nmTipB=b; nmTip.textContent=t; const r=b.getBoundingClientRect(); nmTip.classList.add("show");
+  const w=nmTip.offsetWidth; let x=r.left+r.width/2; x=Math.max(w/2+6,Math.min(window.innerWidth-w/2-6,x));
+  nmTip.style.left=x+"px"; nmTip.style.top=(r.bottom+8+30>window.innerHeight?r.top-34:r.bottom+8)+"px"; });
+document.addEventListener("mouseout",ev=>{ if(_nmTipB&&(!ev.relatedTarget||!_nmTipB.contains(ev.relatedTarget))){ nmTip.classList.remove("show"); _nmTipB=null; } });
+document.addEventListener("click",()=>{ nmTip.classList.remove("show"); _nmTipB=null; },true);
+/* V222: aviso de versión nueva. Cada 5 minutos (y al volver a la pestaña) se mira si el sistema publicado cambió. */
+let _nmUpdVisto="";
+function nmBuscarVersion(){ fetch(location.pathname+"?nv="+Date.now(),{cache:"no-store"}).then(r=>r.text()).then(t=>{
+  const m=t.match(/APP_VERSION\s*=\s*"([^"]+)"/); if(!m||m[1]===APP_VERSION||m[1]===_nmUpdVisto||document.querySelector(".nm-upd")) return;
+  const d=document.createElement("div"); d.className="nm-upd";
+  d.innerHTML=`<span>✨ Hay una nueva versión del sistema (${esc(m[1])})</span><button type="button" class="ok">Actualizar ahora</button><button type="button" class="x" title="Más tarde">✕</button>`;
+  d.querySelector(".ok").onclick=()=>location.reload();
+  d.querySelector(".x").onclick=()=>{ _nmUpdVisto=m[1]; d.remove(); };
+  document.body.appendChild(d); }).catch(()=>{}); }
+setInterval(nmBuscarVersion,5*60*1000);
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") nmBuscarVersion(); });
 $("#loginBtn").addEventListener("click",()=>{ if(NMFB.on) nmEntrarFB(); else conectar($("#pin").value); });
 $("#pin").addEventListener("keydown",e=>{ if(e.key==="Enter") conectar($("#pin").value); });
 ["#fbEmail","#fbClave"].forEach(sel=>{ const el=$(sel); if(el) el.addEventListener("keydown",e=>{ if(e.key==="Enter") nmEntrarFB(); }); });
@@ -10384,7 +10436,7 @@ function _rhTratoAuto(r){ const s=_normTxt(r.sexo||""); if(/^f|mujer|femen/.test
 const _MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 function _rhFecha(iso,larga){ const d=parseLocalDate?parseLocalDate(iso):null; if(!d||isNaN(d)) return iso?String(iso):"—";
   return larga? (_p2(d.getDate())+" de "+_MESES[d.getMonth()]+" de "+d.getFullYear()) : (_p2(d.getDate())+"/"+_p2(d.getMonth()+1)+"/"+d.getFullYear()); }
-function _rhNum(n){ return (Math.round((+n||0)*100)/100).toLocaleString("es-BO",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function _rhNum(n){ return nmNum(Math.round((+n||0)*100)/100,2); }
 function _rhMon(n,mon){ return (mon==="BOB"?"Bs ":"USD ")+_rhNum(n); }
 function numeroALetras(n){
   n=Math.floor(Math.abs(+n||0));

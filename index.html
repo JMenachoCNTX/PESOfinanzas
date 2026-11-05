@@ -676,11 +676,11 @@ td .pc:focus{border-color:var(--brand)}
 #pnlTable th:first-child,#pnlTable td:first-child{min-width:190px;max-width:250px;white-space:normal;overflow-wrap:anywhere}
 #pnlTable tr.pnl-l0>td,#lcGrp tr.pnl-l0>td{background:#163832!important;color:#fff!important}
 #pnlTable tr.pnl-l1>td,#lcGrp tr.pnl-l1>td{background:#cfe3d5!important;color:#051F20}
-#pnlTable tr.pnl-l2>td{background:#e3f0e6!important;color:#051F20}
-#pnlTable tr.pnl-l3>td{background:#f2f8f3!important;color:#051F20}
+#pnlTable tr.pnl-l2>td,#lcGrp tr.pnl-l2>td{background:#e3f0e6!important;color:#051F20}
+#pnlTable tr.pnl-l3>td,#lcGrp tr.pnl-l3>td{background:#f2f8f3!important;color:#051F20}
 html.tema-oscuro #pnlTable tr.pnl-l1>td,html.tema-oscuro #lcGrp tr.pnl-l1>td{background:#235347!important;color:#fff}
-html.tema-oscuro #pnlTable tr.pnl-l2>td{background:#1b4038!important;color:#fff}
-html.tema-oscuro #pnlTable tr.pnl-l3>td{background:#12302a!important;color:#fff}
+html.tema-oscuro #pnlTable tr.pnl-l2>td,html.tema-oscuro #lcGrp tr.pnl-l2>td{background:#1b4038!important;color:#fff}
+html.tema-oscuro #pnlTable tr.pnl-l3>td,html.tema-oscuro #lcGrp tr.pnl-l3>td{background:#12302a!important;color:#fff}
 #lcGrp tfoot td{position:sticky;bottom:0;z-index:2;background:#235347;color:#fff;font-weight:700}
 #pnlTable tfoot td{position:sticky;bottom:0;z-index:2;background:#235347;color:#fff;font-weight:700;border-top:2px solid var(--border2)}
 #pnlTable tfoot tr:nth-last-child(2) td{bottom:34px}
@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V238";
+const APP_VERSION = "V239";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3890,7 +3890,7 @@ function renderEgresosGeneral(){
     {label:"Monto original",right:1,cls:"num",sortKey:"orig",render:r=>r.orig!=null?((r.moneda==="BOB"?"Bs ":"$")+f2(r.orig)):'<span class="zero">–</span>'},
     {label:"USD",right:1,cls:"num",sortKey:"usd",render:r=>r.usd!=null?fmt(r.usd,2):'<span class="zero">–</span>'},
     {label:"BOB",right:1,cls:"num",sortKey:"bob",render:r=>r.bob!=null?("Bs "+f2(r.bob)):'<span class="zero">–</span>'},
-    {label:"",render:r=>(r.egId&&STATE.egFB)?`<button class="btn ghost eg-ed" data-id="${esc(r.egId)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button>`:""},
+    {label:"",render:r=>STATE.egFB?`<span class="ta-acts" style="flex-wrap:nowrap"><button class="btn ghost eg-cxp" data-i="${STATE._egCxpRows.push(r)-1}" title="Crear una cuenta por pagar a partir de este gasto (ej.: el mismo pago para este mes)" style="padding:4px 8px;white-space:nowrap">→ Por pagar</button>${r.egId?`<button class="btn ghost eg-ed" data-id="${esc(r.egId)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button>`:""}</span>`:""},
   ];
   const totRow=cols.map((c,i)=> i===0?("Total ("+rows.length+")"):(c.label==="USD"?fmt(totUSD,2):(c.label==="BOB"?("Bs "+f2(totBOB)):"")));
   const fijoUSD=rows.filter(r=>r.costo==="fijo").reduce((s,r)=>s+(+r.usd||0),0);
@@ -3934,6 +3934,7 @@ function renderEgresosGeneral(){
   document.querySelectorAll("#egGenSrcSeg button").forEach(b=>b.addEventListener("click",()=>{ STATE.egGenSrc=b.dataset.v; render(); }));
   tarjetaWire(); wireCaCells();
   document.querySelectorAll(".eg-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const e=(STATE.egresos||[]).find(x=>x._id===b.dataset.id); if(e) abrirFormEgreso(e); }));
+  document.querySelectorAll(".eg-cxp").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const r=STATE._egCxpRows[+b.dataset.i]; if(r) egresoACxP(r); }));
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
   document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
     const k=th.dataset.k;
@@ -5871,6 +5872,21 @@ function costosSugerencias(items){
 /* Lista de Costos (lo esperado al mes) vs lo pagado en Egresos los últimos 3 meses completos */
 /* V235: de la Lista de Costos a Cuentas por Pagar. Abre el formulario de gasto ya lleno como «Pendiente»
    (ej.: «Alquiler Diciembre»); cuando se pague, en Cuentas por Pagar ▸ Pagar pasa a Pagado y se sube el comprobante. */
+/* V239: cualquier gasto de Egresos (esté o no en la Lista de Costos) puede volverse una cuenta por pagar:
+   se abre el formulario con los mismos datos, como «Pendiente» y con el mes actual en el concepto. */
+function egresoACxP(r){
+  abrirFormEgreso();
+  const set=(id,v)=>{ const el=$("#"+id); if(el) el.value=(v==null?"":String(v)); };
+  const mes=MONTH_ES_LONG[new Date().getMonth()];
+  const base=String(r.con||r.keytext||"").replace(/[\s\-–·]*\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b.*$/i,"").trim();
+  set("f_estado","Pendiente"); set("f_concepto",(base+" "+mes).trim()); set("f_ben",r.fuente==="Egresos"?r.keytext:"");
+  set("f_importe",r.orig||r.usd||""); set("f_moneda",String(r.moneda||"USD").toUpperCase());
+  set("f_coment","Desde Egresos · pago anterior del "+String(r.fecha||"").slice(0,10)+(r.fuente!=="Egresos"?" ("+r.fuente+")":""));
+  if(r.ca){ const cc=$("#f_cc"); if(cc){ cc.value=r.ca; cc.dataset.sug=""; } try{ autoFillCuenta(); }catch(_){} } else egSugerirCA();
+  const t=$("#egFormTitle"); if(t) t.textContent="Nueva cuenta por pagar";
+  const ld=$("#egFormLead"); if(ld) ld.innerHTML="Copiado del gasto <b>"+esc(base||"—")+"</b>. Revisa el concepto (ej.: <b>"+esc((base+" "+mes).trim())+"</b>) y el importe de este mes. Queda como <b>Pendiente</b> en <b>Cuentas por Pagar</b>; cuando se pague, pulsa <b>Pagar</b> ahí y sube el comprobante.";
+  const c=$("#f_concepto"); if(c){ c.focus(); c.select(); }
+}
 function costoACxP(it){
   abrirFormEgreso();
   const set=(id,v)=>{ const el=$("#"+id); if(el) el.value=(v==null?"":String(v)); };
@@ -6067,23 +6083,32 @@ function renderCostos(){
         </tbody><tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.i.mFijoM,0))}</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.i.mVarM,0))}</b></td>
           ${cmp.ks.map((k,j)=>`<td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.pag[j],0))}</b></td>`).join("")}<td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.prom,0))}</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.dif,0))}</b></td></tr></tfoot></table></div></div>`;
     else if(vista==="agrupada"){
-      // V236: agrupada como el Estado de Resultados: Grupo ▸ Centro de costo ▸ costo, con totales y plegable
-      const cerr=STATE.lcCerr||(STATE.lcCerr=new Set()), abiertos=STATE.lcAbr||(STATE.lcAbr=new Set());
+      /* V236: agrupada como el Estado de Resultados.
+         V239: se abre por NIVEL, igual que el Estado de Resultados: abrir un grupo abre todos los grupos, abrir un centro abre
+         todos los centros, abrir un costo muestra los últimos pagos de todos los costos (desde Egresos). */
+      if(STATE.lcNivel==null) STATE.lcNivel=1; const niv=STATE.lcNivel;
       const usd=v=>v?"$"+f2(v):'<span class="zero">–</span>', bob=v=>(v&&RATE)?"Bs "+f2(v*RATE):'<span class="zero">–</span>';
       const tot=L=>({f:L.reduce((s,i)=>s+i.mFijoM,0),v:L.reduce((s,i)=>s+i.mVarM,0)});
-      const fila=(cls,pid,lbl,sub,L,caret,pad)=>{ const t=tot(L); return `<tr class="pnl-row ${cls}" ${pid?`data-lcg="${esc(pid)}"`:""}><td style="padding-left:${pad}px">${caret}${lbl}${sub?`<span class="sub2">${sub}</span>`:""}</td><td class="num">${L.length}</td><td class="num">${usd(t.f)}</td><td class="num">${usd(t.v)}</td><td class="num"><b>${usd(t.f+t.v)}</b></td><td class="num">${bob(t.f+t.v)}</td></tr>`; };
+      const car=l=>`<span class="pnl-caret ${niv>l?"open":""}">▶</span>`;
+      const fila=(cls,lvl,lbl,sub,L,caret,pad)=>{ const t=tot(L); return `<tr class="pnl-row ${cls}" ${lvl!=null?`data-lcn="${lvl}"`:""}><td style="padding-left:${pad}px">${caret}${lbl}${sub?`<span class="sub2">${sub}</span>`:""}</td><td class="num">${L.length}</td><td class="num">${usd(t.f)}</td><td class="num">${usd(t.v)}</td><td class="num"><b>${usd(t.f+t.v)}</b></td><td class="num">${bob(t.f+t.v)}</td></tr>`; };
+      const G=niv>2?_cosGastos():[];
       let body="";
       ["Operativo","Administrativo","Comercialización"].forEach(g=>{ const L=allF.filter(i=>i.tipo===g); if(!L.length) return;
-        const ab0=!cerr.has(g);
-        body+=fila("pnl-l0 pnl-parent",g,esc(g==="Comercialización"?"Comercialización (Marketing)":g).toUpperCase(),"",L,`<span class="pnl-caret ${ab0?"open":""}">▶</span>`,8);
-        if(!ab0) return;
+        body+=fila("pnl-l0 pnl-parent",0,esc(g==="Comercialización"?"Comercialización (Marketing)":g).toUpperCase(),"",L,car(0),8);
+        if(niv<1) return;
         const cs={}; L.forEach(i=>{ const c=i.centro||i.cat||"(Sin centro de costo)"; (cs[c]=cs[c]||[]).push(i); });
-        Object.entries(cs).sort((a,b)=>(tot(b[1]).f+tot(b[1]).v)-(tot(a[1]).f+tot(a[1]).v)).forEach(([c,M])=>{ const pid=g+"|"+c, ab1=abiertos.has(pid);
-          body+=fila("pnl-l1 pnl-parent",pid,esc(c),"",M,`<span class="pnl-caret ${ab1?"open":""}">▶</span>`,26);
-          if(ab1) M.slice().sort((a,b)=>(b.mFijoM+b.mVarM)-(a.mFijoM+a.mVarM)).forEach(i=>{ body+=fila("pnl-l2","",esc(i.prov||"–")+(i.con?" · "+esc(i.con):""),esc(i.frec+(i.fv?" · "+costoLabel(i.fv):"")+" · "+i.moneda),[i],`<span class="pnl-caret-none"></span>`,46); });
-        }); });
+        Object.entries(cs).sort((a,b)=>(tot(b[1]).f+tot(b[1]).v)-(tot(a[1]).f+tot(a[1]).v)).forEach(([c,M])=>{
+          body+=fila("pnl-l1 pnl-parent",1,esc(c),"",M,car(1),26);
+          if(niv<2) return;
+          M.slice().sort((a,b)=>(b.mFijoM+b.mVarM)-(a.mFijoM+a.mVarM)).forEach(i=>{
+            body+=fila("pnl-l2 pnl-parent",2,esc(i.prov||"–")+(i.con?" · "+esc(i.con):""),esc(i.frec+(i.fv?" · "+costoLabel(i.fv):"")+" · "+i.moneda),[i],car(2),46);
+            if(niv<3) return;
+            const P=G.filter(x=>_cosCoincide(i,x.txt)).sort((a,b)=>String(b.e.fecha||"").localeCompare(String(a.e.fecha||""))).slice(0,6);
+            body+=P.length?P.map(x=>`<tr class="pnl-row pnl-l3"><td style="padding-left:66px"><span class="pnl-caret-none"></span>${esc(String(x.e.fecha||"").slice(0,10))} · ${esc(x.e.con||x.ben||"")}${x.e.e&&!/pagad/i.test(x.e.e)?` <span class="tag">${esc(x.e.e)}</span>`:""}</td><td></td><td></td><td></td><td class="num">${usd(x.usd)}</td><td class="num">${bob(x.usd)}</td></tr>`).join("")
+              :`<tr class="pnl-row pnl-l3"><td colspan="6" style="padding-left:66px" class="mini">Sin pagos encontrados en Egresos para este costo</td></tr>`;
+          }); }); });
       const T=tot(allF);
-      cuerpo=`<div class="card"><div class="head"><h3>Lista de Costos agrupada</h3><span class="mini">clic en una fila para abrir o cerrar · montos llevados a base mensual</span></div>
+      cuerpo=`<div class="card"><div class="head"><h3>Lista de Costos agrupada</h3><span class="mini">clic en una fila para abrir o cerrar ese nivel completo (como el Estado de Resultados) · montos llevados a base mensual · al abrir un costo se ven sus últimos pagos</span></div>
         <div class="toolbar" style="align-items:center;margin-bottom:10px">${esearch("lcSearch","Buscar proveedor o concepto…",STATE.lcSearch)}${lcFB.bar}<div class="spacer"></div><button class="btn ghost" id="lcAbrirTodo">Abrir todo</button><button class="btn ghost" id="lcCerrarTodo">Cerrar todo</button></div>${lcFB.panel}
         <div class="tbl-scroll sticky-head" style="max-height:70vh"><table id="lcGrp"><thead><tr><th>Grupo ▸ Centro de costo ▸ Costo</th><th class="num">Costos</th><th class="num">Fijo /mes</th><th class="num">Variable /mes</th><th class="num tot">Total /mes</th><th class="num">BOB /mes</th></tr></thead>
         <tbody>${body||`<tr><td colspan="6">${emptyState("Sin costos con los filtros actuales.")}</td></tr>`}</tbody>
@@ -6106,10 +6131,10 @@ function renderCostos(){
     const si=$("#lcSearch"); if(si){ si.addEventListener("input",()=>{STATE.lcSearch=si.value;STATE._dynFocus="lcSearch";render();}); }
     fbWire("lcf", lcFilterDefs);
     document.querySelectorAll("#lcVista button").forEach(b=>b.addEventListener("click",()=>{ STATE.lcVista=b.dataset.v; render(); }));
-    document.querySelectorAll("#lcGrp tr[data-lcg]").forEach(tr=>tr.addEventListener("click",()=>{ const k=tr.dataset.lcg;
-      if(k.indexOf("|")<0){ const C=STATE.lcCerr; C.has(k)?C.delete(k):C.add(k); } else { const A=STATE.lcAbr; A.has(k)?A.delete(k):A.add(k); } render(); }));
-    const lat=$("#lcAbrirTodo"); if(lat) lat.addEventListener("click",()=>{ STATE.lcCerr=new Set(); STATE.lcAbr=new Set(items.map(i=>i.tipo+"|"+(i.centro||i.cat||"(Sin centro de costo)"))); render(); });
-    const lct=$("#lcCerrarTodo"); if(lct) lct.addEventListener("click",()=>{ STATE.lcCerr=new Set(["Operativo","Administrativo","Comercialización"]); STATE.lcAbr=new Set(); render(); });
+    document.querySelectorAll("#lcGrp tr[data-lcn]").forEach(tr=>tr.addEventListener("click",()=>{ const l=+tr.dataset.lcn;
+      STATE.lcNivel=(STATE.lcNivel>l)?l:l+1; render(); }));
+    const lat=$("#lcAbrirTodo"); if(lat) lat.addEventListener("click",()=>{ STATE.lcNivel=2; render(); });
+    const lct=$("#lcCerrarTodo"); if(lct) lct.addEventListener("click",()=>{ STATE.lcNivel=0; render(); });
     const la=$("#lcAdd"); if(la) la.addEventListener("click",()=>costoModal(null));
     document.querySelectorAll(".lc-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const it=items.find(i=>i._id===b.dataset.id); if(it) costoModal(it); }));
     document.querySelectorAll(".lc-cxp").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const it=items.find(i=>i._id===b.dataset.id); if(it) costoACxP(it); }));

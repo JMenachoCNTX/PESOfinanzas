@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V245";
+const APP_VERSION = "V246";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3640,7 +3640,7 @@ function renderResumen(){
       <div class="card"><div class="head"><h3>Gastos y costos por grupo</h3><span class="mini">para comparar ${annual?"año a año":"mes a mes"}</span></div>${grTbl(ggF,"Sin gastos.")}</div>`;
   } else if(tab==="caja"){
     // La caja es ACUMULADA desde el inicio (no depende del año elegido)
-    const {invTot,preTot,ingTot,egPaid,egSocios,devTot,caja,runway}=cajaEmpresa();
+    const {invTot,preTot,ingTot,egPaid,egSocios,devTot,caja,burn,runway}=cajaEmpresa();
     STATE._resPDF.caja={invTot,preTot,ingTot,egPaid,devTot,caja,runway};
     content=`<div class="card"><div class="head"><h3>Posición de caja</h3><span class="mini">referencial · acumulado desde el inicio</span></div>
         <div class="caja">

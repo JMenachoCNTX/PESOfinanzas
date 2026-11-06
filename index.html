@@ -1241,6 +1241,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
 .pr-in.pr-aj{border-color:var(--brand);box-shadow:inset 0 0 0 1px var(--brand)}
 .pr-tbl .pr-rst{padding:2px 6px;margin-left:4px}
 .pr-tbl tfoot td{border-top:2px solid var(--border);position:sticky;bottom:0;z-index:2;background:#235347;color:#fff}
+.pr-tbl tr.pr-cp>td{background:rgba(142,182,155,.13)}
 .pr-det{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 .pr-det:hover{color:var(--emerald)}
 .pr-tbl tr.pr-grp-t td{font-size:12.5px;color:var(--text);text-transform:none;letter-spacing:0}
@@ -1576,7 +1577,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V257";
+const APP_VERSION = "V258";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2572,6 +2573,10 @@ function presuDetalle(titulo,L){ const F=[...L].sort((a,b)=>String(b.fecha||"").
     <tbody>${F.map(x=>`<tr><td style="text-align:left;white-space:nowrap">${esc(String(x.fecha||"–").slice(0,10))}</td><td style="text-align:left">${esc(x.ben||"–")}</td><td style="text-align:left">${esc(x.con||"–")}</td><td style="text-align:left">${esc(x.tipo||"–")}</td><td class="num">${money(+x.imp||0,2)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td colspan="4" style="text-align:left"><b>Total (${F.length})</b></td><td class="num"><b>${money(t,2)}</b></td></tr></tfoot></table></div>`,860); }
 const _prDet=(n,i,v)=>`<td class="pr-det" data-o="${n}" data-i="${i}" title="Ver los pagos">${money(v)}</td>`;
+/* V258: los rubros del Presupuesto en español, juntando los que son lo mismo */
+const PR_RUBROS=[[/^people/,"Sueldos y bonos"],[/^otrosbeneficios/,"Beneficios sociales"],[/^(subscription|annualsub)/,"Suscripciones"],[/^(generaladmin|serviciode|mantenimiento|materialesysuministros)/,"Oficina"],
+  [/^profesionalservices/,"Servicios profesionales"],[/^viajes/,"Viajes y viáticos"],[/^otrosgastos/,"Otros gastos"],[/^plataformatecnologica/,"Plataforma tecnológica"],[/^publicidad/,"Publicidad digital"]];
+function prRubro(cp){ const t=String(cp||"").trim(), k=_cosClave(t), r=PR_RUBROS.find(x=>x[0].test(k)); if(r) return r[1]; return t===t.toUpperCase()?t.charAt(0)+t.slice(1).toLowerCase():t; }
 function presuWireModo(){ document.querySelectorAll("#prModo button").forEach(b=>b.addEventListener("click",()=>{ STATE.presuModo=b.dataset.m; render(); })); }
 function renderPresupuesto(pre){
   const app=$("#app"); if(!app) return; presuCargar();
@@ -2617,13 +2622,24 @@ function renderPresupuesto(pre){
   // V223: cada grupo se pliega/despliega y muestra su total
   if(!STATE.presuCerr) STATE.presuCerr=new Set();
   const GT={}; lista.forEach(o=>{ const g=GT[o.gr]||(GT[o.gr]={ref:[0,0,0],prom:0,lista:0,bud:0,pend:0,tot:0}); o.ref.forEach((v,i)=>g.ref[i]+=v); ["prom","lista","bud","pend","tot"].forEach(k=>g[k]+=o[k]); });
-  let gAnt=null; const filas=lista.map((o,n)=>{ const cerr=STATE.presuCerr.has(o.gr), g=GT[o.gr];
-    const head=o.gr!==gAnt?`<tr class="pr-grp pr-grp-t" data-gr="${esc(o.gr)}" style="cursor:pointer"><td style="text-align:left"><span class="pnl-caret ${cerr?"":"open"}">▶</span> <b>${esc(o.gr)}</b></td>${g.ref.map(v=>`<td>${v?money(v):""}</td>`).join("")}<td><b>${money(g.prom)}</b></td><td>${g.lista?money(g.lista):""}</td><td><b>${money(g.bud)}</b></td><td>${g.pend?money(g.pend):""}</td><td><b>${money(g.tot)}</b></td></tr>`:""; gAnt=o.gr;
-    if(cerr) return head;
-    return head+`<tr><td style="text-align:left">${esc(o.ca)}<span class="sub2">${esc(o.cp)}</span></td>
+  /* V258: Grupo ▸ rubro ▸ cuenta. Un rubro con varias cuentas se ve en una línea y se despliega con un clic. */
+  if(!STATE.presuCpAb) STATE.presuCpAb=new Set();
+  const cpDe=o=>prRubro(o.cp), cpId=o=>o.gr+"|"+cpDe(o);
+  const sumaFila=(t,lbl,cls,attr,pad,abierto)=>`<tr class="${cls}" ${attr} style="cursor:pointer"><td style="text-align:left;padding-left:${pad}px"><span class="pnl-caret ${abierto?"open":""}">▶</span> <b>${esc(lbl)}</b></td>${t.ref.map(v=>`<td>${v?money(v):""}</td>`).join("")}<td><b>${money(t.prom)}</b></td><td>${t.lista?money(t.lista):""}</td><td><b>${money(t.bud)}</b></td><td>${t.pend?money(t.pend):""}</td><td><b>${money(t.tot)}</b></td></tr>`;
+  const filaCa=(o,pad,sub)=>{ const n=lista.indexOf(o); return `<tr><td style="text-align:left;padding-left:${pad}px">${esc(o.ca)}${sub?`<span class="sub2">${esc(sub)}</span>`:""}</td>
       ${o.ref.map((v,i)=>v?_prDet(n,i,v):'<td><span class="zero">–</span></td>').join("")}<td><b>${money(o.prom)}</b></td><td>${o.lista?money(o.lista):'<span class="zero">–</span>'}</td>
       <td><input class="pr-in${o.aj?" pr-aj":""}" data-ca="${esc(o.ca)}" value="${Math.round(o.bud)}" inputmode="decimal" title="${o.aj?"Ajustado a mano":"Sugerido: promedio (o lo presupuestado si es mayor)"}">${o.aj?`<button class="btn ghost pr-rst" data-ca="${esc(o.ca)}" title="Volver al promedio">↻</button>`:""}</td>
-      ${o.pend?_prDet(n,"p",o.pend):'<td><span class="zero">–</span></td>'}<td><b>${money(o.tot)}</b></td></tr>`; }).join("");
+      ${o.pend?_prDet(n,"p",o.pend):'<td><span class="zero">–</span></td>'}<td><b>${money(o.tot)}</b></td></tr>`; };
+  const rango=g=>/^activo/i.test(g)?1:(/^sin clasificar/i.test(g)?2:(/^en la lista/i.test(g)?3:0));
+  const filas=[...new Set(lista.map(o=>o.gr))].sort((a,b)=>rango(a)-rango(b)).map(gr=>{ const cerr=STATE.presuCerr.has(gr);
+    let h=sumaFila(GT[gr],gr,"pr-grp pr-grp-t",`data-gr="${esc(gr)}" data-pid="${esc(gr)}"`,8,!cerr); if(cerr) return h;
+    const M=new Map(); lista.filter(o=>o.gr===gr).forEach(o=>{ const c=cpDe(o); if(!M.has(c)) M.set(c,[]); M.get(c).push(o); });
+    const suma=L=>{ const t={ref:[0,1,2].map(i=>L.reduce((a,o)=>a+o.ref[i],0))}; ["prom","lista","bud","pend","tot"].forEach(k=>t[k]=L.reduce((a,o)=>a+(+o[k]||0),0)); return t; };
+    [...M.entries()].map(([c,L])=>({c,L,t:suma(L)})).sort((a,b)=>b.t.tot-a.t.tot).forEach(({c,L,t})=>{
+      if(L.length===1){ h+=filaCa(L[0],26,c); return; }
+      const id=gr+"|"+c, ab=STATE.presuCpAb.has(id); h+=sumaFila(t,c,"pr-cp",`data-cp="${esc(id)}" data-pid="${esc(id)}"`,26,ab);
+      if(ab) L.forEach(o=>{ h+=filaCa(o,46); }); });
+    return h; }).join("");
   STATE._resPDF={tab:"presupuesto", year:STATE.year, cur:CUR, presu:{mes:MES[tMi]+" "+ty, ref:ref.map(x=>MES[x.mi].slice(0,3)+" "+String(x.g).slice(2)), lista:lista.map(o=>({gr:o.gr,ca:o.ca,ref:o.ref.slice(),prom:o.prom,lc:o.lista,bud:o.bud,pend:o.pend,tot:o.tot}))}};
   app.innerHTML=(pre||"")+`
     <div class="seg" id="prModo" style="margin-bottom:14px"><button data-m="armar" class="on">Armar presupuesto</button><button data-m="comparar">Comparar con lo gastado</button></div>
@@ -2639,9 +2655,9 @@ function renderPresupuesto(pre){
       ${kpi("Total que se necesita",money(T("tot")),"presupuesto + lo que ya se debe","#163832","=")}
       ${kpi("Promedio mensual real",money(T("prom")),"pagado en "+refTxt,"#8EB69B","≈")}
     </div>
-    <div class="card"><div class="head"><h3>Presupuesto de ${MES[tMi]} ${ty}</h3><span class="mini">${CUR} · los valores se pueden cambiar</span></div>
+    <div class="card"><div class="head"><h3>Presupuesto de ${MES[tMi]} ${ty}</h3><span class="mini">${CUR} · los valores se pueden cambiar</span><div class="spacer" style="flex:1"></div><button class="btn ghost" id="prAbrir">Abrir todo</button><button class="btn ghost" id="prCerrar">Cerrar todo</button></div>
       <p class="section-intro">La columna <b>Presupuesto</b> se llena sola con el <b>promedio de lo pagado</b> en ${refTxt} (o con lo <b>Presupuestado</b> registrado en Egresos si es mayor). Cámbiala si quieres ajustar algo: queda guardada para ese mes. Haz clic en el monto de un mes o de <b>Por pagar</b> para ver sus pagos. <b>Por pagar</b> son los egresos en estado <b>Pendiente</b> hasta ${MES[tMi]}. No incluye Traspasos Internos. <b>Lista de Costos</b> es solo para comparar: muestra lo esperado al mes según la Lista, en la cuenta donde más se le pagó a cada proveedor, y no cambia el Presupuesto.</p>
-      <div class="tbl-scroll sticky-head"><table class="pr-tbl"><thead><tr><th style="text-align:left">Cuenta</th>${ref.map(x=>`<th>${MES[x.mi].slice(0,3)} ${String(x.g).slice(2)}</th>`).join("")}<th>Promedio</th><th>Lista de Costos</th><th>Presupuesto</th><th>Por pagar</th><th>Total</th></tr></thead>
+      <div class="tbl-scroll sticky-head" id="prScroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Cuenta</th>${ref.map(x=>`<th>${MES[x.mi].slice(0,3)} ${String(x.g).slice(2)}</th>`).join("")}<th>Promedio</th><th>Lista de Costos</th><th>Presupuesto</th><th>Por pagar</th><th>Total</th></tr></thead>
       <tbody>${filas||`<tr><td colspan="9">${emptyState("No hay gastos pagados en los últimos 3 meses ni cuentas por pagar.")}</td></tr>`}</tbody>
       <tfoot><tr><td style="text-align:left"><b>Total</b></td>${[0,1,2].map(i=>`<td><b>${money(lista.reduce((s,o)=>s+o.ref[i],0))}</b></td>`).join("")}<td><b>${money(T("prom"))}</b></td><td><b>${money(T("lista"))}</b></td><td><b>${money(T("bud"))}</b></td><td><b>${money(T("pend"))}</b></td><td><b>${money(T("tot"))}</b></td></tr></tfoot></table></div>
     </div>`;
@@ -2649,7 +2665,10 @@ function renderPresupuesto(pre){
   document.querySelectorAll(".pr-det").forEach(td=>td.addEventListener("click",()=>{ const o=lista[+td.dataset.o], i=td.dataset.i, x=ref[+i];
     if(i==="p") presuDetalle(o.ca+" · por pagar",o.pendDet); else presuDetalle(o.ca+" · "+MES[x.mi]+" "+x.g,o.det[+i]); }));
   presuWireModo();
-  document.querySelectorAll(".pr-grp-t").forEach(tr=>tr.addEventListener("click",()=>{ const g=tr.dataset.gr; if(STATE.presuCerr.has(g)) STATE.presuCerr.delete(g); else STATE.presuCerr.add(g); render(); }));
+  document.querySelectorAll(".pr-grp-t").forEach(tr=>tr.addEventListener("click",()=>{ const g=tr.dataset.gr; if(STATE.presuCerr.has(g)) STATE.presuCerr.delete(g); else STATE.presuCerr.add(g); renderKeepScroll("#prScroll",g); }));
+  document.querySelectorAll(".pr-cp").forEach(tr=>tr.addEventListener("click",()=>{ const c=tr.dataset.cp, A=STATE.presuCpAb; if(A.has(c)) A.delete(c); else A.add(c); renderKeepScroll("#prScroll",c); }));
+  $("#prAbrir").addEventListener("click",()=>{ STATE.presuCerr.clear(); lista.forEach(o=>STATE.presuCpAb.add(cpId(o))); renderKeepScroll("#prScroll"); });
+  $("#prCerrar").addEventListener("click",()=>{ STATE.presuCpAb.clear(); renderKeepScroll("#prScroll"); });
   $("#prGuardar").addEventListener("click",()=>{ if(!NM_PRESU) return;
     const items={}; lista.forEach(o=>{ if(o.bud) items[o.ca]={gr:o.gr,cp:o.cp,bud:Math.round(o.bud/fx*100)/100}; });
     NM_PRESU.guardados=NM_PRESU.guardados||{};
@@ -2817,6 +2836,25 @@ function compLlenarForm(c){ const ia=(c&&c.ia)||{}; const set=(id,v)=>{ const e=
   const sg=compSugerir(c), cc=$("#f_cc"), hint=$("#f_ccSug");
   if(sg.ca&&cc&&!cc.value.trim()){ cc.value=sg.ca; cc.dataset.sug=""; if(hint){ hint.style.display=""; hint.textContent="💡 Sugerida "+(sg.src==="ia"?"por la IA":"por el sistema")+" · cámbiala si no es"; } try{ autoFillCuenta(); }catch(_){} }
   else egSugerirCA(); }
+/* V258: un comprobante de pago (transferencia o recibo, nunca una factura) contra las cuentas por pagar:
+   mismo monto y moneda, y el nombre del proveedor en el beneficiario o el concepto. */
+function compCxpDe(c){ const ia=(c&&c.ia)||{}, mo=+ia.monto||0; if(!mo||!/transferencia|recibo/i.test(ia.tipo_documento||"")) return null;
+  const pal=_normTxt(ia.proveedor||"").split(/[^a-z0-9]+/).filter(w=>w.length>=3&&!/^(srl|ltda|sociedad|banco|pago|peso|los|las|del)$/.test(w)); if(!pal.length) return null;
+  const L=(STATE.egresos||[]).filter(e=>e._id&&e._raw&&/pendiente/i.test(e.e||"")&&String(e.moneda||"USD").toUpperCase()===String(ia.moneda||"USD").toUpperCase()&&Math.abs((+e.impOrig||0)-mo)<=Math.max(0.5,mo*0.005)&&pal.some(w=>_normTxt((e.ben||"")+" "+(e.con||"")).indexOf(w)>=0));
+  return L.length?{e:L[0],unico:L.length===1}:null; }
+function compCxpCuenta(c,e){ const ia=(c&&c.ia)||{}; return String((e&&e._raw&&e._raw.tipodepago)||(compCidreDe(c)?"CIDRE - Peso Liquidez":"")||ia.banco_origen||"").trim(); }
+function compCxpCerrar(c,e,fecha,cuenta){ c.estado="registrado"; c.registrado=new Date().toISOString(); c.egreso={fecha, con:e._raw.concepto||e.con, imp:e._raw.importe, ben:e._raw.beneficiario||e.ben}; return compGuardarLista(); }
+/* Marca solo lo seguro: una única cuenta que coincide, con fecha y cuenta de pago conocidas. Lo demás queda con su botón en la Bandeja. */
+async function compCxpAuto(){ if(STATE._compCxpAuto||!STATE.egFB||!nmFbActivo()) return; STATE._compCxpAuto=true; const hechos=[];
+  try{ for(const c of (STATE.comps||[]).filter(x=>x.estado==="pendiente")){ const m=compCxpDe(c); if(!m||!m.unico) continue;
+      const e=m.e, f=String((c.ia||{}).fecha||"").slice(0,10), cta=compCxpCuenta(c,e); if(!/^\d{4}-\d{2}-\d{2}$/.test(f)||!cta) continue;
+      const cambios={estado:"Pagado", fechadepago:f, tipodepago:cta, pagadopor:(c.ia||{}).pagado_por||e._raw.pagadopor||""};
+      if(!e._raw.fechadecontabilizacion) cambios.fechadecontabilizacion=e._raw.fechadepago||f;
+      await egresoActualizar(e._id, cambios, false); await compCxpCerrar(c,e,f,cta); hechos.push(e.ben||e.con);
+      compAvisarSlack(c,"Cuenta por pagar marcada como pagada",(e.ben||e.con||"")+" · "+f); } }
+  catch(err){ console.error("comprobante a cuenta por pagar",err); }
+  STATE._compCxpAuto=false;
+  if(hechos.length){ STATE._slackMsg="Marcado como pagado por su comprobante: "+hechos.join(", "); if(STATE.section==="comprobantes"&&!compEscribiendo()) render(); } }
 function compMarcarRegistrado(datos){ const id=STATE._compReg; if(!id) return; const c=(STATE.comps||[]).find(x=>x.id===id); if(!c) return;
   c.estado="registrado"; c.registrado=new Date().toISOString(); c.egreso={fecha:datos.fechaPago, con:datos.concepto, imp:datos.importe, ben:datos.beneficiario};
   STATE._compReg=null; compGuardarLista();
@@ -2844,7 +2882,7 @@ document.addEventListener("change",ev=>{ if(!ev.target||ev.target.id!=="egCompFi
 function compRevisarSlack(forzar){
   if(!nmFbActivo()) return; const ahora=Date.now(); if(!forzar && STATE._slackChk && ahora-STATE._slackChk<120000) return; STATE._slackChk=ahora;
   STATE._slackMsg="Revisando Slack…"; if(STATE.section==="comprobantes") render();
-  const releer=(txt)=>NMFB.histGet("comprobantes").then(L=>{ STATE.comps=L||[]; STATE._compIdx=null; STATE._slackMsg=txt; if(STATE.section==="comprobantes"&&!compEscribiendo()) render(); }).catch(()=>{ STATE._slackMsg=txt; });
+  const releer=(txt)=>NMFB.histGet("comprobantes").then(L=>{ STATE.comps=L||[]; STATE._compIdx=null; STATE._slackMsg=txt; if(STATE.section==="comprobantes"&&!compEscribiendo()) render(); compCxpAuto(); }).catch(()=>{ STATE._slackMsg=txt; });
   let pin=compPin(); if(!pin||!(window.google&&google.script&&google.script.run)){ releer(""); return; }
   google.script.run.withSuccessHandler(r=>{ const hora=new Date().toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit"});
       releer(r&&r.ok?("Slack revisado a las "+hora+(r.nuevos?" · "+r.nuevos+" comprobante(s) nuevo(s)":" · sin novedades")+(r.ignorados?" · "+r.ignorados+" archivo(s) que la IA no consideró comprobante":"")):(r&&/no permitida/i.test(r.error||"")?"":"Slack: "+((r&&r.error)||"sin respuesta"))); })
@@ -3027,7 +3065,7 @@ function renderComprobantes(){
       <td class="num">${ia.monto!=null&&ia.monto!==""?esc((ia.moneda||"")+" "+f2(+ia.monto)):"–"}</td>
       <td><span class="tag">${c.origen==="slack"?"Slack":(c.origen==="slack-chat"?"Slack (mensaje)":(c.origen==="billing"?"Billing":"Sistema"))}</span></td>
       <td>${c.estado==="registrado"?'<span class="st activo">Registrado</span>':(c.estado==="descartado"?'<span class="st inactivo">Descartado</span>':'<span class="st bob">Pendiente</span>')}</td>
-      <td><span class="ta-acts">${c.driveId?`<button class="btn ghost cp-ver" data-id="${c.id}">Ver</button>`:""}${c.estado==="pendiente"?`<button class="btn ghost cp-iaca" data-id="${c.id}" title="La IA lee el comprobante, tu explicación y CIDRE, y elige la cuenta">✦ Cuenta</button>`:""}${c.estado!=="registrado"?`<button class="btn primary cp-reg" data-id="${c.id}" title="Crear un gasto nuevo con estos datos">Registrar</button><button class="btn ghost cp-adj" data-id="${c.id}" title="Unirlo a un pago que ya existe (factura, contrato, etc.)">Adjuntar a pago</button>`:""}${c.driveId?`<button class="btn ghost cp-ia" data-id="${c.id}" title="Volver a leer con la IA">↻ IA</button>`:""}${c.estado==="pendiente"?`<button class="btn ghost cp-desc" data-id="${c.id}" title="Descartar">✕</button>`:""}</span></td></tr>`; }).join("");
+      <td><span class="ta-acts">${c.driveId?`<button class="btn ghost cp-ver" data-id="${c.id}">Ver</button>`:""}${c.estado==="pendiente"?`<button class="btn ghost cp-iaca" data-id="${c.id}" title="La IA lee el comprobante, tu explicación y CIDRE, y elige la cuenta">✦ Cuenta</button>`:""}${c.estado==="pendiente"&&compCxpDe(c)?`<button class="btn primary cp-cxp" data-id="${c.id}" title="Coincide con una cuenta por pagar: ${esc(compCxpDe(c).e.ben||compCxpDe(c).e.con||"")}">✓ Pagar cuenta pendiente</button>`:""}${c.estado!=="registrado"?`<button class="btn primary cp-reg" data-id="${c.id}" title="Crear un gasto nuevo con estos datos">Registrar</button><button class="btn ghost cp-adj" data-id="${c.id}" title="Unirlo a un pago que ya existe (factura, contrato, etc.)">Adjuntar a pago</button>`:""}${c.driveId?`<button class="btn ghost cp-ia" data-id="${c.id}" title="Volver a leer con la IA">↻ IA</button>`:""}${c.estado==="pendiente"?`<button class="btn ghost cp-desc" data-id="${c.id}" title="Descartar">✕</button>`:""}</span></td></tr>`; }).join("");
   app.innerHTML=`
     <div class="card"><div class="head"><h3>Subir comprobantes</h3><span class="mini">se guardan en Google Drive · la IA lee los datos</span></div>
       <label class="comp-drop" id="cpDrop"><input type="file" id="cpFiles" accept="image/*,application/pdf" multiple hidden>
@@ -3041,7 +3079,7 @@ function renderComprobantes(){
     for(let i=0;i<files.length;i++){ STATE._compSubiendo="Subiendo y leyendo "+(i+1)+" de "+files.length+": "+files[i].name+"…"; render();
       try{ const r=await compSubirUno(files[i]); STATE.comps=(STATE.comps||[]).concat([compNuevo(r,"sistema")]); await compGuardarLista(); }
       catch(e){ alert("No se pudo subir «"+files[i].name+"»: "+((e&&e.message)||e)); } }
-    STATE._compSubiendo=""; STATE.compFiltro="pendiente"; render(); };
+    STATE._compSubiendo=""; STATE.compFiltro="pendiente"; render(); compCxpAuto(); };
   $("#cpFiles").addEventListener("change",ev=>{ const fs=ev.target.files; subir(fs); });
   const dz=$("#cpDrop"); ["dragover","dragenter"].forEach(t=>dz.addEventListener(t,e=>{ e.preventDefault(); dz.classList.add("on"); })); ["dragleave","drop"].forEach(t=>dz.addEventListener(t,e=>{ e.preventDefault(); dz.classList.remove("on"); }));
   dz.addEventListener("drop",e=>subir(e.dataTransfer.files));
@@ -3058,6 +3096,7 @@ function renderComprobantes(){
   document.querySelectorAll(".cp-ver").forEach(b=>b.addEventListener("click",()=>compVer(C(b.dataset.id))));
   document.querySelectorAll(".cp-reg").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); abrirFormEgreso(); const m=$("#egCompMsg"); if(m) m.textContent="Datos leídos del comprobante · revisa y completa"; compLlenarForm(c); }));
   document.querySelectorAll(".cp-adj").forEach(b=>b.addEventListener("click",()=>compAdjuntarAPago(C(b.dataset.id))));
+  document.querySelectorAll(".cp-cxp").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id), m=compCxpDe(c); if(m) cxpPagarModal(m.e,c); }));
   document.querySelectorAll(".cp-desc").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); if(!c||!confirm("¿Descartar este comprobante? (queda en Drive)")) return; c.estado="descartado"; compGuardarLista().then(render); }));
   document.querySelectorAll(".cp-ia").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); if(!c) return; b.textContent="Leyendo…"; b.disabled=true;
     // V195: si Gemini está ocupado, se reintenta solo hasta 3 veces
@@ -4191,7 +4230,7 @@ function asigBaseIndex(){
   const src=STATE.asignacion||[];
   if(STATE._abSrc===src && STATE._abIdx) return STATE._abIdx;
   const m={};
-  src.forEach(r=>{ const k=_normTxt(r.texto); if(!k) return; if(!(k in m) && String(r.ca||"").trim()) m[k]=String(r.ca).trim(); });
+  src.forEach(r=>{ const k=_normTxt(r.texto); if(!k) return; if(!(k in m) && String(r.ca||"").trim() && !/^falta$/i.test(String(r.ca).trim())) m[k]=String(r.ca).trim(); });   // V258: «Falta» era un aviso, no una cuenta
   STATE._abSrc=src; STATE._abIdx=m; return m;
 }
 // Índice de correcciones manuales: (fuente\u0000huella) -> ca
@@ -5800,7 +5839,7 @@ function provPagoModal(nombre, alGuardar){
   };
   return ov;
 }
-function cxpPagarModal(e){
+function cxpPagarModal(e,comp){
   if(!e||!e._id||!e._raw) return alert("No se encontró el gasto.");
   poblarDatalists();
   const R=e._raw, hoy=new Date().toISOString().slice(0,10), mon=String(R.moneda||"USD").toUpperCase();
@@ -5818,6 +5857,7 @@ function cxpPagarModal(e){
   const pintarDatos=()=>{ const box=ov.querySelector("#cpgDatos"); box.innerHTML=provPagoHTML(provPagoDe(e.ben), e.ben);
     const ed=box.querySelector("[data-dp-edit]"); if(ed) ed.onclick=()=>provPagoModal(e.ben, ()=>pintarDatos()); };
   pintarDatos();
+  if(comp){ const ia=comp.ia||{}, f0=String(ia.fecha||"").slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(f0)) ov.querySelector("#cpgFecha").value=f0; ov.querySelector("#cpgCuenta").value=compCxpCuenta(comp,e); if(ia.pagado_por&&!R.pagadopor) ov.querySelector("#cpgPor").value=ia.pagado_por; ov.querySelector("#cpgFileBtn").parentElement.parentElement.style.display="none"; }
   let archivo=null; const fi=ov.querySelector("#cpgFile");
   ov.querySelector("[data-cerrar2]").onclick=()=>ov.remove();
   ov.querySelector("#cpgFileBtn").onclick=()=>fi.click();
@@ -5835,6 +5875,7 @@ function cxpPagarModal(e){
       const cambios={estado:"Pagado", fechadepago:f, tipodepago:cta, pagadopor:por};
       if(!R.fechadecontabilizacion) cambios.fechadecontabilizacion=R.fechadepago||f;   // el gasto se sigue contando en el mes de la factura
       await egresoActualizar(e._id, cambios, false);
+      if(comp){ await compCxpCerrar(comp,e,f,cta); compAvisarSlack(comp,"Cuenta por pagar marcada como pagada",(e.ben||e.con||"")+" · "+f); }
       ov._msg("Pago registrado ✓ Ya no figura en Cuentas por pagar.",true); setTimeout(()=>{ ov.remove(); render(); },900);
     }catch(err){ b.disabled=false; b.textContent="Confirmar pago"; ov._msg("No se pudo guardar: "+((err&&err.message)||err)); }
   };

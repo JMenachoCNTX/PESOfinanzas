@@ -33,7 +33,7 @@ Incluye un widget para iPhone (app Scriptable) con un resumen.
   quedó de respaldo y ya NO se escribe; caché en localStorage `nm_eg_cache_v1`, solo baja lo cambiado por `_act`),
   `usuarios` (correo = ID, con clave y rol), `sesiones`, `claves` (formato antiguo), `config/*`
   (apps = PIN del servidor, widget, presupuesto, plan de cuentas, tipo de cambio, históricos `config/h_*`…),
-  `tareas`, `asignacionManual`.
+  `tareas`, `asignacionManual`, `config/distribuir` (V263: pagos de BitGo y Mercury repartidos en varios meses).
 - Ingreso: Firebase anónimo + correo y clave validados por las reglas.
 
 ## Cómo se publica

@@ -1237,6 +1237,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
 /* ===== V180: Presupuesto ===== */
 .alt-m{display:block;font-size:10px;font-weight:400;font-style:normal;opacity:.65;line-height:1.2;margin-top:1px;white-space:nowrap}
 .kpi .val .alt-m{font-size:12px;margin-top:3px}
+.pr-pago{cursor:pointer}.pr-pago:hover td{background:rgba(142,182,155,.18)}.pr-lc{cursor:pointer}.pr-lc:hover{color:var(--emerald)}
 .pr-tbl td,.pr-tbl th{white-space:nowrap}
 .pr-tbl tr.pr-grp td{background:var(--field);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .pr-in{width:110px;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--field);color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
@@ -1580,7 +1581,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V262";
+const APP_VERSION = "V263";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1892,12 +1893,20 @@ function rendicionCard(inTot,outTot,fondeo,subRows,subLabel,periodo){
   return `<div class="card"><div class="head"><h3>Rendición de la cuenta</h3><span class="mini">Entradas, salidas y saldo · todos los movimientos${periodo?(" · "+periodo):""}</span></div>${kpis}${tblH}</div>`;
 }
 /* ---------- P&L unificado (Egresos + BitGo + Mercury), solo lo clasificado ---------- */
+/* V263: pagos de BitGo y Mercury repartidos en varios meses (config/distribuir). En Egresos se usa «Meses a distribuir». */
+let NM_DIST={};
+const distDe=(fuente,hu)=>NM_DIST[fuente+"\u0000"+hu]||null;
 function pnlRows(allYears){
   const out=[]; const yOk=g=>allYears||STATE.year==="__all"||g===STATE.year; const S=v=>String(v==null?"":v).trim();
   const bobOf=(usd,fecha)=>{ const r=tcRateFor(fecha); return r? usd*r : usd*(RATE||0); };
   // usd = monto en USD;  bob = monto en BOB al TC del DÍA del pago (histórico). imp = moneda activa.
-  let _det=null; // V257: el pago que origina cada fila, para verlo en el Presupuesto
-  const add=(cuenta,grupo,subg,cp,ca,usd,bob,m,g,src)=>{ cuenta=S(cuenta);grupo=S(grupo);subg=S(subg);cp=S(cp);ca=S(ca);
+  let _det=null, _dist=null; // V257: el pago que origina cada fila, para verlo en el Presupuesto
+  const add=(cuenta,grupo,subg,cp,ca,usd,bob,m,g,src)=>{
+    if(_dist){ const D=_dist; if((STATE.resBase||"devengado")==="caja"){ if(!yOk(g)) return; }
+      else { const [y0,m0]=D.desde.split("-").map(Number), d0=_det; _dist=null;
+        for(let k=0;k<D.n;k++){ const t=m0-1+k, yy=y0+Math.floor(t/12), mi=t%12; if(!yOk(yy)) continue; _det=Object.assign({},d0,{_slice:k+1,_nslice:D.n}); add(cuenta,grupo,subg,cp,ca,(+usd||0)/D.n,bob==null?null:(+bob||0)/D.n,MONTHS[mi],yy,src); }
+        _det=d0; _dist=D; return; } }
+    cuenta=S(cuenta);grupo=S(grupo);subg=S(subg);cp=S(cp);ca=S(ca);
     if(!cuenta||!grupo||!subg||!cp||!ca) return; // requiere los 5 niveles asignados
     if(/^activo/i.test(cuenta) && !STATE._pnlSoloPagado && !STATE._pnlConActivos) return; // V252: comprar un activo no es gasto del P&L (sí sale de Caja y de Egresos)
     if(!STATE.clasifHoja && esTraspasoNiv(cuenta,grupo,subg,cp,ca)) return; // V181: Traspasos Internos nunca son ingreso ni gasto
@@ -1919,10 +1928,10 @@ function pnlRows(allYears){
   // BitGo: si existe la columna "Contabilizado?", EGRESO sólo cuando dice "SI"
   // (traspasos internos/fondeo y demás quedan FUERA del Estado de Resultados).
   // Si esa columna aún no existe, se mantiene el criterio anterior por signo (salida<0).
-  if(bAmt && showLLC()) (bg.rows||[]).forEach(r=>{ const v=toNum(r[bAmt]); const tok=bCont?contabTok(r[bCont]):null;
+  if(bAmt && showLLC()) (bg.rows||[]).forEach(r=>{ _dist=distDe("BitGo",r._hu); const v=toNum(r[bAmt]); const tok=bCont?contabTok(r[bCont]):null;
     const esEgreso = bCont ? (tok==="si") : (v<0);
     if(!esEgreso) return; const usd=Math.abs(v); if(!usd) return;
-    const d=bDate?_fd(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const m=(d&&!isNaN(d))?MONTHS[d.getMonth()]:null; const iso=bDate?gdUS(r[bDate]).iso:null; _det={fecha:iso,ben:"BitGo",con:(bCon2&&r[bCon2])||(bCon&&r[bCon])||"",tipo:"BitGo"};
+    const d=bDate?_fd(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)&&!_dist) return; const m=(d&&!isNaN(d))?MONTHS[d.getMonth()]:null; const iso=bDate?gdUS(r[bDate]).iso:null; _det={fecha:iso,ben:"BitGo",con:(bCon2&&r[bCon2])||(bCon&&r[bCon])||"",tipo:"BitGo",fuente:"BitGo",hu:r._hu};
     let cu=bCu&&r[bCu], gr=bGr&&r[bGr], sg=bSg&&r[bSg], cp=bCP&&r[bCP], ca=bCA&&r[bCA];
     if(!_cH){ const a=ancGeneric(resolveGeneric("BitGo", r._hu, (bCon2&&r[bCon2]), ca), {kcuenta:cu,grupoc:gr,ksubgrupo:sg,cp:cp}); cu=a.kcuenta; gr=a.grupoc; sg=a.ksubgrupo; cp=a.cp; ca=a.ca; }
     if(S(cu)&&S(gr)&&S(sg)&&S(cp)&&S(ca)){ add(cu,gr,sg,cp,ca, usd, bobOf(usd,iso), m, g, "BitGo"); }
@@ -1932,7 +1941,8 @@ function pnlRows(allYears){
   // "CashBack" → INGRESO; traspasos internos y "No Corresponde" quedan FUERA del P&L.
   // Si esa columna aún no existe, se mantiene el criterio anterior por signo (salida<0).
   const mHasContab=(STATE.mercury||[]).some(r=> String(r.contab==null?"":r.contab).trim()!=="");
-  if(showLLC()) (STATE.mercury||[]).forEach(r=>{ if(!yOk(r.g)) return; const m=(r.mi>=0)?MONTHS[r.mi]:null; const usd=Math.abs(+r.monto||0); if(!usd) return; _det={fecha:r.fecha,ben:r.desc||r.bankdesc||"Mercury",con:r.bankdesc||"",tipo:"Mercury"};
+  _dist=null;
+  if(showLLC()) (STATE.mercury||[]).forEach(r=>{ _dist=distDe("Mercury",r._hu); if(!yOk(r.g)&&!_dist) return; const m=(r.mi>=0)?MONTHS[r.mi]:null; const usd=Math.abs(+r.monto||0); if(!usd) return; _det={fecha:r.fecha,ben:r.desc||r.bankdesc||"Mercury",con:r.bankdesc||"",tipo:"Mercury",fuente:"Mercury",hu:r._hu};
     const tok=r.ctok||contabTok(r.contab);
     if(mHasContab){
       if(tok==="si"){
@@ -1950,7 +1960,7 @@ function pnlRows(allYears){
       else { const con=(r.desc&&S(r.desc))||(r.bankdesc&&S(r.bankdesc))||"(sin concepto)"; add("Bancos","Mercury","Sin clasificar", con, "(movimiento)", usd, bobOf(usd,r.fecha), m, r.g, "Mercury"); }
     }
   });
-  _det=null;
+  _det=null; _dist=null;
   const it=STATE.ingresosTab||{cols:[],rows:[]}, ic=it.cols||[];
   const iAmt=find(ic,"importe","monto","amount","montousd","importeusd","total"), iDate=find(ic,"fecha","date","fechadepago"),
         iCu=find(ic,"cuenta"), iGr=find(ic,"grupo"), iSg=find(ic,"subgrupo"), iCP=find(ic,"cuentaprincipal"), iCA=find(ic,"cuentaanalitica");
@@ -2547,7 +2557,7 @@ function renderPresuComparar(pre, mopts, MES){
   const snap=G[STATE.presuCmp], [ty,tm]=STATE.presuCmp.split("-").map(Number), tMi=tm-1;
   let rows=[]; const sv={base:STATE.resBase,year:STATE.year}; try{ STATE._pnlSoloPagado=true; STATE.year="__all"; rows=pnlRows(true); } finally { STATE.resBase=sv.base; STATE.year=sv.year; STATE._pnlSoloPagado=false; }
   const fx=CUR==="BOB"?(RATE||1):1, fxA=CUR==="BOB"?1:(RATE||1), real={};
-  rows.filter(r=>!r.income&&!r.dato&&r.g===ty&&monthIdx(r.m)===tMi&&!/traspaso/i.test(r.grupo+" "+r.subg+" "+r.cp+" "+r.ca)).forEach(r=>{ const k=r.ca||"(sin cuenta)"; const o=real[k]||(real[k]={gr:r.grupo||"(sin grupo)",cp:r.cp||"",v:0,a:0,det:[]}); o.v+=+r.imp||0; o.a+=+r.alt||0; if(r.det) o.det.push(Object.assign({},r.det,{imp:r.imp,alt:r.alt})); });
+  rows.filter(r=>!r.income&&!r.dato&&r.g===ty&&monthIdx(r.m)===tMi&&!/traspaso/i.test(r.grupo+" "+r.subg+" "+r.cp+" "+r.ca)).forEach(r=>{ const k=r.ca||"(sin cuenta)"; const o=real[k]||(real[k]={gr:r.grupo||"(sin grupo)",cp:r.cp||"",v:0,a:0,det:[]}); o.v+=+r.imp||0; o.a+=+r.alt||0; if(r.det) o.det.push(Object.assign({},r.det,{imp:r.imp,alt:r.alt,ca:r.ca})); });
   const L={}; Object.entries(snap.items||{}).forEach(([ca,o])=>{ L[ca]={ca,gr:o.gr,cp:o.cp,bud:(+o.bud||0)*fx,budA:(+o.bud||0)*fxA,real:0,realA:0,det:[]}; });
   Object.entries(real).forEach(([ca,o])=>{ const x=L[ca]||(L[ca]={ca,gr:o.gr,cp:o.cp,bud:0,budA:0,real:0,realA:0,det:[]}); x.real+=o.v; x.realA+=o.a; x.det=o.det; });
   const lista=Object.values(L).sort((a,b)=>String(a.gr).localeCompare(String(b.gr))||b.real-a.real);
@@ -2575,9 +2585,36 @@ function renderPresuComparar(pre, mopts, MES){
 }
 /* V257: los pagos detrás de una cifra del Presupuesto, sin salir a Egresos */
 function presuDetalle(titulo,L){ const F=[...L].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||""))), t=F.reduce((s,x)=>s+(+x.imp||0),0), tA=F.reduce((s,x)=>s+(+x.alt||0),0);
-  rhModal(esc(titulo),`<div class="tbl-scroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Fecha</th><th style="text-align:left">Beneficiario</th><th style="text-align:left">Concepto</th><th style="text-align:left">Pagado desde</th><th>Monto</th></tr></thead>
-    <tbody>${F.map(x=>`<tr><td style="text-align:left;white-space:nowrap">${esc(String(x.fecha||"–").slice(0,10))}</td><td style="text-align:left">${esc(x.ben||"–")}</td><td style="text-align:left">${esc(x.con||"–")}${x._nslice>1?` <span class="mini">· parte ${x._slice} de ${x._nslice}</span>`:""}</td><td style="text-align:left">${esc(x.tipo||"–")}</td><td class="num">${p2(+x.imp||0,x.alt)}</td></tr>`).join("")}</tbody>
-    <tfoot><tr><td colspan="4" style="text-align:left"><b>Total (${F.length})</b></td><td class="num"><b>${p2(t,tA)}</b></td></tr></tfoot></table></div>`,860); }
+  const ov=rhModal(esc(titulo),`<p class="mini" style="margin:0 0 8px">Haz clic en un pago para abrirlo y editarlo.</p><div class="tbl-scroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Fecha</th><th style="text-align:left">Beneficiario</th><th style="text-align:left">Concepto</th><th style="text-align:left">Pagado desde</th><th>Monto</th></tr></thead>
+    <tbody>${F.map((x,n)=>`<tr${x._id||x.fuente?` class="pr-pago" data-n="${n}" title="Abrir este pago"`:""}><td style="text-align:left;white-space:nowrap">${esc(String(x.fecha||"–").slice(0,10))}</td><td style="text-align:left">${esc(x.ben||"–")}</td><td style="text-align:left">${esc(x.con||"–")}${x._nslice>1?` <span class="mini">· parte ${x._slice} de ${x._nslice}</span>`:""}</td><td style="text-align:left">${esc(x.tipo||"–")}</td><td class="num">${p2(+x.imp||0,x.alt)}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td colspan="4" style="text-align:left"><b>Total (${F.length})</b></td><td class="num"><b>${p2(t,tA)}</b></td></tr></tfoot></table></div>`,860);
+  ov.querySelectorAll(".pr-pago").forEach(tr=>tr.addEventListener("click",()=>{ const x=F[+tr.dataset.n];
+    if(x._id){ const e=(STATE.egresos||[]).find(q=>q._id===x._id); if(e){ ov.remove(); abrirFormEgreso(e); } }
+    else if(x.fuente){ ov.remove(); pagoBancoModal(x); } })); }
+/* V263: un pago de BitGo o Mercury: cambiar su cuenta y repartirlo en varios meses */
+function pagoBancoModal(x){ const d=distDe(x.fuente,x.hu)||{}, adm=nmFbActivo()&&NMFB.esAdmin();
+  const ov=rhModal("Pago de "+esc(x.fuente),`<p class="mini" style="margin:0 0 12px">${esc(String(x.fecha||"").slice(0,10))} · ${esc(x.ben||x.con||"")} · ${pMoney(+x.imp||0)}${x._nslice>1?" (esta parte)":""}</p>
+    <div class="us-form" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+      <div style="grid-column:1/-1"><label>Cuenta analítica</label><input id="pbCa" list="pbCaL" value="${esc(x.ca||"")}" autocomplete="off"><datalist id="pbCaL">${caMasterList().map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
+      <div><label>Primer mes que cubre</label><input type="month" id="pbDesde" value="${esc(d.desde||String(x.fecha||"").slice(0,7))}"></div>
+      <div><label>Meses a distribuir</label><input type="number" id="pbN" min="1" max="60" step="1" value="${d.n||1}"></div>
+    </div>
+    <p class="mini">Con 1 mes el pago queda entero en su fecha. El reparto se ve en la vista Devengado; en Caja sigue entero.</p>
+    <div class="modal-actions"><button class="btn" data-cerrar2>Cancelar</button><button class="btn primary" id="pbGuardar"${adm?"":" disabled"}>Guardar</button></div>`,520);
+  ov.querySelector("[data-cerrar2]").onclick=()=>ov.remove();
+  ov.querySelector("#pbGuardar").onclick=async()=>{ const b=ov.querySelector("#pbGuardar"), n=Math.floor(+ov.querySelector("#pbN").value||1), desde=ov.querySelector("#pbDesde").value, ca=ov.querySelector("#pbCa").value.trim();
+    if(n<1||n>60) return ov._msg("Escribe entre 1 y 60 meses."); if(n>1&&!/^\d{4}-\d{2}$/.test(desde)) return ov._msg("Elige el primer mes que cubre el pago.");
+    const k=x.fuente+"\u0000"+x.hu, nuevo=Object.assign({},NM_DIST); if(n>1) nuevo[k]={fuente:x.fuente,huella:x.hu,n,desde}; else delete nuevo[k];
+    b.disabled=true; b.textContent="Guardando…";
+    try{ await NMFB.cfgSet("distribuir",{items:Object.values(nuevo)}); NM_DIST=nuevo;
+      if(ca&&ca!==x.ca){ await NMFB.asigGuardar([{fuente:x.fuente,huella:x.hu,ca}]); STATE.asigManual=(STATE.asigManual||[]).filter(r=>!(String(r.fuente)===x.fuente&&String(r.huella)===String(x.hu))).concat([{fuente:x.fuente,huella:x.hu,ca}]); STATE._amSrc=null; STATE._amIdx=null; }
+      ov.remove(); render(); }
+    catch(e){ b.disabled=false; b.textContent="Guardar"; ov._msg("No se pudo guardar: "+((e&&e.message)||e)); } }; }
+/* V263: los costos de la Lista que forman la cifra de una cuenta */
+function presuLista(o){ const L=o.listaDet||[]; if(L.length===1) return costoModal(L[0].it);
+  const ov=rhModal(esc(o.ca)+" · Lista de Costos",`<p class="mini" style="margin:0 0 8px">Haz clic en un costo para editarlo.</p><div class="tbl-scroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Proveedor</th><th style="text-align:left">Concepto</th><th style="text-align:left">Frecuencia</th><th>Al mes</th></tr></thead>
+    <tbody>${L.map((x,n)=>`<tr class="pr-pago" data-n="${n}"><td style="text-align:left">${esc(x.it.prov||"–")}</td><td style="text-align:left">${esc(x.it.con||"–")}</td><td style="text-align:left">${esc(x.it.frec||"–")}</td><td class="num">${p2(x.v,x.vA)}</td></tr>`).join("")}</tbody></table></div>`,720);
+  ov.querySelectorAll(".pr-pago").forEach(tr=>tr.addEventListener("click",()=>{ ov.remove(); costoModal(L[+tr.dataset.n].it); })); }
 const _prDet=(n,i,v,a)=>`<td class="pr-det" data-o="${n}" data-i="${i}" title="Ver los pagos">${p2(v,a)}</td>`;
 /* V258: los rubros del Presupuesto en español, juntando los que son lo mismo */
 const PR_RUBROS=[[/^people/,"Sueldos y bonos"],[/^otrosbeneficios/,"Beneficios sociales"],[/^(subscription|annualsub)/,"Suscripciones"],[/^(generaladmin|serviciode|mantenimiento|materialesysuministros)/,"Oficina"],
@@ -2598,15 +2635,15 @@ function renderPresupuesto(pre){
   const esTraspaso=r=>/traspaso/i.test(r.grupo+" "+r.subg+" "+r.cp+" "+r.ca);
   const inRef=r=>ref.some(x=>x.g===r.g && x.mi===monthIdx(r.m));
   const L={}; const key=(gr,cp,ca)=>gr+"\u0000"+cp+"\u0000"+ca;
-  const get=(gr,cp,ca)=>L[key(gr,cp,ca)]||(L[key(gr,cp,ca)]={gr,cp,ca,ref:[0,0,0],refA:[0,0,0],det:[[],[],[]],pend:0,pendA:0,pendDet:[],presu:0,presuA:0,lista:0,listaA:0,sinPago:0,sinPagoA:0});
-  rows.filter(r=>!r.income && !r.dato && !esTraspaso(r) && inRef(r)).forEach(r=>{ const o=get(r.grupo,r.cp,r.ca); const i=ref.findIndex(x=>x.g===r.g&&x.mi===monthIdx(r.m)); o.ref[i]+=(+r.imp||0); o.refA[i]+=(+r.alt||0); if(r.det) o.det[i].push(Object.assign({},r.det,{imp:r.imp,alt:r.alt})); });
+  const get=(gr,cp,ca)=>L[key(gr,cp,ca)]||(L[key(gr,cp,ca)]={gr,cp,ca,ref:[0,0,0],refA:[0,0,0],det:[[],[],[]],pend:0,pendA:0,pendDet:[],presu:0,presuA:0,lista:0,listaA:0,listaDet:[],sinPago:0,sinPagoA:0});
+  rows.filter(r=>!r.income && !r.dato && !esTraspaso(r) && inRef(r)).forEach(r=>{ const o=get(r.grupo,r.cp,r.ca); const i=ref.findIndex(x=>x.g===r.g&&x.mi===monthIdx(r.m)); o.ref[i]+=(+r.imp||0); o.refA[i]+=(+r.alt||0); if(r.det) o.det[i].push(Object.assign({},r.det,{imp:r.imp,alt:r.alt,ca:r.ca})); });
   // Cuentas por pagar: Pendiente (todo lo no pagado hasta el mes del presupuesto) y Presupuestado del mes
   const val=e=>CUR==="BOB"?(e.impBOB!=null?+e.impBOB:(+e.imp||0)*(RATE||0)):(e.impUSD!=null?+e.impUSD:(+e.imp||0));
   const valA=e=>CUR==="BOB"?(e.impUSD!=null?+e.impUSD:(+e.imp||0)):(e.impBOB!=null?+e.impBOB:(+e.imp||0)*(RATE||0));
   const pendRows=[], presuRows=[];
   (STATE.egresos||[]).forEach(e=>{ if(!empPassRow(e)) return; const est=String(e.e||"").trim().toLowerCase(); const mi=monthIdx(e.m), g=e.g;
     const antes = (g<ty) || (g===ty && mi<=tMi);
-    if(est==="pendiente" && antes){ const a=ancEgreso(e); const o=get(a.grupoc||"(sin grupo)",a.cp||"(sin cuenta principal)",a.ca||"(sin cuenta)"); o.pend+=val(e); o.pendA+=valA(e); o.pendDet.push({fecha:e.fecha,ben:e.ben,con:e.con,tipo:e.tipo,imp:val(e),alt:valA(e)}); pendRows.push(e); }
+    if(est==="pendiente" && antes){ const a=ancEgreso(e); const o=get(a.grupoc||"(sin grupo)",a.cp||"(sin cuenta principal)",a.ca||"(sin cuenta)"); o.pend+=val(e); o.pendA+=valA(e); o.pendDet.push({_id:e._id,fecha:e.fecha,ben:e.ben,con:e.con,tipo:e.tipo,imp:val(e),alt:valA(e)}); pendRows.push(e); }
     if(est==="presupuestado" && g===ty && mi===tMi){ const a=ancEgreso(e); const o=get(a.grupoc||"(sin grupo)",a.cp||"(sin cuenta principal)",a.ca||"(sin cuenta)"); o.presu+=val(e); o.presuA+=valA(e); presuRows.push(e); } });
   /* V255: lo que dice la Lista de Costos, solo para comparar (no cambia el Presupuesto). La Lista va por proveedor:
      cada costo se pone en la cuenta donde más se le pagó a ese proveedor; si nunca se le pagó, queda en un grupo aparte. */
@@ -2620,7 +2657,7 @@ function renderPresupuesto(pre){
     // V259: un costo de plataforma sin pagos en Egresos (Bridge, Rhino, Persona) igual entra al Presupuesto, con el monto de la Lista
     const plat=!m&&/operat/i.test(i.tipo||"")&&/plataforma/i.test(i.centro||i.cat||"");
     const o=m?get(m.r.grupoc||"(sin grupo)",m.r.cp||"(sin cuenta principal)",m.r.ca):(plat?get("COSTOS OPERATIVOS","PLATAFORMA TECNOLÓGICA",i.prov):get("En la Lista, sin pagos en Egresos","No se encontró ningún pago a este proveedor",i.prov||i.con||"(sin nombre)"));
-    o.lista+=v; o.listaA+=vA; if(plat){ o.sinPago+=v; o.sinPagoA+=vA; } });
+    o.lista+=v; o.listaA+=vA; o.listaDet.push({it:i,v,vA}); if(plat){ o.sinPago+=v; o.sinPagoA+=vA; } });
   const aj=(NM_PRESU&&NM_PRESU.ajustes)||{}; const ak=o=>STATE.presuMes+"|"+o.ca;
   const fx=CUR==="BOB"?(RATE||1):1, fxA=CUR==="BOB"?1:(RATE||1); // los ajustes se guardan en USD
   const lista=Object.values(L).map(o=>{ o.prom=(o.ref[0]+o.ref[1]+o.ref[2])/3; const a=aj[ak(o)]; o.aj=(a!=null); o.bud=(a!=null)?(+a*fx):Math.max(o.prom,o.presu,o.sinPago); o.tot=o.bud+o.pend;
@@ -2638,7 +2675,7 @@ function renderPresupuesto(pre){
   const cpDe=o=>prRubro(o.cp,o.ca), cpId=o=>o.gr+"|"+cpDe(o);
   const sumaFila=(t,lbl,cls,attr,pad,abierto)=>`<tr class="${cls}" ${attr} style="cursor:pointer"><td style="text-align:left;padding-left:${pad}px"><span class="pnl-caret ${abierto?"open":""}">▶</span> <b>${esc(lbl)}</b></td>${t.ref.map((v,i)=>`<td>${v?p2(v,t.refA[i]):""}</td>`).join("")}<td><b>${p2(t.prom,t.promA)}</b></td><td>${t.lista?p2(t.lista,t.listaA):""}</td><td><b>${p2(t.bud,t.budA)}</b></td><td>${t.pend?p2(t.pend,t.pendA):""}</td><td><b>${p2(t.tot,t.totA)}</b></td></tr>`;
   const filaCa=(o,pad,sub)=>{ const n=lista.indexOf(o); return `<tr><td style="text-align:left;padding-left:${pad}px">${esc(o.ca)}${sub?`<span class="sub2">${esc(sub)}</span>`:""}</td>
-      ${o.ref.map((v,i)=>v?_prDet(n,i,v,o.refA[i]):'<td><span class="zero">–</span></td>').join("")}<td><b>${p2(o.prom,o.promA)}</b></td><td>${o.lista?p2(o.lista,o.listaA):'<span class="zero">–</span>'}</td>
+      ${o.ref.map((v,i)=>v?_prDet(n,i,v,o.refA[i]):'<td><span class="zero">–</span></td>').join("")}<td><b>${p2(o.prom,o.promA)}</b></td>${o.lista?`<td class="pr-lc" data-o="${n}" title="Ver y editar en la Lista de Costos">${p2(o.lista,o.listaA)}</td>`:'<td><span class="zero">–</span></td>'}
       <td><input class="pr-in${o.aj?" pr-aj":""}" data-ca="${esc(o.ca)}" value="${Math.round(o.bud)}" inputmode="decimal" title="${o.aj?"Ajustado a mano":"Sugerido: promedio (o lo presupuestado si es mayor)"}">${o.aj?`<button class="btn ghost pr-rst" data-ca="${esc(o.ca)}" title="Volver al promedio">↻</button>`:""}${pAlt(o.budA)}</td>
       ${o.pend?_prDet(n,"p",o.pend,o.pendA):'<td><span class="zero">–</span></td>'}<td><b>${p2(o.tot,o.totA)}</b></td></tr>`; };
   const rango=g=>/^activo/i.test(g)?1:(/^sin clasificar/i.test(g)?2:(/^en la lista/i.test(g)?3:0));
@@ -2667,7 +2704,7 @@ function renderPresupuesto(pre){
       ${kpi("Promedio mensual real",p2(T("prom"),T("promA")),"pagado en "+refTxt,"#8EB69B","≈")}
     </div>
     <div class="card"><div class="head"><h3>Presupuesto de ${MES[tMi]} ${ty}</h3><span class="mini">${CUR} · los valores se pueden cambiar</span><div class="spacer" style="flex:1"></div><button class="btn ghost" id="prAbrir">Abrir todo</button><button class="btn ghost" id="prCerrar">Cerrar todo</button></div>
-      <p class="section-intro">La columna <b>Presupuesto</b> se llena sola con el <b>promedio de lo pagado</b> en ${refTxt}, ${STATE.resBase==="caja"?"según el mes en que se pagó":"repartido en los meses a los que corresponde (<b>Meses a Distribuir</b> del gasto)"} (o con lo <b>Presupuestado</b> registrado en Egresos si es mayor). Cámbiala si quieres ajustar algo: queda guardada para ese mes. Haz clic en el monto de un mes o de <b>Por pagar</b> para ver sus pagos. <b>Por pagar</b> son los egresos en estado <b>Pendiente</b> hasta ${MES[tMi]}. No incluye Traspasos Internos. <b>Lista de Costos</b> es solo para comparar: muestra lo esperado al mes según la Lista, en la cuenta donde más se le pagó a cada proveedor, y no cambia el Presupuesto, salvo los costos de plataforma sin pagos en Egresos (como Bridge), que entran con el monto de la Lista.</p>
+      <p class="section-intro">La columna <b>Presupuesto</b> se llena sola con el <b>promedio de lo pagado</b> en ${refTxt}, ${STATE.resBase==="caja"?"según el mes en que se pagó":"repartido en los meses a los que corresponde (<b>Meses a Distribuir</b> del gasto)"} (o con lo <b>Presupuestado</b> registrado en Egresos si es mayor). Cámbiala si quieres ajustar algo: queda guardada para ese mes. Haz clic en el monto de un mes o de <b>Por pagar</b> para ver sus pagos, y en un pago para editarlo. Haz clic en la <b>Lista de Costos</b> de una cuenta para editar ese costo. <b>Por pagar</b> son los egresos en estado <b>Pendiente</b> hasta ${MES[tMi]}. No incluye Traspasos Internos. <b>Lista de Costos</b> es solo para comparar: muestra lo esperado al mes según la Lista, en la cuenta donde más se le pagó a cada proveedor, y no cambia el Presupuesto, salvo los costos de plataforma sin pagos en Egresos (como Bridge), que entran con el monto de la Lista.</p>
       <div class="tbl-scroll sticky-head" id="prScroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Cuenta</th>${ref.map(x=>`<th>${MES[x.mi].slice(0,3)} ${String(x.g).slice(2)}</th>`).join("")}<th>Promedio</th><th>Lista de Costos</th><th>Presupuesto</th><th>Por pagar</th><th>Total</th></tr></thead>
       <tbody>${filas||`<tr><td colspan="9">${emptyState("No hay gastos pagados en los últimos 3 meses ni cuentas por pagar.")}</td></tr>`}</tbody>
       <tfoot><tr><td style="text-align:left"><b>Total</b></td>${[0,1,2].map(i=>`<td><b>${p2(lista.reduce((s,o)=>s+o.ref[i],0),lista.reduce((s,o)=>s+o.refA[i],0))}</b></td>`).join("")}<td><b>${p2(T("prom"),T("promA"))}</b></td><td><b>${p2(T("lista"),T("listaA"))}</b></td><td><b>${p2(T("bud"),T("budA"))}</b></td><td><b>${p2(T("pend"),T("pendA"))}</b></td><td><b>${p2(T("tot"),T("totA"))}</b></td></tr></tfoot></table></div>
@@ -2675,6 +2712,7 @@ function renderPresupuesto(pre){
   $("#prMes").addEventListener("change",ev=>{ STATE.presuMes=ev.target.value; render(); });
   document.querySelectorAll(".pr-det").forEach(td=>td.addEventListener("click",()=>{ const o=lista[+td.dataset.o], i=td.dataset.i, x=ref[+i];
     if(i==="p") presuDetalle(o.ca+" · por pagar",o.pendDet); else presuDetalle(o.ca+" · "+MES[x.mi]+" "+x.g,o.det[+i]); }));
+  document.querySelectorAll(".pr-lc").forEach(td=>td.addEventListener("click",()=>presuLista(lista[+td.dataset.o])));
   presuWireModo();
   document.querySelectorAll(".pr-grp-t").forEach(tr=>tr.addEventListener("click",()=>{ const g=tr.dataset.gr; if(STATE.presuCerr.has(g)) STATE.presuCerr.delete(g); else STATE.presuCerr.add(g); renderKeepScroll("#prScroll",g); }));
   document.querySelectorAll(".pr-cp").forEach(tr=>tr.addEventListener("click",()=>{ const c=tr.dataset.cp, A=STATE.presuCpAb; if(A.has(c)) A.delete(c); else A.add(c); renderKeepScroll("#prScroll",c); }));
@@ -3706,7 +3744,7 @@ function renderResumen(){
   const baseTxt=STATE.resBase==="caja"?"Caja: cada gasto en el mes en que se PAGÓ":"Devengado: cada gasto en el mes al que CORRESPONDE";
   const seg=`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-      ${usaBase?`<div class="seg" id="resBase" title="Devengado = mes al que corresponde el gasto (Fecha de Contabilización, repartido en «Meses a Distribuir») · Caja = mes en que se pagó (Fecha de Pago). BitGo, Mercury y los ingresos tienen una sola fecha, por eso no cambian.">
+      ${usaBase?`<div class="seg" id="resBase" title="Devengado = mes al que corresponde el gasto (Fecha de Contabilización, repartido en «Meses a Distribuir») · Caja = mes en que se pagó (Fecha de Pago). Los pagos de BitGo y Mercury se reparten con el botón ÷ de Egresos. Los ingresos tienen una sola fecha, por eso no cambian.">
         <button data-b="devengado" class="${STATE.resBase==='devengado'?'on':''}">Devengado</button>
         <button data-b="caja" class="${STATE.resBase==='caja'?'on':''}">Caja</button>
       </div><span class="mini">${baseTxt} · ${per} · ${CUR}</span>`
@@ -4081,7 +4119,7 @@ function renderEgresosGeneral(){
     {label:"Monto original",right:1,cls:"num",sortKey:"orig",render:r=>r.orig!=null?((r.moneda==="BOB"?"Bs ":"$")+f2(r.orig)):'<span class="zero">–</span>'},
     {label:"USD",right:1,cls:"num",sortKey:"usd",render:r=>r.usd!=null?fmt(r.usd,2):'<span class="zero">–</span>'},
     {label:"BOB",right:1,cls:"num",sortKey:"bob",render:r=>r.bob!=null?("Bs "+f2(r.bob)):'<span class="zero">–</span>'},
-    {label:"",render:r=>STATE.egFB?`<span class="ta-acts" style="flex-wrap:nowrap"><button class="btn ghost eg-cxp" data-i="${STATE._egCxpRows.push(r)-1}" title="Crear una cuenta por pagar a partir de este gasto (ej.: el mismo pago para este mes)" style="padding:4px 8px;white-space:nowrap">→ Por pagar</button>${r.egId?`<button class="btn ghost eg-ed" data-id="${esc(r.egId)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button>`:""}</span>`:""},
+    {label:"",render:r=>STATE.egFB?`<span class="ta-acts" style="flex-wrap:nowrap"><button class="btn ghost eg-cxp" data-i="${STATE._egCxpRows.push(r)-1}" title="Crear una cuenta por pagar a partir de este gasto (ej.: el mismo pago para este mes)" style="padding:4px 8px;white-space:nowrap">→ Por pagar</button>${r.egId?`<button class="btn ghost eg-ed" data-id="${esc(r.egId)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button>`:""}${(r.fuente==="BitGo"||r.fuente==="Mercury")?`<button class="btn ghost eg-div" data-i="${STATE._egCxpRows.push(r)-1}" title="Cambiar la cuenta o repartir este pago en varios meses" style="padding:4px 8px">÷</button>`:""}</span>`:""},
   ];
   const totRow=cols.map((c,i)=> i===0?("Total ("+rows.length+")"):(c.label==="USD"?fmt(totUSD,2):(c.label==="BOB"?("Bs "+f2(totBOB)):"")));
   const fijoUSD=rows.filter(r=>r.costo==="fijo").reduce((s,r)=>s+(+r.usd||0),0);
@@ -4124,6 +4162,7 @@ function renderEgresosGeneral(){
   document.querySelectorAll("#egGenSrcSeg button").forEach(b=>b.addEventListener("click",()=>{ STATE.egGenSrc=b.dataset.v; render(); }));
   tarjetaWire(); wireCaCells();
   document.querySelectorAll(".eg-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const e=(STATE.egresos||[]).find(x=>x._id===b.dataset.id); if(e) abrirFormEgreso(e); }));
+  document.querySelectorAll(".eg-div").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const r=STATE._egCxpRows[+b.dataset.i]; if(r) pagoBancoModal({fuente:r.fuente,hu:r.hu,fecha:r.fecha,ben:r.con,imp:CUR==="BOB"?r.bob:r.usd,ca:r.ca}); }));
   document.querySelectorAll(".eg-cxp").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const r=STATE._egCxpRows[+b.dataset.i]; if(r) egresoACxP(r); }));
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
   document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
@@ -10773,7 +10812,8 @@ function _lsJSON(k,def){ try{ const v=JSON.parse(localStorage.getItem(k)||"null"
 async function nmFbCargarAjustes(){
   if(!nmFbActivo()) return;
   const adm=NMFB.esAdmin();
-  const [a,rx,re,gc,pc,asg]=await Promise.all(["archivos","rhExtra","rhEmpresa","gcal","planCuentas","asignacion"].map(n=>NMFB.cfgGet(n).catch(()=>null)));
+  const [a,rx,re,gc,pc,asg,dsb]=await Promise.all(["archivos","rhExtra","rhEmpresa","gcal","planCuentas","asignacion","distribuir"].map(n=>NMFB.cfgGet(n).catch(()=>null)));
+  NM_DIST={}; ((dsb&&dsb.items)||[]).forEach(x=>{ if(x.n>1&&x.desde) NM_DIST[x.fuente+"\u0000"+x.huella]=x; });
   // V179: Plan de Cuentas y Asignación automática viven en Firebase (la primera vez se copian desde Sheets)
   if(pc && Array.isArray(pc.filas) && pc.filas.length){ STATE.plan=pc.filas.map(r=>({codigo:String(r.codigo||""),tipo:r.tipo||"",categoria:r.categoria||"",nombre:r.nombre||"",origen:r.origen||"",estado:r.estado||"Activa",alias:Array.isArray(r.alias)?r.alias:[]})); STATE.planFB=true; }
   else if(adm && (STATE.plan||[]).length){ try{ await NMFB.cfgSet("planCuentas",{filas:STATE.plan}); STATE.planFB=true; }catch(_){} }

@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V244";
+const APP_VERSION = "V245";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2084,7 +2084,11 @@ function cajaEmpresa(){
   const ingTot=P.filter(r=>r.income&&!r.dato).reduce((s,r)=>s+(+r.usd||0),0);
   const egSocios=pag.filter(e=>egSocioDe(e)).reduce((s,e)=>s+uE(e),0);
   const egPaid=pag.filter(e=>!egSocioDe(e)).reduce((s,e)=>s+uE(e),0)+U.filter(r=>r.origen==="BitGo"||r.origen==="Mercury").reduce((s,r)=>s+(+r.usd||0),0);
-  return {invTot,preTot,ingTot,egPaid,egSocios,devTot,caja:invTot+preTot+ingTot-egPaid-devTot}; }
+  // V245: gasto mensual = promedio de los últimos 3 meses completos, todas las fuentes, por fecha de pago; el mismo en todas las pantallas
+  const hoy=new Date(), ref=[1,2,3].map(k=>{ const d=new Date(hoy.getFullYear(),hoy.getMonth()-k,1); return d.getFullYear()*12+d.getMonth(); });
+  const svB=STATE.resBase; let pr=[]; try{ STATE.resBase="caja"; STATE._pnlSoloPagado=true; pr=pnlRows(true); } finally { STATE.resBase=svB; STATE._pnlSoloPagado=false; }
+  const burn=pr.filter(r=>!r.income&&!r.dato&&ref.includes(r.g*12+monthIdx(r.m))).reduce((a,r)=>a+(+r.usd||0),0)/3, caja=invTot+preTot+ingTot-egPaid-devTot;
+  return {invTot,preTot,ingTot,egPaid,egSocios,devTot,caja,burn,runway:burn>0?caja/burn:0}; }
 function _repTotales(y,mIdx){
   const saved=STATE.year; STATE.year=(y==null||y==="__all")?"__all":y;
   let rows; try{ rows=pnlRows(); } finally { STATE.year=saved; }
@@ -2148,10 +2152,10 @@ function _repData(){
   const cxpTot=cxpAll.reduce((s,e)=>s+(+e.imp||0),0);
   const cxpTotBOB=cxpAll.reduce((s,e)=>s+(e.impBOB!=null?+e.impBOB:0),0);
 
-  const caja=cajaEmpresa().caja;
+  const _cj=cajaEmpresa(), caja=_cj.caja;
   const activeMonths=Math.max(1, egM.filter(v=>v>0).length);
   const avgBurn=expenseTot>0? (mIdx!=null? expenseTot : expenseTot/activeMonths) : 0;
-  const runway=avgBurn>0? caja/avgBurn : 0;
+  const runway=_cj.runway;
 
   let prev=null;
   if(y!=="__all"){
@@ -3636,11 +3640,7 @@ function renderResumen(){
       <div class="card"><div class="head"><h3>Gastos y costos por grupo</h3><span class="mini">para comparar ${annual?"año a año":"mes a mes"}</span></div>${grTbl(ggF,"Sin gastos.")}</div>`;
   } else if(tab==="caja"){
     // La caja es ACUMULADA desde el inicio (no depende del año elegido)
-    const {invTot,preTot,ingTot,egPaid,egSocios,devTot,caja}=cajaEmpresa();
-    // Gasto mensual = promedio de los últimos 3 meses completos, de TODAS las fuentes (Egresos, BitGo, Mercury), por fecha de pago
-    const hoy=new Date(), ref=[1,2,3].map(k=>{ const d=new Date(hoy.getFullYear(),hoy.getMonth()-k,1); return d.getFullYear()*12+d.getMonth(); });
-    const svB=STATE.resBase; let pr=[]; try{ STATE.resBase="caja"; STATE._pnlSoloPagado=true; pr=pnlRows(true); } finally { STATE.resBase=svB; STATE._pnlSoloPagado=false; }
-    const burn=pr.filter(r=>!r.income&&!r.dato&&ref.includes(r.g*12+monthIdx(r.m))).reduce((a,r)=>a+(+r.usd||0),0)/3, runway=burn>0?caja/burn:0;
+    const {invTot,preTot,ingTot,egPaid,egSocios,devTot,caja,runway}=cajaEmpresa();
     STATE._resPDF.caja={invTot,preTot,ingTot,egPaid,devTot,caja,runway};
     content=`<div class="card"><div class="head"><h3>Posición de caja</h3><span class="mini">referencial · acumulado desde el inicio</span></div>
         <div class="caja">
@@ -8342,7 +8342,8 @@ function cidreCargar(forzar){
     if(!res||res.error){ const e=(res&&res.error)||"Sin respuesta del servidor.";
       STATE.cidreErr=/no permitida/i.test(e)?"El servidor todavía no tiene la función para leer la hoja de CIDRE. Hay que actualizar Apps Script (Deploy).":e; }
     else { STATE.cidre={pagos:cidreParsePagos(res.pagos), treasury:res.treasury||[], costos:res.costos||[], actualizado:res.actualizado};
-      try{ pnlAplicarTreasury(); }catch(e){ console.error("Treasury",e); } }
+      try{ pnlAplicarTreasury(); }catch(e){ console.error("Treasury",e); }
+      try{ nmWidgetPublicar(); }catch(_){} }   // V245: el extracto CIDRE llega después; sin esto el widget guardaba ingresos incompletos
     if((STATE.section==="bancos"&&STATE.bancosTab==="cidre") || ["inicio","resumen","reportes","ingresos","costos","flujo"].indexOf(STATE.section)>=0) render();
   }).catch(e=>{ STATE._cidreCargando=false; STATE.cidreErr=(e&&e.message)||String(e); if(STATE.section==="bancos"&&STATE.bancosTab==="cidre") render(); });
 }
@@ -10118,9 +10119,8 @@ function nmWidgetResumen(){
     const nCxp=(STATE.egresos||[]).filter(e=>est(e,"pendiente")).length;
     const inv=(STATE.inv||[]).reduce((a,e)=>a+(+e.importe||0),0), pre=(STATE.pre||[]).reduce((a,e)=>a+(+e.importe||0),0), dev=(STATE.dev||[]).reduce((a,e)=>a+devUSD(e),0);
     const pagado=(STATE.egresos||[]).filter(e=>est(e,"pagado")).reduce((a,e)=>a+u(e),0);
-    const caja=cajaEmpresa().caja;
-    const g3=[1,2,3].map(k=>{ const d=new Date(y,mi-k,1); return _repTotales(d.getFullYear(),d.getMonth()).expense; });
-    const burn=(g3[0]+g3[1]+g3[2])/3;
+    const _cj=cajaEmpresa(), caja=_cj.caja;
+    const burn=_cj.burn;
     const tc=tcRateLatest();
     const serie=[]; for(let k=5;k>=0;k--){ const d=new Date(y,mi-k,1); const t=_repTotales(d.getFullYear(),d.getMonth()); serie.push({m:MES[d.getMonth()],i:Math.round(t.income),e:Math.round(t.expense)}); }
     return {actualizado:new Date().toISOString(), mesNombre:MES[mi]+" "+y, mesAntNombre:MES[pm]+" "+py,

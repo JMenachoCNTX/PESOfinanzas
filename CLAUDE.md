@@ -27,6 +27,8 @@ Incluye un widget para iPhone (app Scriptable) con un resumen.
   (`getData`, `getDataParte`, etc.) enviando un PIN. Hojas: Egresos, Ingresos, RRHH, Inversiones, Préstamos,
   Devoluciones, etc. La IA (Gemini), Slack y Google Drive (comprobantes) también se manejan desde Apps Script.
 - **Firebase Firestore** (proyecto `nummeros-peso`), colecciones:
+  `config/h_bitgo*` (V247: extracto BitGo por partes; `config/bitgoFB` = migrado y columnas; la hoja «Extracto BitGo»
+  quedó de respaldo y ya NO se escribe; se importa y se clasifica en Bancos → BitGo, solo administradores),
   `egresos` (V216: un documento por gasto, antes hoja HistorialEgresos; `config/egresosFB` = migrado; la hoja
   quedó de respaldo y ya NO se escribe; caché en localStorage `nm_eg_cache_v1`, solo baja lo cambiado por `_act`),
   `usuarios` (correo = ID, con clave y rol), `sesiones`, `claves` (formato antiguo), `config/*`

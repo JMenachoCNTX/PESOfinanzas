@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V246";
+const APP_VERSION = "V247";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1849,6 +1849,9 @@ function contabTok(v){
 }
 /* Etiqueta legible del token de "Contabilizado?". */
 function contabLabel(t){ return t==="si"?"SI":t==="traspaso"?"Traspasos Internos":t==="cashback"?"CashBack":t==="nocorresponde"?"No Corresponde":t==="reembolso"?"Reembolso a Clientes":t==="no"?"No":"(otro)"; }
+/* V247: valor que se guarda en «Contabilizado?» (SI y No se escriben como en la hoja) */
+function contabLabelHoja(v){ const t=contabTok(v); return !t?String(v==null?"":v).trim():t==="no"?"No":contabLabel(t); }
+const BG_CONTAB_OTRO=v=>(v&&["SI","No","Traspasos Internos","Reembolso a Clientes","CashBack","No Corresponde"].indexOf(v)<0)?[v]:[];
 /* Insignia con color para la columna "Contabilizado?" en las listas. */
 function contabBadge(v){ const raw=String(v==null?"":v).trim(); if(!raw) return '<span class="zero">–</span>'; const t=contabTok(v);
   const col=t==="si"?"#235347":t==="cashback"?"#6F9A7D":t==="traspaso"?"#163832":t==="nocorresponde"?"#B42318":t==="reembolso"?"#0B2B26":"#8EB69B";
@@ -8091,13 +8094,17 @@ function renderBancos(){
         <button data-t="mercury" class="${tab==='mercury'?'on':''}">Mercury (cerrada)</button>
       </div>
       ${tab==='tesabiz'?`<div class="seg" id="cidreSub"><button data-c="pagos" class="${STATE.cidreSub!=='concil'?'on':''}">Pagos CIDRE</button><button data-c="concil" class="${STATE.cidreSub==='concil'?'on':''}">Conciliación CIDRE</button></div>`:''}
-      ${tab==='bitgo'?`<button class="btn primary" id="bgImportBtn" title="Elige el CSV tal como lo descargas de BitGo">⬆ Importar extracto BitGo</button><input type="file" id="bgImportFile" accept=".csv,text/csv" hidden>`:''}
+      ${tab==='bitgo'?`<button class="btn primary" id="bgImportBtn" title="Elige el CSV tal como lo descargas de BitGo">⬆ Importar extracto BitGo</button><input type="file" id="bgImportFile" accept=".csv,text/csv" hidden>${!STATE.bitgoFB&&!STATE.bitgoFBErr&&nmFbActivo()&&NMFB.esAdmin()?`<button class="btn" id="bgMigrar" title="Copia la hoja «Extracto BitGo» a Firebase. La hoja queda de respaldo.">☁ Pasar BitGo a la nube</button>`:''}${STATE.bitgoFBErr?`<span class="mini neg">No se pudo leer BitGo desde Firebase: se muestra la hoja de respaldo.</span>`:''}`:''}
     </div>`;
   const app=$("#app"); if(app){ app.insertAdjacentHTML("afterbegin", seg+(((tab==="tesabiz"&&STATE.cidreSub!=="concil")||tab==="otras"||tab==="altitude")?bancosResumenHTML(tab):""));
     document.querySelectorAll("#cidreSub button").forEach(b=>b.addEventListener("click",()=>{STATE.cidreSub=b.dataset.c;render();}));
     document.querySelectorAll("#bancosTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.bancosTab=b.dataset.t;render();}));
     const ib=$("#bgImportBtn"), fi=$("#bgImportFile");
-    if(ib&&fi){ ib.addEventListener("click",()=>fi.click()); fi.addEventListener("change",()=>{ const f=fi.files&&fi.files[0]; fi.value=""; if(f) bitgoImportarArchivo(f); }); } }
+    if(ib&&fi){ ib.addEventListener("click",()=>fi.click()); fi.addEventListener("change",()=>{ const f=fi.files&&fi.files[0]; fi.value=""; if(f) bitgoImportarArchivo(f); }); }
+    const bm=$("#bgMigrar"); if(bm) bm.addEventListener("click",async()=>{ if(!confirm("Se copiará la hoja «Extracto BitGo» a la nube del sistema. Desde ahí BitGo se importa y clasifica aquí, y la hoja queda solo de respaldo. ¿Continuar?")) return;
+      bm.disabled=true; bm.textContent="Copiando…";
+      try{ const n=await bitgoMigrarAFirebase(); alert("Listo: "+n+" movimientos copiados a la nube."); actualizarDatos(); }
+      catch(e){ bm.disabled=false; bm.textContent="☁ Pasar BitGo a la nube"; alert("No se pudo: "+((e&&e.message)||e)); } }); }
 }
 /* V199: IMPORTAR EXTRACTO BITGO. BitGo entrega el CSV con coma entre columnas y PUNTO decimal (4998.50).
    Al pegarlo en la hoja (formato 1.000,00) los importes se dañaban. Aquí se lee bien y el servidor
@@ -8129,19 +8136,20 @@ function bitgoImportarArchivo(file){
     const fs=filas.map(o=>String(o.DATETIME).slice(0,10)).sort(), dmy=s=>s.split("-").reverse().join("/");
     if(!confirm(`Extracto BitGo: ${filas.length} movimientos, del ${dmy(fs[0])} al ${dmy(fs[fs.length-1])}.\n\n`+
       Object.keys(porW).map(w=>"• "+w+": "+porW[w]).join("\n")+
-      "\n\nSe agregarán a la hoja «Extracto BitGo» solo los que todavía no están (se revisa el código TX_ID). Los importes se guardan como números correctos.\n\n¿Continuar?")) return;
+      "\n\nSe agregarán "+(STATE.bitgoFB?"al sistema":"a la hoja «Extracto BitGo»")+" solo los que todavía no están (se revisa el código TX_ID). Los importes se guardan como números correctos.\n\n¿Continuar?")) return;
+    if(STATE.bitgoFBErr){ alert("No se pudo leer BitGo desde Firebase, así que no se importa nada para no mezclar datos.\nPulsa Actualizar y vuelve a intentar."); return; }
     let pin=""; try{ pin=localStorage.getItem("peso_pin")||""; }catch(_){}
     const b=$("#bgImportBtn"), bt=b?b.innerHTML:""; if(b){ b.disabled=true; b.innerHTML="Importando…"; }
     const fin=()=>{ const x=$("#bgImportBtn"); if(x){ x.disabled=false; x.innerHTML=bt||"⬆ Importar extracto BitGo"; } };
-    nmRun("importarBitgo", pin, filas).then(function(res){
+    (STATE.bitgoFB?bitgoImportarFB(filas):nmRun("importarBitgo", pin, filas)).then(function(res){
       fin();
       if(!res||res.error){ const e=(res&&res.error)||"Sin respuesta del servidor.";
         alert(/no permitida/i.test(e)?"El servidor todavía no tiene la función para importar BitGo. Hay que actualizar Apps Script.":"No se pudo importar: "+e); return; }
       const ag=res.agregados||{}, tot=Object.keys(ag).reduce((a,k)=>a+(ag[k]||0),0);
-      let msg=tot?`Listo ✓ Se agregaron ${tot} movimientos nuevos:\n`+Object.keys(ag).filter(k=>ag[k]).map(k=>"• "+k+": "+ag[k]).join("\n"):"No había movimientos nuevos: todos ya estaban en la hoja.";
+      let msg=tot?`Listo ✓ Se agregaron ${tot} movimientos nuevos:\n`+Object.keys(ag).filter(k=>ag[k]).map(k=>"• "+k+": "+ag[k]).join("\n"):"No había movimientos nuevos: todos ya estaban "+(STATE.bitgoFB?"en el sistema.":"en la hoja.");
       if(res.repetidos) msg+=`\n\n${res.repetidos} ya estaban y no se repitieron.`;
       if(res.sinHoja&&res.sinHoja.length) msg+="\n\n⚠ No se importaron movimientos de estas wallets porque no tienen hoja: "+res.sinHoja.join(", ");
-      if(tot) msg+="\n\nRecuerda clasificarlos (Contabilizado?, Cuenta Analítica…) en la hoja.";
+      if(tot) msg+=STATE.bitgoFB?"\n\nRecuerda clasificarlos aquí mismo, en la lista de BitGo (Contabilizado? y Cuenta Analítica).":"\n\nRecuerda clasificarlos (Contabilizado?, Cuenta Analítica…) en la hoja.";
       alert(msg);
       if(tot) actualizarDatos();
     }).catch(function(e){ fin(); alert("No se pudo importar: "+((e&&e.message)||e)); });
@@ -8794,7 +8802,9 @@ function renderBitgo(){
   tcols.push({label:"Empresa (resp.)",render:r=>{const g=reglaCosto(commentsCol&&r[commentsCol]); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}});
   tcols.push({label:"Tipo",render:r=>{const g=reglaCosto(commentsCol&&r[commentsCol]); return dimAuto(g&&g.tipo||"");}});
   tcols.push({label:"Centro de Costo",render:r=>{const g=reglaCosto(commentsCol&&r[commentsCol]); return dimAuto(g&&g.centro||"");}});
-  if(contCol)     tcols.push({label:"Contabilizado?",sortKey:contCol,render:r=>contabBadge(r[contCol])});
+  const bgEdit=!!STATE.bitgoFB&&nmFbActivo()&&NMFB.esAdmin(); STATE._bgRows=[];   // V247: se clasifica aquí, ya no en la hoja
+  if(contCol)     tcols.push({label:"Contabilizado?",sortKey:contCol,render:r=>{ if(!bgEdit) return contabBadge(r[contCol]); const v=contabLabelHoja(r[contCol]);
+    return `<select class="bg-cont" data-i="${STATE._bgRows.push(r)-1}" title="Cambiar la clasificación de este movimiento">${["","SI","No","Traspasos Internos","Reembolso a Clientes","CashBack","No Corresponde"].concat(BG_CONTAB_OTRO(v)).map(o=>`<option value="${esc(o)}"${o===v?" selected":""}>${esc(o||"–")}</option>`).join("")}</select>`; }});
   if(commentsCol) tcols.push({label:"Comentario",sortKey:commentsCol,render:r=>{const v=r[commentsCol]; return v?esc(String(v).slice(0,90)):'<span class="zero">–</span>';}});
   if(assetCol)    tcols.push({label:"Asset",sortKey:assetCol,render:r=>r[assetCol]?`<span class="tag">${esc(r[assetCol])}</span>`:'<span class="zero">–</span>'});
   if(walletCol)   tcols.push({label:"Wallet",sortKey:walletCol,render:r=>r[walletCol]?`<span class="mini">${esc(r[walletCol])}</span>`:'<span class="zero">–</span>'});
@@ -8887,6 +8897,8 @@ function renderBitgo(){
       render();
     }));
     wireCaCells();
+    document.querySelectorAll("#app .bg-cont").forEach(el=>el.addEventListener("change",async()=>{ const r=STATE._bgRows[+el.dataset.i]; if(!r) return; el.disabled=true;
+      try{ await bitgoCambiarContab(r,contCol,el.value); render(); }catch(e){ alert("No se pudo guardar: "+((e&&e.message)||e)); render(); } }));
     wireBulk("bg",STATE.bgSel,"BitGo",rows);
   }
   if(STATE._focus){const el=$("#bgSearch"); if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);} STATE._focus=false;}
@@ -9991,9 +10003,10 @@ function nmRun(fn){ const args=Array.prototype.slice.call(arguments,1);
 async function nmGetDataRapido(pin){
   const res={ok:true}, pre={}, extra=NM_HIST.concat(["tc"]);
   if(nmFbActivo()){
-    await Promise.all(extra.map(async n=>{ try{ const rows=await NMFB.histGet(n); if(rows&&rows.length){ res[n]=rows; pre[n]=true; } }catch(_){ } }));
+    await Promise.all(extra.map(async n=>{ try{ const rows=await NMFB.histGet(n); if(rows&&rows.length){ res[n]=rows; pre[n]=true; } }catch(_){ } })
+      .concat([bitgoFB().then(b=>{ if(b){ res.bitgo=b; pre.bitgo=true; } }).catch(e=>console.error("BitGo Firebase",e))]));   // V247
   }
-  const partes=["base","tablas","pnl","bitgo"].concat(extra.filter(n=>!pre[n]));
+  const partes=["base","tablas","pnl"].concat(pre.bitgo?[]:["bitgo"]).concat(extra.filter(n=>!pre[n]));
   const r=await Promise.all(partes.map(p=>nmRun("getDataParte",pin,p)));
   const mal=r.find(x=>!x||x.error);
   if(mal){
@@ -10026,6 +10039,70 @@ async function egresosFB(meta){
   nuevos.forEach(r=>{ C.rows[r._id]=r; if((r._actMs||0)>C.sync) C.sync=r._actMs; });
   egCacheGuardar(C); STATE._egLeidos=nuevos.length;
   return Object.values(C.rows).filter(r=>!r._borrado).sort((a,b)=>(a._orden||0)-(b._orden||0));
+}
+/* ============================================================
+   V247: BITGO EN FIREBASE (antes: hoja «Extracto BitGo»)
+   - config/h_bitgo + config/h_bitgo_<i>: los movimientos por partes (igual que Mercury, V185).
+   - config/bitgoFB {migrado:true, cols} indica que la hoja ya se copió; desde ahí la hoja queda de respaldo.
+   - Cada fila lleva _p (parte) e _i (posición) para guardar solo la parte que cambia.
+   ============================================================ */
+const BG_MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+/* Fila para guardar: sin vacíos ni campos de trabajo (_hu, _p, _i); _cat sí se guarda */
+function bgLimpia(r){ const o={}; Object.keys(r).forEach(k=>{ const v=r[k]; if(v===""||v==null||(k[0]==="_"&&k!=="_cat")) return; o[k]=v; }); return o; }
+/* Devuelve {cols,rows} desde Firebase, o null si BitGo todavía vive en la hoja */
+async function bitgoFB(){
+  const meta=await NMFB.cfgGet("bitgoFB"); if(!meta||!meta.migrado) return null;
+  return bitgoLeer(meta.cols);
+}
+async function bitgoLeer(cols){
+  const m=await NMFB.cfgGet("h_bitgo"); if(!m||!m.partes) throw new Error("Faltan los datos de BitGo en Firebase.");
+  const ps=await Promise.all(Array.from({length:m.partes},(_,i)=>NMFB.cfgGet("h_bitgo_"+i)));
+  const rows=[];
+  ps.forEach((p,i)=>{ if(!p||!Array.isArray(p.filas)) throw new Error("Falta la parte "+i+" de BitGo en Firebase.");
+    p.filas.forEach((r,j)=>{ cols.forEach(c=>{ if(r[c]===undefined) r[c]=""; }); r._p=i; r._i=j; rows.push(r); }); });
+  return {cols:cols,rows:rows,_ver:m.actualizado||""};
+}
+/* Copia lo que hoy viene de la hoja y solo marca «migrado» si lo que se lee de vuelta es idéntico */
+async function bitgoMigrarAFirebase(){
+  if(!NMFB.esAdmin()) throw new Error("Solo un administrador puede pasar BitGo a la nube.");
+  const meta=await NMFB.cfgGet("bitgoFB"); if(meta&&meta.migrado) throw new Error("BitGo ya está en la nube.");
+  const d=STATE.bitgo||{}; if(!(d.rows||[]).length) throw new Error("La hoja no tiene movimientos para copiar.");
+  const filas=d.rows.map(bgLimpia);
+  await NMFB.histSet("bitgo",filas);
+  const back=await bitgoLeer(d.cols);
+  if(back.rows.length!==filas.length) throw new Error("Se copiaron "+back.rows.length+" de "+filas.length+" movimientos. No se cambió nada.");
+  const dif=filas.findIndex((f,i)=>JSON.stringify(f)!==JSON.stringify(bgLimpia(back.rows[i])));
+  if(dif>=0) throw new Error("El movimiento "+(dif+1)+" no quedó igual. No se cambió nada.");
+  await NMFB.cfgSet("bitgoFB",{migrado:true,cols:d.cols,n:filas.length,fecha:new Date().toISOString()});
+  return filas.length;
+}
+/* Agrega a Firebase solo los movimientos que faltan. Se cuenta por TX_ID y wallet porque un mismo TX_ID
+   puede tener varias filas: si el archivo trae más que las guardadas, se agrega la diferencia. */
+async function bitgoImportarFB(filas){
+  if(!NMFB.esAdmin()) throw new Error("Solo un administrador puede importar el extracto.");
+  const bg=STATE.bitgo, m=await NMFB.cfgGet("h_bitgo");
+  if(!m||(m.actualizado||"")!==(bg._ver||"")) throw new Error("Alguien importó movimientos hace poco. Pulsa Actualizar y vuelve a intentar.");
+  const k=(t,w)=>String(t)+"|"+String(w).replace(/^\s*-\s*/,"").trim(), ya={}, agregados={}, sinHoja={}, nuevos=[]; let repetidos=0;
+  bg.rows.forEach(r=>{ const x=k(r.TX_ID,r.WALLET_LABEL); ya[x]=(ya[x]||0)+1; });
+  filas.forEach(o=>{ const x=k(o.TX_ID,o.WALLET_LABEL); if(ya[x]>0){ ya[x]--; repetidos++; return; }
+    const w=String(o.WALLET_LABEL||"").replace(/^\s*-\s*/,"").trim(), c=(w.match(/sueldos|marketing|refunds|treasury/i)||[""])[0];
+    if(!c){ sinHoja[w||"(sin wallet)"]=1; return; }
+    const cat=c[0].toUpperCase()+c.slice(1).toLowerCase(), f=String(o.DATETIME).slice(0,10), n=Object.assign({},o,{WALLET_LABEL:w,_cat:cat});
+    n["MM/DD/YYYY"]=f; n["Mes"]=BG_MESES[+f.slice(5,7)-1]||""; n["Año"]=f.slice(0,4);
+    nuevos.push(n); agregados[cat]=(agregados[cat]||0)+1; });
+  if(nuevos.length){ const fp=i=>bg.rows.filter(r=>r._p===i).map(bgLimpia), cambio={}; let p=m.partes-1, cur=fp(p), tam=JSON.stringify(cur).length;
+    nuevos.forEach(n=>{ const o=bgLimpia(n), t=JSON.stringify(o).length+8; if(tam+t>600000){ cambio[p]=cur; p++; cur=[]; tam=0; } cur.push(o); tam+=t; });
+    cambio[p]=cur;
+    for(const i of Object.keys(cambio)) await NMFB.cfgSet("h_bitgo_"+i,{filas:cambio[i]});
+    await NMFB.cfgSet("h_bitgo",{partes:p+1,n:bg.rows.length+nuevos.length}); }
+  return {agregados:agregados,repetidos:repetidos,sinHoja:Object.keys(sinHoja)};
+}
+/* Cambia «Contabilizado?» de un movimiento: relee su parte para no pisar otros cambios */
+async function bitgoCambiarContab(r,col,val){
+  const n="h_bitgo_"+r._p, d=await NMFB.cfgGet(n), f=d&&d.filas&&d.filas[r._i];
+  if(!f||f.TX_ID!==r.TX_ID) throw new Error("El movimiento cambió de lugar. Pulsa Actualizar y vuelve a intentar.");
+  if(val) f[col]=val; else delete f[col];
+  await NMFB.cfgSet(n,{filas:d.filas}); r[col]=val;
 }
 /* Pone las filas en el sistema (igual que aplicarDatos) */
 function egresosAplicarFilas(rows){
@@ -10086,6 +10163,10 @@ async function nmFbHistoricos(res){
   try{ const tc=await costosFB(); if(tc){ res.tablaCostos=tc; STATE.cosFB=true; } }
   catch(e){ console.error("costos Firebase",e); STATE.cosFBErr=/permission|insufficient/i.test(String(e&&e.message||e))?"Falta publicar la regla nueva de Firebase (costos).":((e&&e.message)||String(e)); }
   const PRE=res._fbPre||{};
+  // V247: BitGo vive en Firebase (si ya se migró); la hoja «Extracto BitGo» queda de respaldo
+  STATE.bitgoFB=!!PRE.bitgo; STATE.bitgoFBErr=null;
+  if(!STATE.bitgoFB){ try{ const b=await bitgoFB(); if(b){ res.bitgo=b; STATE.bitgoFB=true; } }
+    catch(e){ console.error("BitGo Firebase",e); STATE.bitgoFBErr=(e&&e.message)||String(e); } }
   for(const n of NM_HIST){
     if(PRE[n]){ STATE.histFB[n]=true; continue; }   // V198: ya vino de Firebase
     try{ const rows=await NMFB.histGet(n);

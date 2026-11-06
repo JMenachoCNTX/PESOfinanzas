@@ -1572,7 +1572,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V249";
+const APP_VERSION = "V250";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2842,12 +2842,66 @@ function billMonto(m){ const cur=c=>/bs|bob/i.test(c||"")?"BOB":(/€|eur/i.test
   const pre=/(US\$|USD\s?|\$|Bs\.?\s?|BOB\s?|€|EUR\s?)\s?(\d[\d.,]*\d|\d)()/i, post=/()(\d[\d.,]*\d)\s?(USD|BOB|Bs)\b/i;
   const kw=/(?:total|amount due|amount paid|amount|monto|importe|total a pagar)[^\d$€]{0,25}(US\$|USD\s?|\$|Bs\.?\s?|€)?\s?(\d[\d.,]*\d)()/i;
   return tryRe(m.asunto,pre)||tryRe(m.asunto,post)||tryRe(m.texto,kw)||tryRe(m.texto,pre)||tryRe(m.texto,post); }
-function billCruce(m, U){ if(!m.monto) return null; const f=new Date(m.fecha), prov=_normTxt(m.prov).split(" ").filter(w=>w.length>2);
-  let best=null; U.forEach(r=>{ const o=Math.abs(+r.orig||0); if(Math.abs(o-m.monto.n)>Math.max(0.5,m.monto.n*0.01)) return;
-    const d=(new Date(String(r.fecha).slice(0,10)+"T12:00")-f)/864e5; if(isNaN(d)||d<-10||d>60) return;
-    const t=_normTxt([r.keytext,r.con,r.extra].join(" ")); const nom=prov.some(w=>t.indexOf(w)>=0);
-    const s=(nom?100:0)-Math.abs(d); if(!best||s>best.s) best={r,s,nom}; });
+/* V250: un mismo documento llega en varios correos (factura, recordatorio, «recibí el pago»). Se juntan en un
+   grupo por N° de factura o recibo, por hilo o por asunto, y el grupo se busca una sola vez en el sistema. */
+function billDocNro(m){ const T=[m.asunto].concat((m.adjuntos||[]).map(a=>a.nombre),[String(m.texto||"").slice(0,300)]);
+  for(const t of T){ const x=String(t||"").match(/\b(?:factura|fact|invoice|inv|recibo|receipt)\b[\s._-]*(?:n[°ºo]?\.?\s|nro\.?|num(?:ero)?\.?|#)?[\s:#._-]*([a-z0-9]*\d[a-z0-9-]*)/i);
+    if(x){ const d=x[1].toLowerCase().replace(/-[a-z]+$/,""); if(d.length>=3&&!/^(19|20)\d\d$/.test(d)) return d; } }
+  return ""; }
+function billAsunto(s){ return _normTxt(String(s||"").replace(/^(\s*(re|rv|fw|fwd|res|aw)\s*:\s*)+/i,"")); }
+function billDia(m){ return new Date(m.fecha).getTime(); }
+function billGrupos(L,U){
+  const G=new Map(), put=(k,m)=>{ if(!G.has(k)) G.set(k,[]); G.get(k).push(m); }, H={};
+  L.forEach(m=>{ m.doc=billDocNro(m); (H[m.hilo]=H[m.hilo]||[]).push(m); });
+  Object.values(H).forEach(A=>{ const docs=[...new Set(A.map(m=>m.doc).filter(Boolean))], mon=new Set(A.filter(m=>m.monto).map(m=>m.monto.n));
+    A.forEach(m=>{ const d=m.doc||(docs.length===1?docs[0]:"");
+      put(d?m.prov+"|d:"+d:(!docs.length&&mon.size>1&&m.monto?"h:"+m.hilo+"|"+m.monto.n:"h:"+m.hilo),m); }); });
+  const sueltos=[], porAs={};
+  [...G.values()].forEach(ms=>{ ms.sort((a,b)=>billDia(a)-billDia(b)); const p=ms[0], k=p.prov+"|"+billAsunto(p.asunto), o=porAs[k], doc=(ms.find(m=>m.doc)||{}).doc||"", mo=(ms.find(m=>m.monto)||{}).monto;
+    if(o&&Math.abs(billDia(p)-billDia(o.ms[o.ms.length-1]))<=3*864e5&&(!doc||!o.doc||doc===o.doc)&&(!mo||!o.mo||mo.n===o.mo.n)){ o.ms=o.ms.concat(ms).sort((a,b)=>billDia(a)-billDia(b)); o.doc=o.doc||doc; o.mo=o.mo||mo; return; }
+    const g={ms,doc,mo}; porAs[k]=g; sueltos.push(g); });
+  U.forEach(r=>{ r._bt=_normTxt([r.keytext,r.con,r.extra].join(" ")); });
+  return sueltos.map(x=>{ const ms=x.ms, docs=ms.filter(m=>m.tipo==="factura"||m.tipo==="recibo"), p=docs.find(m=>(m.adjuntos||[]).length)||docs[0]||ms[0];
+    const cs=(STATE.comps||[]).filter(c=>c.billing&&ms.some(m=>String(c.billing).indexOf(m.id+":")===0)), ci=cs.find(c=>c.ia&&+c.ia.monto), ia=(ci&&ci.ia)||{};
+    const g=Object.assign({},p,{tipo:ms.some(m=>m.tipo==="recibo")?"recibo":p.tipo, ms, otros:ms.filter(m=>m!==p), comps:cs, ia, ultimo:ms[ms.length-1].fecha,
+      doc:x.doc||String(ia.numero_factura||"").toLowerCase(), monto:x.mo||(ia.monto?{n:+ia.monto,mon:/bs|bob/i.test(ia.moneda||"")?"BOB":String(ia.moneda||"USD").toUpperCase()}:null)});
+    g.cruce=(g.tipo==="factura"||g.tipo==="recibo")?billCruceG(g,U):null; return g; }).sort((a,b)=>a.ultimo<b.ultimo?1:-1); }
+/* Busca el documento en Egresos, Bancos y Cuentas por Pagar. seguro = mismo N° o mismo monto y proveedor */
+function billCruceG(g,U){
+  const reg=g.comps.find(c=>c.estado==="registrado");
+  if(reg){ const r=U.find(x=>reg.adjuntadoA&&movKey(x)===reg.adjuntadoA)||(reg.egreso&&U.find(x=>String(x.fecha).slice(0,10)===String(reg.egreso.fecha).slice(0,10)&&_normTxt(x.con)===_normTxt(reg.egreso.con)));
+    return {r:r||{origen:"Comprobantes",fecha:String(reg.registrado||"").slice(0,10)},nom:true,seguro:!!r}; }
+  const pal=_normTxt([g.prov,g.ia.proveedor].join(" ")).split(/[^a-z0-9]+/).filter(w=>w.length>2).concat(_caToks(billAsunto(g.asunto)));
+  const nomOk=r=>pal.some(w=>r._bt.indexOf(w)>=0), mo=g.monto, monOk=r=>!!mo&&Math.abs(Math.abs(+r.orig||0)-mo.n)<=Math.max(0.5,mo.n*0.01);
+  if(g.doc&&g.doc.length>=3){ const re=new RegExp("(^|[^a-z0-9])"+g.doc.replace(/[^a-z0-9]/g,"\\$&")+"([^a-z0-9]|$)"), r=U.find(x=>re.test(x._bt)&&(monOk(x)||nomOk(x)));
+    if(r) return {r,nom:true,seguro:true,porNro:true}; }
+  if(!mo) return null;
+  const f=new Date(g.fecha); let best=null;
+  U.forEach(r=>{ if(!monOk(r)) return; const d=(new Date(String(r.fecha).slice(0,10)+"T12:00")-f)/864e5; if(isNaN(d)||d<-10||d>60) return;
+    const nom=nomOk(r), s=(nom?100:0)-Math.abs(d); if(!best||s>best.s) best={r,s,nom,seguro:nom}; });
   return best; }
+/* V250: si el pago ya está en Egresos o Bancos, sus PDF se adjuntan solos como respaldo. Solo con coincidencia
+   segura y pagos ya hechos (una cuenta por pagar cambia de fecha al pagarse). Se hace de uno en uno. */
+async function billAutoAdjuntar(Gs){
+  if(STATE._billAuto||!nmFbActivo()||!NMFB.esAdmin()) return;
+  const fallo=STATE._billAutoFallo||(STATE._billAutoFallo={}), T=[];
+  Gs.forEach(g=>{ const c=g.cruce; if(!c||!c.seguro||!c.r||!c.r.hu||/pend/i.test(c.r.estado||"")) return; const mov=movKey(c.r), vistos={};
+    g.ms.forEach(m=>(m.adjuntos||[]).forEach(a=>{ const n=String(a.nombre||""), k=m.id+":"+a.i; if(!/\.pdf$/i.test(n)||vistos[n]||fallo[k]) return; vistos[n]=1;
+      if((STATE.resp||[]).some(x=>x.mov===mov&&x.nombre===n)) return;
+      if((STATE.comps||[]).some(x=>x.billing&&x.nombre===n&&x.estado==="registrado"&&x.adjuntadoA===mov)) return;
+      T.push({g,m,a,mov,k,tipo:g.tipo==="recibo"?"Recibo":"Factura"}); })); });
+  if(!T.length) return;
+  STATE._billAuto=true; let ok=0;
+  for(let i=0;i<T.length;i++){ const t=T[i]; STATE._billAutoMsg="Adjuntando solos a sus pagos: "+(i+1)+" de "+T.length+"…"; if(STATE.section==="billing") render();
+    try{ let c=(STATE.comps||[]).find(x=>x.billing===t.k)||(STATE.comps||[]).find(x=>x.billing&&x.nombre===t.a.nombre&&t.g.ms.some(m=>String(x.billing).indexOf(m.id+":")===0));
+      if(!c){ const r=await nmRun("billingAdjunto",compPin(),t.m.id,t.a.i); if(!r||r.error) throw new Error((r&&r.error)||"sin respuesta");
+        c=compNuevo(r,"billing"); c.billing=t.k; c.mensaje=t.m.asunto; STATE.comps=(STATE.comps||[]).concat([c]); }
+      STATE.resp=(STATE.resp||[]).concat([{id:"R"+Date.now()+i,mov:t.mov,tipo:t.tipo,driveId:c.driveId,url:c.url,nombre:c.nombre,mime:c.mime,subido:new Date().toISOString(),por:"Billing (automático)",comp:c.id}]);
+      c.estado="registrado"; c.adjuntadoA=t.mov; c.registrado=new Date().toISOString();
+      await Promise.all([respGuardar(),compGuardarLista()]); ok++; }
+    catch(e){ console.error("Billing adjuntar",e); fallo[t.k]=1; } }
+  STATE._billAuto=false; STATE._billAutoMsg=""; STATE._billMsg={t:"Listo ✓ "+ok+" de "+T.length+" documentos se adjuntaron solos a sus pagos.",ok:ok===T.length}; if(STATE.section==="billing") render();
+}
 function billingCargar(forzar){
   if(STATE._billCargando) return; const dias=STATE.billDias||90;
   if(STATE.billing&&STATE.billing.dias===dias&&!forzar) return;
@@ -2872,27 +2926,30 @@ function renderBilling(){
   const B=STATE.billing, tipoF=STATE.billTipo||"todos", soloSin=!!STATE.billSoloSin, q=_normTxt(STATE.billSearch||"");
   let U=[]; const sy=STATE.year; STATE.year="__all"; try{ U=egresosUnificados(); }catch(_){ } finally{ STATE.year=sy; }
   const compDe={}; (STATE.comps||[]).forEach(c=>{ if(c.billing) compDe[c.billing]=c; });
-  const M=((B&&B.mensajes)||[]).map(m=>{ m.cruce=(m.tipo==="factura"||m.tipo==="recibo")?billCruce(m,U):null; return m; });
+  const M=billGrupos((B&&B.mensajes)||[],U);
   const pend=m=>(m.tipo==="factura"||m.tipo==="recibo")&&!m.cruce;
-  const V=M.filter(m=>(tipoF==="todos"||m.tipo===tipoF)&&(!soloSin||pend(m))&&(!q||_normTxt([m.prov,m.asunto,m.texto].join(" ")).indexOf(q)>=0));
+  const V=M.filter(m=>(tipoF==="todos"||m.tipo===tipoF)&&(!soloSin||pend(m))&&(!q||_normTxt([m.prov,m.doc].concat(m.ms.map(x=>x.asunto+" "+x.texto)).join(" ")).indexOf(q)>=0));
   const n=k=>M.filter(m=>k==="todos"||m.tipo===k).length;
   const grupos=new Map(); V.forEach(m=>{ if(!grupos.has(m.prov)) grupos.set(m.prov,[]); grupos.get(m.prov).push(m); });
   const tag={factura:'<span class="st bob">Factura</span>',recibo:'<span class="st activo">Recibo · pagado</span>',fallido:'<span class="st inactivo">Pago fallido</span>',aviso:'<span class="tag">Aviso</span>'};
   const fila=m=>{ const c=m.cruce, mo=m.monto;
-    const cruce=(m.tipo==="factura"||m.tipo==="recibo")?(c?`<span class="st activo" title="${esc((c.r.keytext||c.r.con||"")+" · "+(c.r.cuentaPago||""))}">✓ ${esc(c.r.origen)} ${esc(fmtDate(c.r.fecha)||"")}${c.nom?"":" (mismo monto)"}</span>`:(mo?'<span class="st bob">Sin registrar</span>':'<span class="mini">sin monto</span>')):"";
-    const adj=(m.adjuntos||[]).map(a=>{ const k=m.id+":"+a.i, ya=compDe[k];
-      return ya?`<span class="tag" title="Ya está en Comprobantes">📎 ${esc(a.nombre)} ✓</span>`:`<button class="btn ghost bl-adj" data-id="${esc(m.id)}" data-i="${a.i}" title="Guardarlo en Comprobantes (Drive) y que la IA lo lea">📎 ${esc(a.nombre)} → Comprobantes</button>`; }).join(" ");
+    const cdr=!c&&mo&&mo.mon==="BOB"?compCidreDe({ia:{monto:mo.n,moneda:"BOB",fecha:String(m.fecha).slice(0,10)}}):null, enComp=m.comps.some(x=>x.estado==="pendiente");
+    const cruce=(m.tipo==="factura"||m.tipo==="recibo")?(c?(/pend/i.test(c.r.estado||"")?`<span class="st bob" title="${esc((c.r.keytext||c.r.con||"")+" · "+f2(c.r.orig||0))}">⏳ En Cuentas por Pagar</span>`:`<span class="st activo" title="${esc((c.r.keytext||c.r.con||"")+" · "+(c.r.cuentaPago||""))}">✓ ${esc(c.r.origen)} ${esc(fmtDate(c.r.fecha)||"")}${c.porNro?" (N° "+esc(m.doc)+")":(c.nom?"":" (mismo monto)")}</span>`):
+      (cdr?`<span class="st bob" title="Concepto en CIDRE: ${esc(cdr.con)}">🏦 En CIDRE, falta en Egresos</span>`:(enComp?'<span class="st bob">En Comprobantes, falta registrar</span>':(mo?'<span class="st bob">Sin registrar</span>':'<span class="mini">sin monto</span>')))):"";
+    const vistos={}, adj=m.ms.map(x=>(x.adjuntos||[]).map(a=>{ if(vistos[a.nombre]) return ""; vistos[a.nombre]=1; const k=x.id+":"+a.i, ya=compDe[k]||m.comps.find(y=>y.nombre===a.nombre);
+      return ya?`<span class="tag" title="Ya está en Comprobantes">📎 ${esc(a.nombre)} ✓</span>`:`<button class="btn ghost bl-adj" data-id="${esc(x.id)}" data-i="${a.i}" title="Guardarlo en Comprobantes (Drive) y que la IA lo lea">📎 ${esc(a.nombre)} → Comprobantes</button>`; }).join(" ")).join(" ").trim();
+    const otros=m.otros.length?`<details class="mini" style="margin-top:6px"><summary style="cursor:pointer">+${m.otros.length} correo${m.otros.length===1?"":"s"} del mismo documento</summary>${m.otros.map(x=>`<div style="margin-top:4px">${esc(fmtDate(x.fecha.slice(0,10))||"")} · ${esc(x.asunto||"(sin asunto)")}</div>`).join("")}</details>`:"";
     return `<tr><td style="white-space:nowrap">${esc(fmtDate(m.fecha.slice(0,10))||"")}</td><td>${tag[m.tipo]}</td>
-      <td style="text-align:left"><b>${esc(m.asunto||"(sin asunto)")}</b><span class="sub2">${esc(m.texto.slice(0,140))}</span>${adj?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${adj}</div>`:""}</td>
+      <td style="text-align:left"><b>${esc(m.asunto||"(sin asunto)")}</b><span class="sub2">${esc(m.texto.slice(0,140))}</span>${adj?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${adj}</div>`:""}${otros}</td>
       <td class="num" style="white-space:nowrap">${mo?esc(mo.mon)+" "+f2(mo.n):"–"}</td><td>${cruce}</td>
       <td><a class="btn ghost" href="https://mail.google.com/mail/u/1/#all/${encodeURIComponent(m.hilo)}" target="_blank" rel="noopener" title="Abrir el correo en Gmail (cuenta PE$O)">Gmail ↗</a></td></tr>`; };
   const cards=[...grupos.entries()].map(([p,L])=>{ const sp=L.filter(pend).length;
-    return `<div class="card"><div class="head"><h3>${esc(p)}</h3><span class="mini">${L.length} correo${L.length===1?"":"s"}${sp?` · <b style="color:var(--error)">${sp} sin registrar</b>`:""}</span></div>
+    return `<div class="card"><div class="head"><h3>${esc(p)}</h3><span class="mini">${L.length} documento${L.length===1?"":"s"}${sp?` · <b style="color:var(--error)">${sp} sin registrar</b>`:""}</span></div>
       <div class="tbl-scroll"><table class="comp-tbl"><thead><tr><th>Fecha</th><th>Tipo</th><th style="text-align:left">Asunto</th><th>Monto</th><th>En el sistema</th><th></th></tr></thead><tbody>${L.map(fila).join("")}</tbody></table></div></div>`; }).join("");
   const kp=M.filter(pend).length, kf=M.filter(m=>m.tipo==="fallido").length;
   app.innerHTML=`
     <div class="grid kpis">
-      ${kpi("Correos a billing@",String(M.length),"últimos "+(STATE.billDias||90)+" días","#235347","✉")}
+      ${kpi("Correos a billing@",String(((B&&B.mensajes)||[]).length),M.length+" documentos · últimos "+(STATE.billDias||90)+" días","#235347","✉")}
       ${kpi("Facturas y recibos",String(M.filter(m=>m.tipo==="factura"||m.tipo==="recibo").length),"con monto detectado: "+M.filter(m=>m.monto&&(m.tipo==="factura"||m.tipo==="recibo")).length,"#163832","▤")}
       ${kpi("Sin registrar",String(kp),"no se encontró el gasto en Egresos ni Bancos","#B42318","!")}
       ${kpi("Pagos fallidos",String(kf),"revisar la tarjeta o el saldo","#8EB69B","✕")}
@@ -2904,9 +2961,11 @@ function renderBilling(){
       <button class="btn" id="billAct"${STATE._billCargando?" disabled":""}>${STATE._billCargando?"Leyendo Gmail…":"↻ Actualizar"}</button></div>
     <div class="seg" id="billTipos" style="margin:0 0 16px;flex-wrap:wrap">${BILL_TIPOS.map(([k,l])=>`<button data-t="${k}" class="${tipoF===k?"on":""}">${l} (${n(k)})</button>`).join("")}</div>
     ${STATE.billErr?`<div class="msg err" style="display:block;margin-bottom:12px">${esc(STATE.billErr)}</div>`:""}
+    ${STATE._billAutoMsg?`<div class="msg" style="display:block;margin-bottom:12px">${esc(STATE._billAutoMsg)}</div>`:""}
     ${STATE._billMsg?`<div class="msg ${STATE._billMsg.ok?"ok":"err"}" style="display:block;margin-bottom:12px">${esc(STATE._billMsg.t)}</div>`:""}
     ${cards||`<div class="card">${emptyState(STATE._billCargando&&!B?"Leyendo los correos de billing@… (tarda unos 20 segundos)":(B?"No hay correos con estos filtros.":"Todavía no se leyeron los correos."))}</div>`}
-    <p class="gcal-note">Solo se leen los correos: el sistema no los marca, no los borra ni responde. «En el sistema» busca un gasto con el mismo monto (±1%) entre 10 días antes y 60 días después del correo, en Egresos y en Bancos.</p>`;
+    <p class="gcal-note">Solo se leen los correos: el sistema no los marca, no los borra ni responde. Los correos de un mismo documento (mismo N° de factura o recibo, misma cadena o mismo asunto) se muestran juntos. «En el sistema» busca el N° o el mismo monto (±1%), entre 10 días antes y 60 días después del correo, en Egresos, Bancos y Cuentas por Pagar. Si el pago ya está hecho y el proveedor coincide, el PDF se adjunta solo.</p>`;
+  if(B) setTimeout(()=>billAutoAdjuntar(M).catch(e=>console.error(e)),0);
   const si=$("#billSearch"); if(si) si.addEventListener("input",()=>{ STATE.billSearch=si.value; STATE._focus=true; render(); });
   if(STATE._focus&&si){ si.focus(); si.setSelectionRange(si.value.length,si.value.length); STATE._focus=false; }
   $("#billDias").addEventListener("change",e=>{ STATE.billDias=+e.target.value; billingCargar(true); });
@@ -2914,7 +2973,7 @@ function renderBilling(){
   $("#billAct").addEventListener("click",()=>billingCargar(true));
   document.querySelectorAll("#billTipos button").forEach(b=>b.addEventListener("click",()=>{ STATE.billTipo=b.dataset.t; render(); }));
   document.querySelectorAll(".bl-adj").forEach(b=>b.addEventListener("click",()=>{
-    const m=M.find(x=>x.id===b.dataset.id), i=+b.dataset.i; if(!m) return;
+    const m=((B&&B.mensajes)||[]).find(x=>x.id===b.dataset.id), i=+b.dataset.i; if(!m) return;
     b.disabled=true; b.textContent="Guardando y leyendo con IA…";
     nmRun("billingAdjunto",compPin(),m.id,i).then(r=>{
       if(!r||r.error){ STATE._billMsg={t:"No se pudo pasar a Comprobantes: "+((r&&r.error)||"sin respuesta"),ok:false}; render(); return; }
@@ -3596,7 +3655,7 @@ function renderResumen(){
     const ingPas=sum(A.filas.filter(r=>r._k==="ing"), r=>r.subg);
     const gasGr=sum(A.filas.filter(r=>r._k!=="ing"), r=>r.subg);
     const top=sum(A.filas.filter(r=>r._k!=="ing"), r=>r.ca+"\u0000"+r.cp).slice(0,5);
-    const fuente=sum(A.filas.filter(r=>r._k!=="ing"), r=>({Egresos:"Hoja de Egresos",BitGo:"BitGo",Mercury:"Mercury"}[r.src]||r.src));
+    const fuente=sum(A.filas.filter(r=>r._k!=="ing"), r=>({Egresos:"Egresos",BitGo:"BitGo",Mercury:"Mercury"}[r.src]||r.src));
     const gasTot=A.cos+A.gas;
     const linea=(l,v,cls,nota)=>`<tr class="${cls||''}"><td style="text-align:left">${l}</td><td class="num">${pMoney(v)}</td><td class="num mini">${nota||pct(v,A.ing)}</td></tr>`;
     STATE._resPDF.ingPas=ingPas; STATE._resPDF.gasGr=gasGr; STATE._resPDF.top=top; STATE._resPDF.fuente=fuente;
@@ -3919,7 +3978,7 @@ function renderEgresosGeneral(){
   if(STATE.egGenCA!=="__all") rows=rows.filter(r=>STATE.egGenCA==="__sin"?!r.ca:String(r.ca||"")===STATE.egGenCA);
   if(STATE.egGenMes!=="__all") rows=rows.filter(r=>String(r.mi)===STATE.egGenMes);
   if(STATE.egGenCosto!=="__all") rows=rows.filter(r=>String(r.costo||"")===STATE.egGenCosto);
-  if(STATE.egGenAsig&&STATE.egGenAsig!=="__all") rows=rows.filter(r=>{ const x=r.casrc; return STATE.egGenAsig==="manual"?x==="manual":STATE.egGenAsig==="auto"?(x==="auto"||x==="hist"||x==="adiv"):STATE.egGenAsig==="sheet"?x==="sheet":(!r.ca); });
+  if(STATE.egGenAsig&&STATE.egGenAsig!=="__all") rows=rows.filter(r=>{ const x=r.casrc; return STATE.egGenAsig==="manual"?(x==="manual"||x==="sheet"):STATE.egGenAsig==="auto"?(x==="auto"||x==="hist"||x==="adiv"):(!r.ca); });
   const q=String(STATE.egGenSearch||"").trim().toLowerCase();
   // V205: también busca por beneficiario, comentario (N° de transferencia, cuenta destino), pagado por, tipo de pago e IMPORTE
   if(q){ const nq=egNumQuery(q); const qn=_rhNorm(q);
@@ -3959,7 +4018,7 @@ function renderEgresosGeneral(){
   const srcSeg=srcs.length>1?`<div class="seg" id="egGenSrcSeg" style="margin:0 0 12px;flex-wrap:wrap">${[["__all","Todos"]].concat(srcs.map(x=>[x,x])).map(([v,t])=>`<button data-v="${esc(v)}" class="${(STATE.egGenSrc||"__all")===v?"on":""}">${esc(t)} <span class="mini">(${v==="__all"?allU.length:allU.filter(r=>r.origen===v).length})</span></button>`).join("")}</div>`:"";
   const egGenFilterDefs=[
     {k:"egGenSrc",lbl:"Fuente",disp:v=>v,opts:srcs.map(s=>({v:s,t:s})),ph:"Todas las fuentes"},
-    {k:"egGenAsig",lbl:"Cuenta analítica puesta",seg:true,disp:v=>({manual:"A mano",auto:"Automática (sistema)",sheet:"De la hoja",sin:"Sin cuenta"}[v]||v),opts:[{v:"manual",t:"A mano"},{v:"auto",t:"Automática (sistema)"},{v:"sheet",t:"De la hoja"},{v:"sin",t:"Sin cuenta"}]},
+    {k:"egGenAsig",lbl:"Cuenta analítica puesta",seg:true,disp:v=>({manual:"A mano",auto:"Automática (sistema)",sin:"Sin cuenta"}[v]||v),opts:[{v:"manual",t:"A mano"},{v:"auto",t:"Automática (sistema)"},{v:"sin",t:"Sin cuenta"}]},
     {k:"egGenTP",lbl:"Tipo de Pago",seg:true,disp:v=>v,opts:[...new Set(allU.map(r=>r.cuentaPago).filter(Boolean))].sort().map(v=>({v,t:v})),ph:"Todos los tipos de pago"},
     {k:"egGenMes",lbl:"Mes",seg:true,disp:v=>MONTH_ES_LONG[+v],opts:fMeses.map(i=>({v:String(i),t:MONTH_ES_LONG[i]})),ph:"Todos los meses"},
     {k:"egGenCuenta",lbl:"Cuenta",disp:v=>v,opts:fCuentas.map(c=>({v:c,t:c})),ph:"Todas las cuentas"},
@@ -3978,7 +4037,6 @@ function renderEgresosGeneral(){
       <div class="mini" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:-2px 0 12px">Cuenta Analítica:
         <span class="ca-cell ca-auto" style="cursor:default;pointer-events:none">Automática</span>
         <span class="ca-cell ca-man" style="cursor:default;pointer-events:none">Manual</span>
-        <span class="ca-cell ca-sheet" style="cursor:default;pointer-events:none">De la hoja</span>
         <span style="color:var(--muted)">· Clic en la cuenta para cambiarla o dejar el gasto <b>sin cuenta</b> (filtro «sin cuenta analítica» para reasignarlos). La columna <b>Concepto</b> muestra Beneficiario · Description · COMMENTS según la fuente.</span></div>
       ${rows.length?tbl(cols,sorted.slice(0,1000),totRow,S,{sticky:true}):emptyState("No hay egresos con los filtros actuales.")}
       ${rows.length>1000?`<div class="mini" style="margin-top:10px">Mostrando 1000 de ${rows.length}. Usa la búsqueda o filtros.</div>`:""}</div>`;
@@ -4229,7 +4287,7 @@ function ancGeneric(res, fb){ fb=fb||{}; const j=caJer(res.ca, fb.cp)||{};
 function caCellHTMLg(fuente, huella, res){
   const cls=res.src==="manual"?"ca-man":((res.src==="auto"||res.src==="hist"||res.src==="adiv")?"ca-auto":(res.src==="sheet"?"ca-sheet":"ca-none"));
   const label=res.ca?esc(res.ca):"Asignar";
-  const title=res.src==="manual"?"Manual (tú la pusiste) · clic para cambiar":(res.src==="auto"?"Automática (base Asignación) · clic para cambiar":res.src==="hist"?"Automática: el sistema la dedujo del historial (mismo proveedor o concepto) · clic para cambiar":res.src==="adiv"?"Automática (aproximada): el sistema la eligió por palabras parecidas · revísala y clic para corregir":(res.src==="sheet"?"Valor de la hoja, aún no está en la base · clic para asignar":"Sin asignar · clic para asignar"));
+  const title=res.src==="manual"?"Manual (tú la pusiste) · clic para cambiar":(res.src==="auto"?"Automática (base Asignación) · clic para cambiar":res.src==="hist"?"Automática: el sistema la dedujo del historial (mismo proveedor o concepto) · clic para cambiar":res.src==="adiv"?"Automática (aproximada): el sistema la eligió por palabras parecidas · revísala y clic para corregir":(res.src==="sheet"?"Cuenta guardada en el registro · clic para cambiar":"Sin asignar · clic para asignar"));
   const rev=(res.src==="manual"||res.src==="sin")?`<button type="button" class="ca-revert" data-fuente="${esc(fuente)}" data-hu="${esc(huella)}" title="Volver a automático">↻</button>`:"";
   return `<span class="ca-wrap"><button type="button" class="ca-cell ${cls}" data-fuente="${esc(fuente)}" data-hu="${esc(huella)}" title="${esc(title)}">${label}</button>${rev}</span>`;
 }
@@ -4454,7 +4512,6 @@ function dimAuto(val){ return val?`<span class="ca-cell ca-auto" style="cursor:d
 function caLeyenda(){ return `<div class="mini" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:-2px 0 12px">Cuenta Analítica:
     <span class="ca-cell ca-auto" style="cursor:default;pointer-events:none">Automática</span> de la base
     <span class="ca-cell ca-man" style="cursor:default;pointer-events:none">Manual</span> tú la pusiste
-    <span class="ca-cell ca-sheet" style="cursor:default;pointer-events:none">De la hoja</span> aún no en la base
     <span style="color:var(--muted)">· Clic en la celda para asignar/cambiar · ↻ vuelve a automático</span></div>`; }
 
 // Nombre contable estándar del Tipo (a partir del texto de la columna B)
@@ -4609,6 +4666,7 @@ function renderEgresos(){
     const allSel=allHu.length>0 && allHu.every(h=>STATE.egSel.has(h));
     const cols=[
       {sel:true,noMenu:true,cls:"chk",label:`<input type="checkbox" id="egchkall" title="Seleccionar todo lo filtrado"${allSel?" checked":""}>`,render:r=>`<input type="checkbox" class="egchk" data-hu="${esc(r._hu)}"${STATE.egSel.has(r._hu)?" checked":""}>`},
+      {label:"Fecha de pago",sortKey:"fecha",render:r=>`<span class="mini" style="white-space:nowrap">${r.fecha?esc(fmtDate(String(r.fecha).slice(0,10))):(r.m?esc(mesES(r.m))+" "+(r.g||""):"–")}</span>`},
       {label:"Cuenta",sortKey:"kcuenta",render:r=>{const a=ancEgreso(r);return a.kcuenta?`<span class="tag">${esc(a.kcuenta)}</span>`:'<span class="zero">–</span>';}},
       {label:"Grupo",sortKey:"grupoc",render:r=>esc(ancEgreso(r).grupoc||"–")},
       {label:"Sub Grupo",sortKey:"ksubgrupo",render:r=>esc(ancEgreso(r).ksubgrupo||"–")},
@@ -4620,7 +4678,6 @@ function renderEgresos(){
       {label:"Empresa (resp.)",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
       {label:"Tipo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.tipo||"");}},
       {label:"Centro de Costo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.centro||"");}},
-      {label:"Mes",sortKey:"fecha",render:r=>`<span class="mini">${esc(mesES(r.m))} ${r.g||""}</span>`},
       {label:"País",sortKey:"pais",render:r=>r.pais?`<span class="tag">${esc(r.pais)}</span>`:'<span class="zero">–</span>'},
       {label:"Estado",sortKey:"e",render:r=>stBadge(r.e)},
       {label:"Tipo de Pago",sortKey:"tipo",render:r=>r.tipo?`<span class="tag">${esc(r.tipo)}</span>`:'<span class="zero">–</span>'},
@@ -4637,7 +4694,6 @@ function renderEgresos(){
       <div class="mini" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:-2px 0 12px">Cuenta Analítica:
         <span class="ca-cell ca-auto" style="cursor:default;pointer-events:none">Automática</span> de la base
         <span class="ca-cell ca-man" style="cursor:default;pointer-events:none">Manual</span> tú la pusiste
-        <span class="ca-cell ca-sheet" style="cursor:default;pointer-events:none">De la hoja</span> aún no en la base
         <span style="color:var(--muted)">· Clic en la celda para asignar/cambiar · marca las casillas para asignar varias a la vez · ↻ vuelve a automático</span></div>
       <div id="egBulkBar" class="bulkbar"${STATE.egSel.size?"":' style="display:none"'}>
         <b><span id="egBulkCount">${STATE.egSel.size}</span> fila(s) seleccionada(s)</b>
@@ -5924,12 +5980,12 @@ function _cosGastos(){
     return {e, k:e.g*12+monthIdx(e.m), usd:e.impUSD!=null?+e.impUSD:(+e.imp||0), ben:e.ben||"", ca, cuenta:a.kcuenta||"", txt:_cosClave([e.ben,e.con,ca].join(" "))}; });
 }
 /* Pagos que se repiten en Egresos y no están en la Lista de Costos */
-function costosSugerencias(items){
+function costosSugerencias(items, ocultas){
   const G=_cosGastos(), hoyK=new Date().getFullYear()*12+new Date().getMonth(), oc=new Set(STATE.cosOcultas||[]);
   const m={};
   G.filter(x=>x.k>hoyK-12&&x.usd>0&&x.ben&&!/^activo/i.test(x.cuenta)&&!/sueldo|salario|remunera|aguinaldo|refund|devoluc|prestamo|préstamo|aporte|inversi|impuesto|dividend/i.test(x.ca+" "+x.e.con)).forEach(x=>{
-    const k=_cosClave(x.ben); if(!k||oc.has(k)) return; const o=m[k]||(m[k]={k,ben:x.ben,meses:{},n:0,cas:{},ult:""}); o.meses[x.k]=(o.meses[x.k]||0)+x.usd; o.n++; o.cas[x.ca]=(o.cas[x.ca]||0)+1; if(String(x.e.fecha)>o.ult) o.ult=String(x.e.fecha); });
-  return Object.values(m).filter(o=>Object.keys(o.meses).length>=2&&!items.some(it=>_cosCoincide(it,o.k,true))).map(o=>{
+    const k=_cosClave(x.ben); if(!k||oc.has(k)!==!!ocultas) return; const o=m[k]||(m[k]={k,ben:x.ben,meses:{},n:0,cas:{},ult:""}); o.meses[x.k]=(o.meses[x.k]||0)+x.usd; o.n++; o.cas[x.ca]=(o.cas[x.ca]||0)+1; if(String(x.e.fecha)>o.ult) o.ult=String(x.e.fecha); });
+  return Object.values(m).filter(o=>Object.keys(o.meses).length>=(ocultas?1:2)&&!items.some(it=>_cosCoincide(it,o.k,true))).map(o=>{
     const vals=Object.values(o.meses), prom=vals.reduce((s,v)=>s+v,0)/vals.length, dev=Math.sqrt(vals.reduce((s,v)=>s+(v-prom)*(v-prom),0)/vals.length);
     const ca=Object.entries(o.cas).sort((a,b)=>b[1]-a[1])[0][0], t=_normTxt(o.ben+" "+ca);
     const tipo=/ads|marketing|publici|meta|facebook|instagram|tiktok|linkedin|influenc|campa/.test(t)?"COMERCIALIZACION":(/contab|legal|abogad|notari|oficina|alquiler|banco|seguro|admin/.test(t)?"ADMINISTRATIVO":"OPERATIVO");
@@ -6127,19 +6183,19 @@ function renderCostos(){
     ];
     const lcFB=fbHTML("lcf", lcFilterDefs);
     // V231: editar en la nube, sugerencias y comparación con lo pagado
-    const vista=STATE.lcVista||"lista", sug=costosSugerencias(items), cmp=vista==="comparar"?costosComparacion(items.filter(passF)):null;
+    const vista=STATE.lcVista||"lista", verOcu=vista==="sugerencias"&&!!STATE.lcVerOcu, sug=costosSugerencias(items,verOcu), nOcu=(STATE.cosOcultas||[]).length, cmp=vista==="comparar"?costosComparacion(items.filter(passF)):null;
     const accion=STATE.cosFB?`<button class="btn primary" id="lcAdd">+ Agregar costo</button>`:(NMFB.esAdmin()&&nmFbActivo()?`<button class="btn primary" id="lcMigrar" title="Copia la hoja «Tabla Costos» a la nube del sistema; la hoja queda de respaldo">☁ Pasar la lista a la nube</button>`:"");
     const toolbar=`<div class="toolbar" style="align-items:center">${esearch("lcSearch","Buscar proveedor o concepto…",STATE.lcSearch)}${lcFB.bar}<div class="spacer"></div>${accion}</div>${lcFB.panel}
       ${STATE.cosFBErr?`<div class="msg err" style="display:block;margin:0 0 12px">${esc(STATE.cosFBErr)}</div>`:""}${!STATE.cosFB?`<div class="mini" style="margin:-4px 0 10px">La lista todavía se lee de la hoja «Tabla Costos». Para editarla aquí hay que pasarla a la nube.</div>`:""}`;
-    const vistaSeg=`<div class="seg" id="lcVista" style="margin:0 0 14px;flex-wrap:wrap"><button data-v="lista" class="${vista==="lista"?"on":""}">Lista</button><button data-v="agrupada" class="${vista==="agrupada"?"on":""}">Agrupada</button><button data-v="sugerencias" class="${vista==="sugerencias"?"on":""}">Sugerencias (${sug.length})</button><button data-v="comparar" class="${vista==="comparar"?"on":""}">Lista vs lo pagado</button></div>`;
+    const vistaSeg=`<div class="seg" id="lcVista" style="margin:0 0 14px;flex-wrap:wrap"><button data-v="lista" class="${vista==="lista"?"on":""}">Lista</button><button data-v="agrupada" class="${vista==="agrupada"?"on":""}">Agrupada</button><button data-v="sugerencias" class="${vista==="sugerencias"?"on":""}">Sugerencias (${verOcu?costosSugerencias(items).length:sug.length})</button><button data-v="comparar" class="${vista==="comparar"?"on":""}">Lista vs lo pagado</button></div>`;
     const mesK=k=>MONTH_ES[k%12]+" "+String(Math.floor(k/12)).slice(2);
     let cuerpo;
-    if(vista==="sugerencias") cuerpo=`<div class="card"><div class="head"><h3>Pagos frecuentes que no están en la lista</h3><span class="mini">${sug.length} · se pagaron en 2 o más meses del último año</span></div>
+    if(vista==="sugerencias") cuerpo=`<div class="card"><div class="head"><h3>${verOcu?"Sugerencias ocultas":"Pagos frecuentes que no están en la lista"}</h3><span class="mini">${sug.length}${verOcu?"":" · se pagaron en 2 o más meses del último año"}</span><div class="spacer"></div>${nOcu||verOcu?`<button class="btn ghost" id="lcVerOcu">${verOcu?"← Volver a las sugerencias":"Ver ocultos ("+nOcu+")"}</button>`:""}</div>
         <p class="section-intro">Sistemas, plataformas, suscripciones y proveedores que aparecen seguido en <b>Egresos</b> pero no en tu Lista de Costos. Decide si son <b>fijos</b> o <b>variables</b> y de qué <b>grupo</b>: <b>+ Agregar</b> los pasa a la lista (puedes cambiar los datos antes de guardar) y <b>Ocultar</b> los saca de aquí.</p>
         ${sug.length?`<div class="tbl-scroll sticky-head"><table><thead><tr><th>Proveedor</th><th>Cuenta analítica</th><th class="num">Meses con pago</th><th class="num">Promedio /mes (USD)</th><th>Parece</th><th>Grupo sugerido</th><th>Último pago</th><th></th></tr></thead><tbody>
         ${sug.map((x,j)=>`<tr><td><b>${esc(x.ben)}</b></td><td>${esc(x.ca||"–")}</td><td class="num">${x.nMeses}</td><td class="num">$${f2(x.prom)}</td><td><span class="tag">${x.fijo?"Fijo":"Variable"}</span></td><td>${x.tipo==="OPERATIVO"?"Operativo":x.tipo==="ADMINISTRATIVO"?"Administrativo":"Comercialización"}</td><td class="mini">${esc(x.ult)}</td>
-          <td style="white-space:nowrap">${STATE.cosFB?`<button class="btn ghost lc-sug" data-j="${j}">+ Agregar</button><button class="btn ghost lc-ocu" data-j="${j}" title="No mostrar más esta sugerencia">Ocultar</button>`:""}</td></tr>`).join("")}
-        </tbody></table></div>`:emptyState("Todos los pagos frecuentes ya están en la lista.")}</div>`;
+          <td style="white-space:nowrap">${STATE.cosFB?`<button class="btn ghost lc-sug" data-j="${j}">+ Agregar</button>${verOcu?`<button class="btn ghost lc-mos" data-j="${j}" title="Vuelve a la lista de sugerencias">Mostrar</button>`:`<button class="btn ghost lc-ocu" data-j="${j}" title="La pasa a Ver ocultos">Ocultar</button>`}`:""}</td></tr>`).join("")}
+        </tbody></table></div>`:emptyState(verOcu?"No hay sugerencias ocultas para mostrar.":"Todos los pagos frecuentes ya están en la lista.")}</div>`;
     else if(vista==="comparar") cuerpo=`<div class="card"><div class="head"><h3>Lista vs lo pagado</h3><span class="mini">lo que dice la lista al mes (fijo + variable) contra lo pagado en Egresos · USD</span></div>
         <p class="section-intro">Para cada costo de la lista se buscan en <b>Egresos</b> los pagos al mismo proveedor en los <b>últimos 3 meses completos</b>. <b>Diferencia</b> en rojo = se pagó más de lo esperado; en verde = menos. Si un costo sale en 0 puede que esté a otro nombre en Egresos.</p>
         <div class="tbl-scroll sticky-head"><table><thead><tr><th>Grupo</th><th>Proveedor</th><th>Concepto</th><th class="num">Monto fijo /mes</th><th class="num">Monto variable /mes</th>${cmp.ks.map(k=>`<th class="num">${mesK(k)}</th>`).join("")}<th class="num">Promedio pagado</th><th class="num">Diferencia</th></tr></thead><tbody>
@@ -6206,6 +6262,9 @@ function renderCostos(){
     document.querySelectorAll(".lc-cxp").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const it=items.find(i=>i._id===b.dataset.id); if(it) costoACxP(it); }));
     document.querySelectorAll(".lc-sug").forEach(b=>b.addEventListener("click",()=>{ const x=sug[+b.dataset.j]; if(!x) return;
       costoModal(null,{tipo:x.tipo,prov:x.ben,con:x.ca,fv:x.fijo?"Fijo":"Variable",fijo:x.fijo?Math.round(x.prom*100)/100:"",vari:x.fijo?"":Math.round(x.prom*100)/100,mon:"USD",frec:"Mensual",emp:"LLC",nota:"Sugerido desde Egresos"}); }));
+    const lvo=$("#lcVerOcu"); if(lvo) lvo.addEventListener("click",()=>{ STATE.lcVerOcu=!STATE.lcVerOcu; render(); });
+    document.querySelectorAll(".lc-mos").forEach(b=>b.addEventListener("click",async()=>{ const x=sug[+b.dataset.j]; if(!x) return;
+      const L=(STATE.cosOcultas||[]).filter(k=>k!==x.k); try{ await NMFB.cosOcultar(L); STATE.cosOcultas=L; render(); }catch(e){ alert("No se pudo mostrar: "+((e&&e.message)||e)); } }));
     document.querySelectorAll(".lc-ocu").forEach(b=>b.addEventListener("click",async()=>{ const x=sug[+b.dataset.j]; if(!x) return;
       const L=(STATE.cosOcultas||[]).concat([x.k]); try{ await NMFB.cosOcultar(L); STATE.cosOcultas=L; render(); }catch(e){ alert("No se pudo ocultar: "+((e&&e.message)||e)); } }));
     const lm=$("#lcMigrar"); if(lm) lm.addEventListener("click",async()=>{ if(!confirm("Se copiará la hoja «Tabla Costos» a la nube del sistema. Desde ahí la lista se edita aquí y la hoja queda solo de respaldo. ¿Continuar?")) return;
@@ -8684,7 +8743,7 @@ function renderMercury(){
     const allSelM=rows.length>0 && rows.every(r=>STATE.mSel.has(r._hu));
     const cols=[
       selCol("m",STATE.mSel,allSelM),
-      {label:"Fecha",sortKey:"fecha",render:r=>`<span class="mini">${fmtDate(r.fecha)}</span>`},
+      {label:"Fecha de pago",sortKey:"fecha",render:r=>`<span class="mini">${fmtDate(r.fecha)}</span>`},
       {label:"Descripción",sortKey:"desc",render:r=>`${esc(r.desc||"–")}${(r.bankdesc&&r.bankdesc!==r.desc)?`<span class="sub2">${esc(r.bankdesc)}</span>`:""}`},
       {label:"Cuenta de Débito",sortKey:"cuenta",render:r=>r.cuenta?`<span class="tag">${esc(r.cuenta)}</span>`:'<span class="zero">–</span>'},
       {label:"Cuenta",sortKey:"kcuenta",render:r=>{const a=manc(r);return a.kcuenta?`<span class="tag">${esc(a.kcuenta)}</span>`:'<span class="zero">–</span>';}},
@@ -8830,7 +8889,7 @@ function renderBitgo(){
   const ordered=[...rows].sort(cmp);
 
   const tcols=[{label:"TIPO",sortKey:"_cat",render:r=>`<span class="tw" style="display:inline-block;background:${bgColor(r._cat)};margin-right:7px"></span>${esc(r._cat)}`}];
-  if(dateCol)     tcols.push({label:"Fecha",sortKey:dateCol,render:r=>`<span class="mini">${fmtDate(gdUS(r[dateCol]).iso||r[dateCol])}</span>`});
+  if(dateCol)     tcols.unshift({label:"Fecha de pago",sortKey:dateCol,render:r=>`<span class="mini" style="white-space:nowrap">${fmtDate(gdUS(r[dateCol]).iso||r[dateCol])}</span>`});
   if(typeCol)     tcols.push({label:"Movimiento",sortKey:typeCol,render:r=>r[typeCol]?`<span class="tag">${esc(r[typeCol])}</span>`:'<span class="zero">–</span>'});
   if(cuCol)       tcols.push({label:"Cuenta",sortKey:cuCol,render:r=>{const a=bganc(r);return a.kcuenta?`<span class="tag">${esc(a.kcuenta)}</span>`:'<span class="zero">–</span>';}});
   if(grCol)       tcols.push({label:"Grupo",sortKey:grCol,render:r=>{const a=bganc(r);return a.grupoc?esc(a.grupoc):'<span class="zero">–</span>';}});

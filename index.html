@@ -1577,7 +1577,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V259";
+const APP_VERSION = "V260";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2539,30 +2539,30 @@ function renderPresuComparar(pre, mopts, MES){
   const app=$("#app"); const segP=`<div class="seg" id="prModo" style="margin-bottom:14px"><button data-m="armar">Armar presupuesto</button><button data-m="comparar" class="on">Comparar con lo gastado</button></div>`;
   if(!meses.length){ app.innerHTML=(pre||"")+segP+`<div class="card">${emptyState("Todavía no hay presupuestos guardados. En «Armar presupuesto» pulsa <b>📌 Guardar presupuesto</b> al comenzar el mes; al terminar el mes vuelve aquí para comparar.")}</div>`; presuWireModo(); return; }
   const snap=G[STATE.presuCmp], [ty,tm]=STATE.presuCmp.split("-").map(Number), tMi=tm-1;
-  let rows=[]; const sv={base:STATE.resBase,year:STATE.year}; try{ STATE.resBase="caja"; STATE._pnlSoloPagado=true; STATE.year="__all"; rows=pnlRows(true); } finally { STATE.resBase=sv.base; STATE.year=sv.year; STATE._pnlSoloPagado=false; }
+  let rows=[]; const sv={base:STATE.resBase,year:STATE.year}; try{ STATE._pnlSoloPagado=true; STATE.year="__all"; rows=pnlRows(true); } finally { STATE.resBase=sv.base; STATE.year=sv.year; STATE._pnlSoloPagado=false; }
   const fx=CUR==="BOB"?(RATE||1):1, real={};
   rows.filter(r=>!r.income&&!r.dato&&r.g===ty&&monthIdx(r.m)===tMi&&!/traspaso/i.test(r.grupo+" "+r.subg+" "+r.cp+" "+r.ca)).forEach(r=>{ const k=r.ca||"(sin cuenta)"; const o=real[k]||(real[k]={gr:r.grupo||"(sin grupo)",cp:r.cp||"",v:0,det:[]}); o.v+=+r.imp||0; if(r.det) o.det.push(Object.assign({},r.det,{imp:r.imp})); });
   const L={}; Object.entries(snap.items||{}).forEach(([ca,o])=>{ L[ca]={ca,gr:o.gr,cp:o.cp,bud:(+o.bud||0)*fx,real:0,det:[]}; });
   Object.entries(real).forEach(([ca,o])=>{ const x=L[ca]||(L[ca]={ca,gr:o.gr,cp:o.cp,bud:0,real:0,det:[]}); x.real+=o.v; x.det=o.det; });
   const lista=Object.values(L).sort((a,b)=>String(a.gr).localeCompare(String(b.gr))||b.real-a.real);
   const tb=lista.reduce((s,o)=>s+o.bud,0), tr=lista.reduce((s,o)=>s+o.real,0);
-  const dif=(b,r)=>{ const d=r-b; return `<td class="num" style="color:${d>0.5?"var(--error,#B42318)":"var(--emerald)"}">${d>0.5?"▲ ":(d<-0.5?"▼ ":"")}${money(Math.abs(d))}</td><td class="num">${b?Math.round(r/b*100)+"%":(r?"no presupuestado":"–")}</td>`; };
+  const dif=(b,r)=>{ const d=r-b; return `<td class="num" style="color:${d>0.5?"var(--error,#B42318)":"var(--emerald)"}">${d>0.5?"▲ ":(d<-0.5?"▼ ":"")}${pMoney(Math.abs(d))}</td><td class="num">${b?Math.round(r/b*100)+"%":(r?"no presupuestado":"–")}</td>`; };
   let gAnt=null; const filas=lista.map((o,n)=>{ const h=o.gr!==gAnt?`<tr class="pr-grp"><td colspan="5" style="text-align:left"><b>${esc(o.gr)}</b></td></tr>`:""; gAnt=o.gr;
-    return h+`<tr><td style="text-align:left">${esc(o.ca)}<span class="sub2">${esc(o.cp||"")}</span></td><td class="num">${o.bud?money(o.bud):'<span class="zero">–</span>'}</td>${o.real?_prDet(n,"r",o.real).replace('class="pr-det"','class="num pr-det"'):'<td class="num"><span class="zero">–</span></td>'}${dif(o.bud,o.real)}</tr>`; }).join("");
+    return h+`<tr><td style="text-align:left">${esc(o.ca)}<span class="sub2">${esc(o.cp||"")}</span></td><td class="num">${o.bud?pMoney(o.bud):'<span class="zero">–</span>'}</td>${o.real?_prDet(n,"r",o.real).replace('class="pr-det"','class="num pr-det"'):'<td class="num"><span class="zero">–</span></td>'}${dif(o.bud,o.real)}</tr>`; }).join("");
   const sobre=lista.filter(o=>o.real-o.bud>0.5).length;
   app.innerHTML=(pre||"")+segP+`
     <div class="toolbar-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
       <label class="mini" style="display:flex;gap:8px;align-items:center">Presupuesto guardado <span class="select-wrap"><select id="prCmpMes">${meses.map(m=>{ const [y,mm]=m.split("-").map(Number); return `<option value="${m}"${m===STATE.presuCmp?" selected":""}>${MES[mm-1]} ${y}</option>`; }).join("")}</select></span></label>
       <span class="mini">guardado el ${esc(String(snap.fecha||"").slice(0,10).split("-").reverse().join("/"))}${snap.por?" por "+esc(snap.por):""}</span></div>
     <div class="grid kpis">
-      ${kpi("Presupuestado",money(tb),MES[tMi]+" "+ty,"#235347","◇")}
-      ${kpi("Gastado (pagado)",money(tr),"en "+MES[tMi]+" "+ty,"#163832","◆")}
-      ${kpi(tr>tb?"Gastado de más":"Ahorro",money(Math.abs(tr-tb)),tb?Math.round(tr/tb*100)+"% del presupuesto":"",tr>tb?"#B42318":"#235347",tr>tb?"▲":"▼")}
+      ${kpi("Presupuestado",pMoney(tb),MES[tMi]+" "+ty,"#235347","◇")}
+      ${kpi("Gastado (pagado)",pMoney(tr),"en "+MES[tMi]+" "+ty,"#163832","◆")}
+      ${kpi(tr>tb?"Gastado de más":"Ahorro",pMoney(Math.abs(tr-tb)),tb?Math.round(tr/tb*100)+"% del presupuesto":"",tr>tb?"#B42318":"#235347",tr>tb?"▲":"▼")}
       ${kpi("Cuentas pasadas",String(sobre),"gastaron más de lo presupuestado","#8EB69B","!")}
     </div>
-    <div class="card"><div class="head"><h3>Presupuesto vs gastado · ${MES[tMi]} ${ty}</h3><span class="mini">${CUR} · lo gastado es lo pagado en el mes (caja)</span></div>
+    <div class="card"><div class="head"><h3>Presupuesto vs gastado · ${MES[tMi]} ${ty}</h3><span class="mini">${CUR} · ${STATE.resBase==="caja"?"lo gastado es lo pagado en el mes":"lo gastado es lo que corresponde al mes (pagado)"}</span></div>
       <div class="tbl-scroll sticky-head"><table class="pr-tbl"><thead><tr><th style="text-align:left">Cuenta</th><th>Presupuesto</th><th>Gastado</th><th>Diferencia</th><th>% usado</th></tr></thead>
-      <tbody>${filas}</tbody><tfoot><tr><td style="text-align:left"><b>Total</b></td><td class="num"><b>${money(tb)}</b></td><td class="num"><b>${money(tr)}</b></td>${dif(tb,tr)}</tr></tfoot></table></div></div>`;
+      <tbody>${filas}</tbody><tfoot><tr><td style="text-align:left"><b>Total</b></td><td class="num"><b>${pMoney(tb)}</b></td><td class="num"><b>${pMoney(tr)}</b></td>${dif(tb,tr)}</tr></tfoot></table></div></div>`;
   presuWireModo();
   $("#prCmpMes").addEventListener("change",ev=>{ STATE.presuCmp=ev.target.value; render(); });
   document.querySelectorAll(".pr-det").forEach(td=>td.addEventListener("click",()=>{ const o=lista[+td.dataset.o]; presuDetalle(o.ca+" · "+MES[tMi]+" "+ty,o.det); }));
@@ -2570,9 +2570,9 @@ function renderPresuComparar(pre, mopts, MES){
 /* V257: los pagos detrás de una cifra del Presupuesto, sin salir a Egresos */
 function presuDetalle(titulo,L){ const F=[...L].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||""))), t=F.reduce((s,x)=>s+(+x.imp||0),0);
   rhModal(esc(titulo),`<div class="tbl-scroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Fecha</th><th style="text-align:left">Beneficiario</th><th style="text-align:left">Concepto</th><th style="text-align:left">Pagado desde</th><th>Monto</th></tr></thead>
-    <tbody>${F.map(x=>`<tr><td style="text-align:left;white-space:nowrap">${esc(String(x.fecha||"–").slice(0,10))}</td><td style="text-align:left">${esc(x.ben||"–")}</td><td style="text-align:left">${esc(x.con||"–")}</td><td style="text-align:left">${esc(x.tipo||"–")}</td><td class="num">${money(+x.imp||0,2)}</td></tr>`).join("")}</tbody>
-    <tfoot><tr><td colspan="4" style="text-align:left"><b>Total (${F.length})</b></td><td class="num"><b>${money(t,2)}</b></td></tr></tfoot></table></div>`,860); }
-const _prDet=(n,i,v)=>`<td class="pr-det" data-o="${n}" data-i="${i}" title="Ver los pagos">${money(v)}</td>`;
+    <tbody>${F.map(x=>`<tr><td style="text-align:left;white-space:nowrap">${esc(String(x.fecha||"–").slice(0,10))}</td><td style="text-align:left">${esc(x.ben||"–")}</td><td style="text-align:left">${esc(x.con||"–")}</td><td style="text-align:left">${esc(x.tipo||"–")}</td><td class="num">${pMoney(+x.imp||0)}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td colspan="4" style="text-align:left"><b>Total (${F.length})</b></td><td class="num"><b>${pMoney(t)}</b></td></tr></tfoot></table></div>`,860); }
+const _prDet=(n,i,v)=>`<td class="pr-det" data-o="${n}" data-i="${i}" title="Ver los pagos">${pMoney(v)}</td>`;
 /* V258: los rubros del Presupuesto en español, juntando los que son lo mismo */
 const PR_RUBROS=[[/^people/,"Sueldos y bonos"],[/^otrosbeneficios/,"Beneficios sociales"],[/^(subscription|annualsub)/,"Suscripciones"],[/^(generaladmin|serviciode|mantenimiento|materialesysuministros)/,"Oficina"],
   [/^profesionalservices/,"Servicios profesionales"],[/^viajes/,"Viajes y viáticos"],[/^otrosgastos/,"Otros gastos"],[/^plataformatecnologica/,"Sistemas"],[/^publicidad/,"Publicidad digital"]];
@@ -2588,7 +2588,7 @@ function renderPresupuesto(pre){
   // últimos 3 meses COMPLETOS antes del mes actual
   const ref=[]; for(let k=3;k>=1;k--){ const d=new Date(yNow,mNow-k,1); ref.push({g:d.getFullYear(),mi:d.getMonth()}); }
   const save={base:STATE.resBase,year:STATE.year};
-  let rows=[]; try{ STATE.resBase="caja"; STATE._pnlSoloPagado=true; rows=pnlRows(true); } finally { STATE.resBase=save.base; STATE._pnlSoloPagado=false; }
+  let rows=[]; try{ STATE._pnlSoloPagado=true; rows=pnlRows(true); } finally { STATE.resBase=save.base; STATE._pnlSoloPagado=false; }   // V260: usa Devengado o Caja, igual que el Estado de Resultados
   const esTraspaso=r=>/traspaso/i.test(r.grupo+" "+r.subg+" "+r.cp+" "+r.ca);
   const inRef=r=>ref.some(x=>x.g===r.g && x.mi===monthIdx(r.m));
   const L={}; const key=(gr,cp,ca)=>gr+"\u0000"+cp+"\u0000"+ca;
@@ -2628,11 +2628,11 @@ function renderPresupuesto(pre){
   /* V258: Grupo ▸ rubro ▸ cuenta. Un rubro con varias cuentas se ve en una línea y se despliega con un clic. */
   if(!STATE.presuCpAb) STATE.presuCpAb=new Set();
   const cpDe=o=>prRubro(o.cp,o.ca), cpId=o=>o.gr+"|"+cpDe(o);
-  const sumaFila=(t,lbl,cls,attr,pad,abierto)=>`<tr class="${cls}" ${attr} style="cursor:pointer"><td style="text-align:left;padding-left:${pad}px"><span class="pnl-caret ${abierto?"open":""}">▶</span> <b>${esc(lbl)}</b></td>${t.ref.map(v=>`<td>${v?money(v):""}</td>`).join("")}<td><b>${money(t.prom)}</b></td><td>${t.lista?money(t.lista):""}</td><td><b>${money(t.bud)}</b></td><td>${t.pend?money(t.pend):""}</td><td><b>${money(t.tot)}</b></td></tr>`;
+  const sumaFila=(t,lbl,cls,attr,pad,abierto)=>`<tr class="${cls}" ${attr} style="cursor:pointer"><td style="text-align:left;padding-left:${pad}px"><span class="pnl-caret ${abierto?"open":""}">▶</span> <b>${esc(lbl)}</b></td>${t.ref.map(v=>`<td>${v?pMoney(v):""}</td>`).join("")}<td><b>${pMoney(t.prom)}</b></td><td>${t.lista?pMoney(t.lista):""}</td><td><b>${pMoney(t.bud)}</b></td><td>${t.pend?pMoney(t.pend):""}</td><td><b>${pMoney(t.tot)}</b></td></tr>`;
   const filaCa=(o,pad,sub)=>{ const n=lista.indexOf(o); return `<tr><td style="text-align:left;padding-left:${pad}px">${esc(o.ca)}${sub?`<span class="sub2">${esc(sub)}</span>`:""}</td>
-      ${o.ref.map((v,i)=>v?_prDet(n,i,v):'<td><span class="zero">–</span></td>').join("")}<td><b>${money(o.prom)}</b></td><td>${o.lista?money(o.lista):'<span class="zero">–</span>'}</td>
+      ${o.ref.map((v,i)=>v?_prDet(n,i,v):'<td><span class="zero">–</span></td>').join("")}<td><b>${pMoney(o.prom)}</b></td><td>${o.lista?pMoney(o.lista):'<span class="zero">–</span>'}</td>
       <td><input class="pr-in${o.aj?" pr-aj":""}" data-ca="${esc(o.ca)}" value="${Math.round(o.bud)}" inputmode="decimal" title="${o.aj?"Ajustado a mano":"Sugerido: promedio (o lo presupuestado si es mayor)"}">${o.aj?`<button class="btn ghost pr-rst" data-ca="${esc(o.ca)}" title="Volver al promedio">↻</button>`:""}</td>
-      ${o.pend?_prDet(n,"p",o.pend):'<td><span class="zero">–</span></td>'}<td><b>${money(o.tot)}</b></td></tr>`; };
+      ${o.pend?_prDet(n,"p",o.pend):'<td><span class="zero">–</span></td>'}<td><b>${pMoney(o.tot)}</b></td></tr>`; };
   const rango=g=>/^activo/i.test(g)?1:(/^sin clasificar/i.test(g)?2:(/^en la lista/i.test(g)?3:0));
   const filas=[...new Set(lista.map(o=>o.gr))].sort((a,b)=>rango(a)-rango(b)).map(gr=>{ const cerr=STATE.presuCerr.has(gr);
     let h=sumaFila(GT[gr],gr,"pr-grp pr-grp-t",`data-gr="${esc(gr)}" data-pid="${esc(gr)}"`,8,!cerr); if(cerr) return h;
@@ -2653,16 +2653,16 @@ function renderPresupuesto(pre){
       <button class="btn primary" id="prGuardar" title="Guarda una copia de este presupuesto para compararlo al terminar el mes">📌 ${(NM_PRESU&&NM_PRESU.guardados&&NM_PRESU.guardados[STATE.presuMes])?"Volver a guardar":"Guardar presupuesto"} de ${MES[tMi]}</button>
     </div>
     <div class="grid kpis">
-      ${kpi("Presupuesto del mes",money(T("bud")),"promedio "+refTxt+" (ajustable)","#235347","◇")}
-      ${kpi("Cuentas por pagar",money(T("pend")),pendRows.length+" pagos pendientes hasta "+MES[tMi],"#B42318","◷")}
-      ${kpi("Total que se necesita",money(T("tot")),"presupuesto + lo que ya se debe","#163832","=")}
-      ${kpi("Promedio mensual real",money(T("prom")),"pagado en "+refTxt,"#8EB69B","≈")}
+      ${kpi("Presupuesto del mes",pMoney(T("bud")),"promedio "+refTxt+" (ajustable)","#235347","◇")}
+      ${kpi("Cuentas por pagar",pMoney(T("pend")),pendRows.length+" pagos pendientes hasta "+MES[tMi],"#B42318","◷")}
+      ${kpi("Total que se necesita",pMoney(T("tot")),"presupuesto + lo que ya se debe","#163832","=")}
+      ${kpi("Promedio mensual real",pMoney(T("prom")),"pagado en "+refTxt,"#8EB69B","≈")}
     </div>
     <div class="card"><div class="head"><h3>Presupuesto de ${MES[tMi]} ${ty}</h3><span class="mini">${CUR} · los valores se pueden cambiar</span><div class="spacer" style="flex:1"></div><button class="btn ghost" id="prAbrir">Abrir todo</button><button class="btn ghost" id="prCerrar">Cerrar todo</button></div>
-      <p class="section-intro">La columna <b>Presupuesto</b> se llena sola con el <b>promedio de lo pagado</b> en ${refTxt} (o con lo <b>Presupuestado</b> registrado en Egresos si es mayor). Cámbiala si quieres ajustar algo: queda guardada para ese mes. Haz clic en el monto de un mes o de <b>Por pagar</b> para ver sus pagos. <b>Por pagar</b> son los egresos en estado <b>Pendiente</b> hasta ${MES[tMi]}. No incluye Traspasos Internos. <b>Lista de Costos</b> es solo para comparar: muestra lo esperado al mes según la Lista, en la cuenta donde más se le pagó a cada proveedor, y no cambia el Presupuesto, salvo los costos de plataforma sin pagos en Egresos (como Bridge), que entran con el monto de la Lista.</p>
+      <p class="section-intro">La columna <b>Presupuesto</b> se llena sola con el <b>promedio de lo pagado</b> en ${refTxt}, ${STATE.resBase==="caja"?"según el mes en que se pagó":"repartido en los meses a los que corresponde (<b>Meses a Distribuir</b> del gasto)"} (o con lo <b>Presupuestado</b> registrado en Egresos si es mayor). Cámbiala si quieres ajustar algo: queda guardada para ese mes. Haz clic en el monto de un mes o de <b>Por pagar</b> para ver sus pagos. <b>Por pagar</b> son los egresos en estado <b>Pendiente</b> hasta ${MES[tMi]}. No incluye Traspasos Internos. <b>Lista de Costos</b> es solo para comparar: muestra lo esperado al mes según la Lista, en la cuenta donde más se le pagó a cada proveedor, y no cambia el Presupuesto, salvo los costos de plataforma sin pagos en Egresos (como Bridge), que entran con el monto de la Lista.</p>
       <div class="tbl-scroll sticky-head" id="prScroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Cuenta</th>${ref.map(x=>`<th>${MES[x.mi].slice(0,3)} ${String(x.g).slice(2)}</th>`).join("")}<th>Promedio</th><th>Lista de Costos</th><th>Presupuesto</th><th>Por pagar</th><th>Total</th></tr></thead>
       <tbody>${filas||`<tr><td colspan="9">${emptyState("No hay gastos pagados en los últimos 3 meses ni cuentas por pagar.")}</td></tr>`}</tbody>
-      <tfoot><tr><td style="text-align:left"><b>Total</b></td>${[0,1,2].map(i=>`<td><b>${money(lista.reduce((s,o)=>s+o.ref[i],0))}</b></td>`).join("")}<td><b>${money(T("prom"))}</b></td><td><b>${money(T("lista"))}</b></td><td><b>${money(T("bud"))}</b></td><td><b>${money(T("pend"))}</b></td><td><b>${money(T("tot"))}</b></td></tr></tfoot></table></div>
+      <tfoot><tr><td style="text-align:left"><b>Total</b></td>${[0,1,2].map(i=>`<td><b>${pMoney(lista.reduce((s,o)=>s+o.ref[i],0))}</b></td>`).join("")}<td><b>${pMoney(T("prom"))}</b></td><td><b>${pMoney(T("lista"))}</b></td><td><b>${pMoney(T("bud"))}</b></td><td><b>${pMoney(T("pend"))}</b></td><td><b>${pMoney(T("tot"))}</b></td></tr></tfoot></table></div>
     </div>`;
   $("#prMes").addEventListener("change",ev=>{ STATE.presuMes=ev.target.value; render(); });
   document.querySelectorAll(".pr-det").forEach(td=>td.addEventListener("click",()=>{ const o=lista[+td.dataset.o], i=td.dataset.i, x=ref[+i];
@@ -3694,7 +3694,7 @@ function renderResumen(){
   const app=$("#app");
   if(RESCHART){try{RESCHART.destroy();}catch(e){}RESCHART=null;}
   const per=STATE.year==="__all"?"Todos los años":STATE.year;
-  const usaBase=(tab==="resumen"||tab==="eresultados"||tab==="pormes");
+  const usaBase=(tab==="resumen"||tab==="eresultados"||tab==="pormes"||tab==="presupuesto");
   const baseTxt=STATE.resBase==="caja"?"Caja: cada gasto en el mes en que se PAGÓ":"Devengado: cada gasto en el mes al que CORRESPONDE";
   const seg=`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
@@ -3702,7 +3702,7 @@ function renderResumen(){
         <button data-b="devengado" class="${STATE.resBase==='devengado'?'on':''}">Devengado</button>
         <button data-b="caja" class="${STATE.resBase==='caja'?'on':''}">Caja</button>
       </div><span class="mini">${baseTxt} · ${per} · ${CUR}</span>`
-      :`<span class="mini">${tab==="presupuesto"?"Se calcula con lo realmente pagado (caja)":"Posición de caja y lo que hay que cubrir"} · ${CUR}</span>`}
+      :`<span class="mini">${tab==="presupuesto"?baseTxt:"Posición de caja y lo que hay que cubrir"} · ${CUR}</span>`}
       </div>
       <button class="btn btn-icon icon-only" id="resPdf" title="Descargar PDF de lo que ves" aria-label="PDF">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>

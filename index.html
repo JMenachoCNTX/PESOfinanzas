@@ -1581,7 +1581,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V264";
+const APP_VERSION = "V265";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -5013,7 +5013,27 @@ function renderRRHH(){
   // ---- PAGOS (BitGo wallet Sueldos) ----
   if(tab==="pagos"){
     rhPlCargar();
-    const pagos=bitgoSueldos().filter(p=>p.salida);
+    const todos=bitgoSueldos().filter(p=>p.salida);
+    /* V265: filtros de la pestaña Pagos */
+    const F=STATE.rhPagF||(STATE.rhPagF={y:"",m:"",per:"",colab:"",wallet:"",tipo:"",asset:"",q:""});
+    const qF=_normTxt(F.q||"");
+    const pagos=todos.filter(p=>(!F.y||String(p.y)===F.y)&&(!F.m||String(p.mi)===F.m)&&(!F.per||String(p.per||"")===F.per)
+      &&(!F.colab||(F.colab==="__sin"?!p.colab:p.colab===F.colab))&&(!F.wallet||p.wallet===F.wallet)&&(!F.tipo||p.tipo===F.tipo)&&(!F.asset||p.asset===F.asset)
+      &&(!qF||_normTxt([p.quien,p.colab,p.wallet,p.tipo,p.asset].join(" ")).indexOf(qF)>=0));
+    const uniq=k=>[...new Set(todos.map(p=>p[k]).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
+    const fSel=(k,lbl,L)=>`<label class="mini" style="display:flex;flex-direction:column;gap:4px">${lbl}<span class="select-wrap"><select class="rh-pf" data-f="${k}"><option value="">Todos</option>${L.map(([v,t])=>`<option value="${esc(v)}"${String(F[k])===String(v)?" selected":""}>${esc(t)}</option>`).join("")}</select></span></label>`;
+    const hayF=Object.values(F).some(Boolean);
+    const filtrosHTML=`<div class="card"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <label class="mini" style="display:flex;flex-direction:column;gap:4px;flex:1 1 200px">Buscar<input id="rhPfQ" placeholder="Nombre, detalle…" value="${esc(F.q||"")}" autocomplete="off"></label>
+        ${fSel("y","Año",[...new Set(todos.map(p=>p.y).filter(v=>v!=null))].sort((a,b)=>b-a).map(y=>[y,y]))}
+        ${fSel("m","Mes de pago",MONTH_ES_LONG.map((t,i)=>[i,t]).filter(([i])=>todos.some(p=>p.mi===i)))}
+        ${fSel("per","Mes de planilla",uniq("per").reverse().map(v=>[v,rhPerTxt(v)]))}
+        ${fSel("colab","Colaborador",[["__sin","Sin asignar"],...uniq("colab").map(v=>[v,v])])}
+        ${fSel("wallet","Wallet",uniq("wallet").map(v=>[v,v]))}
+        ${fSel("tipo","Movimiento",uniq("tipo").map(v=>[v,v]))}
+        ${fSel("asset","Asset",uniq("asset").map(v=>[v,v]))}
+        ${hayF?`<button class="btn ghost" id="rhPfLimpiar">Limpiar filtros</button>`:""}
+      </div>${hayF?`<p class="mini" style="margin:10px 0 0">Mostrando ${pagos.length} de ${todos.length} pagos.</p>`:""}</div>`;
     const totalPag=pagos.reduce((s,p)=>s+p.monto,0);
     const years=[...new Set(pagos.map(p=>p.y).filter(v=>v!=null))].sort((a,b)=>a-b);
     const meses=new Set(pagos.filter(p=>p.mi>=0).map(p=>p.y+"-"+p.mi));
@@ -5039,12 +5059,16 @@ function renderRRHH(){
         ${kpi("Meses con pago",String(meses.size),"con al menos 1 pago","#163832","◷")}
         ${kpi("Último pago",last?fmtDate(last.fecha):"–",last?money(last.monto):"","#235347","★")}
       </div>`;
-    app.innerHTML=intro+seg+(pagos.length?pagosKpis:"")+(pagos.length?`
+    app.innerHTML=intro+seg+(todos.length?filtrosHTML:"")+(pagos.length?pagosKpis:"")+(pagos.length?`
       <div class="card"><div class="head"><h3>Pagos por mes ${yrForChart?("· "+yrForChart):""}</h3><span class="mini">Wallet Sueldos · BitGo</span></div><div id="rhPagChart"></div></div>
       <div class="card"><div class="head"><h3>Detalle de pagos de sueldos</h3><span class="mini">${money(totalPag)} · clic en un encabezado para ordenar</span></div>${tbl(cols,ordered,["Total","","","","","","",money(totalPag)],S,{sticky:true})}</div>`
-      : emptyState('No hay pagos de sueldos. Se extraen automáticamente de la wallet <b>Sueldos</b> de BitGo. Registra pagos en esa wallet y presiona Actualizar.'));
+      : emptyState(todos.length?'Ningún pago coincide con estos filtros.':'No hay pagos de sueldos. Se extraen automáticamente de la wallet <b>Sueldos</b> de BitGo. Registra pagos en esa wallet y presiona Actualizar.'));
     if(pagos.length){ drawMonthlyInto("#rhPagChart", monthTot, "rhPag", "#8EB69B", "#235347", 124); }
-    rhPerWire(pagos);
+    rhPerWire(todos);
+    document.querySelectorAll(".rh-pf").forEach(x=>x.addEventListener("change",()=>{ F[x.dataset.f]=x.value; render(); }));
+    { const q=$("#rhPfQ"); if(q){ if(STATE._rhPfFoco){ STATE._rhPfFoco=false; q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
+        q.addEventListener("input",()=>{ F.q=q.value; STATE._rhPfFoco=true; render(); }); } }
+    { const b=$("#rhPfLimpiar"); if(b) b.addEventListener("click",()=>{ STATE.rhPagF=null; render(); }); }
     document.querySelectorAll("#app th.sortable").forEach(th=>th.addEventListener("click",()=>{
       const k=th.dataset.k;
       if(S.key===k) STATE.rhPagSort={key:k,dir:S.dir==="asc"?"desc":"asc"};

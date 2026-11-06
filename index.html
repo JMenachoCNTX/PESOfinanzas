@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V241";
+const APP_VERSION = "V242";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2092,10 +2092,10 @@ function _repData(){
     yearRows = pnlRows();
     pas = pasarelaIngresos();
     egU = egresosUnificados();
-    cxpAll = (STATE.egresos||[]).filter(e=>(STATE.year==="__all"||e.g===STATE.year)&&stlow(e.e)==="pendiente");
+    cxpAll = (STATE.egresos||[]).filter(e=>(STATE.year==="__all"||e.g===STATE.year||e.g==null)&&stlow(e.e)==="pendiente");
     invTot = yearFilter(STATE.inv||[]).reduce((s,e)=>s+(+e.importe||0),0);
     preTot = yearFilter(STATE.pre||[]).reduce((s,e)=>s+(+e.importe||0),0);
-    devTot = yearFilter(STATE.dev||[]).reduce((s,e)=>s+(+e.importe||0),0);
+    devTot = yearFilter(STATE.dev||[]).reduce((s,e)=>s+devUSD(e),0);
     paidTot= (STATE.egresos||[]).filter(e=>(STATE.year==="__all"||e.g===STATE.year)&&stlow(e.e)==="pagado").reduce((s,e)=>s+(+e.imp||0),0);
   } finally { STATE.year=saved; }
 
@@ -3403,7 +3403,7 @@ function estadoCuentaHTML(){
   const lcFijoUSD=lcItems.reduce((s,i)=>s+i.mFijoM,0), lcVarUSD=lcItems.reduce((s,i)=>s+i.mVarM,0), lcTotUSD=lcFijoUSD+lcVarUSD;
   const yOkE=r=> STATE.year==="__all"||r.g===STATE.year;
   const st=n=>String(n||"").trim().toLowerCase();
-  const cxpPend=(STATE.egresos||[]).filter(r=>yOkE(r)&&st(r.e)==="pendiente");
+  const cxpPend=(STATE.egresos||[]).filter(r=>(yOkE(r)||r.g==null)&&st(r.e)==="pendiente");
   const cxpPresu=(STATE.egresos||[]).filter(r=>yOkE(r)&&st(r.e)==="presupuestado");
   const sUSD=arr=>arr.reduce((s,r)=>s+(+r.imp||0),0), sBOB=arr=>arr.reduce((s,r)=>s+(+r.impBOB||0),0);
   const pendUSD=sUSD(cxpPend), pendBOB=sBOB(cxpPend), presuUSD=sUSD(cxpPresu), presuBOB=sBOB(cxpPresu);
@@ -3627,7 +3627,7 @@ function renderResumen(){
     // La caja es ACUMULADA desde el inicio (no depende del año elegido)
     const invTot = (STATE.inv||[]).reduce((s,e)=>s+(+e.importe||0),0);
     const preTot = (STATE.pre||[]).reduce((s,e)=>s+(+e.importe||0),0);
-    const devTot = (STATE.dev||[]).reduce((s,e)=>s+(+e.importe||0),0);
+    const devTot = (STATE.dev||[]).reduce((s,e)=>s+devUSD(e),0);
     const egPaid = (STATE.egresos||[]).filter(e=>String(e.e||"").trim().toLowerCase()==="pagado").reduce((s,e)=>s+(+e.imp||0),0);
     const caja = invTot + preTot - egPaid - devTot;
     // Gasto mensual = promedio de los últimos 3 meses completos, de TODAS las fuentes (Egresos, BitGo, Mercury), por fecha de pago
@@ -5042,7 +5042,11 @@ function renderInversiones(){
 /* ---------- PRÉSTAMOS ---------- */
 /* V206: EGRESOS DE SOCIOS — gastos de la empresa pagados por un socio (columna "Pagado por" de Egresos,
    ej. con su tarjeta "TC Alejo"). Es plata que el socio puso por PE$O: se compara con Préstamos y Devoluciones. */
-function egSocioDe(e){ const p=String(e.pagadopor||"").trim(); if(!p || /pe\$?s?o\b|s\.?r\.?l|llc/i.test(p)) return ""; return p; }
+/* V242: lo pagado desde una cuenta de la empresa (CIDRE, Altitude, BitGo) no es gasto de un socio aunque lo haya ejecutado él:
+   así Egresos de socios cuadra con Rendiciones y con Pagos Externos. */
+function egSocioDe(e){ const p=String(e.pagadopor||"").trim(); if(!p || /pe\$?s?o\b|s\.?r\.?l|llc/i.test(p)) return ""; const t=String(e.tipo||""); if(esCuentaCidre(t)||/altitude|bitgo/i.test(t)) return ""; return p; }
+// V242: las devoluciones en bolivianos se pasan a dólares al TC de su fecha (antes se sumaban como si fueran dólares)
+function devUSD(r){ const v=+r.importe||0; if(!/bob|boliv|^bs/i.test(String(r.moneda||""))) return v; const t=tcRateFor(r.fecha)||RATE; return t?v/t:0; }
 function renderEgresosSocios(){
   const all=yearFilter(STATE.egresos||[]).filter(e=>egSocioDe(e));
   const usd=e=>(e.impUSD!=null?+e.impUSD:(+e.imp||0))||0;
@@ -6378,7 +6382,7 @@ function renderFlujoUno(){
         <div class="nsub"><span>Treasury (liquidez)</span><span>Sueldos</span><span>Marketing</span><span>Refunds</span><span>Wallet Liquidez</span><span>Wallets de usuarios</span></div></div>
       <div class="flj-node"><div class="nn">${dot(C.llc)} Lead Bank · Bridge</div><div class="nd">Cuentas USA de los usuarios (USD; swap a USDC). Envío y recepción USA / Europa.</div></div>
       <div class="flj-node"><div class="nn">${dot(C.llc)} Manteca</div><div class="nd">Pasarela LATAM: Argentina, Brasil, Colombia, pronto Perú.</div></div>
-      <div class="flj-node flj-off"><div class="nn">${dot('#9CADA3')} Mercury <span class="mini">(inactiva)</span></div><div class="nd">Cuenta con tarjeta de débito empresarial. Sin uso actual; pronto la reemplaza otro banco con tarjetas corporativas.</div></div>
+      <div class="flj-node flj-off"><div class="nn">${dot('#9CADA3')} Mercury <span class="mini">(cerrada)</span></div><div class="nd">Cuenta cerrada. Solo queda su historial.</div></div>
     </div>
     <div class="flj-ent" style="--e:${C.srl}">
       <div class="eh"><div class="en">PESO SRL</div><div class="ed">Subsidiaria · Bolivia</div></div>
@@ -6445,7 +6449,7 @@ function renderFlujoDos(){
   A+=N(265,230,120,64,"BitGo","6 wallets",C.llc);
   A+=N(395,230,120,64,"Lead Bank","Bridge · USD",C.llc);
   A+=N(525,230,120,64,"Manteca","LATAM",C.llc);
-  A+=N(655,230,120,64,"Mercury","inactiva",C.off,"off");
+  A+=N(655,230,120,64,"Mercury","cerrada",C.off,"off");
   A+=N(800,230,95,52,"CIDRE","banco BO",C.srl);
   A+=N(905,230,95,52,"Tesabiz","pasarela BO",C.srl);
   // wallets de BitGo (chips en fila inferior)
@@ -6522,7 +6526,7 @@ function buildContextoIA(){
   }catch(e){}
   const invT=(STATE.inv||[]).reduce((a,r)=>a+(+r.importe||0),0);
   const preT=(STATE.pre||[]).reduce((a,r)=>a+(+r.importe||0),0);
-  const devT=(STATE.dev||[]).reduce((a,r)=>a+(+r.importe||0),0);
+  const devT=(STATE.dev||[]).reduce((a,r)=>a+devUSD(r),0);
   out.push("INVERSIONES total=$"+r0(invT)+" (Caimán). PRÉSTAMOS total=$"+r0(preT)+". DEVOLUCIONES total=$"+r0(devT)+".");
   const acts=(STATE.rrhh||[]).filter(rrhhIsAct);
   const nom=acts.reduce((a,r)=>a+(+r.sf||0)+(+r.be||0)+(+r.bk||0),0);
@@ -10104,7 +10108,7 @@ function nmWidgetResumen(){
     const est=(e,x)=>String(e.e||"").trim().toLowerCase()===x;
     const cxp=(STATE.egresos||[]).filter(e=>est(e,"pendiente")).reduce((a,e)=>a+u(e),0);
     const nCxp=(STATE.egresos||[]).filter(e=>est(e,"pendiente")).length;
-    const inv=(STATE.inv||[]).reduce((a,e)=>a+(+e.importe||0),0), pre=(STATE.pre||[]).reduce((a,e)=>a+(+e.importe||0),0), dev=(STATE.dev||[]).reduce((a,e)=>a+(+e.importe||0),0);
+    const inv=(STATE.inv||[]).reduce((a,e)=>a+(+e.importe||0),0), pre=(STATE.pre||[]).reduce((a,e)=>a+(+e.importe||0),0), dev=(STATE.dev||[]).reduce((a,e)=>a+devUSD(e),0);
     const pagado=(STATE.egresos||[]).filter(e=>est(e,"pagado")).reduce((a,e)=>a+u(e),0);
     const caja=inv+pre-pagado-dev;
     const g3=[1,2,3].map(k=>{ const d=new Date(y,mi-k,1); return _repTotales(d.getFullYear(),d.getMonth()).expense; });

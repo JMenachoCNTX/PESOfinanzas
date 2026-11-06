@@ -1585,7 +1585,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V267";
+const APP_VERSION = "V268";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -7688,7 +7688,7 @@ function exportResumenPDF(){
     const ctr={halign:"center",lineWidth:0};
     const head=[[{content:"Cuenta",rowSpan:2,styles:{halign:"left",valign:"bottom"}},{content:P.grTit,colSpan:4,styles:ctr},{content:"Comparación",styles:ctr},{content:"Presupuesto de "+(P.mesCorto||P.mes),colSpan:3,styles:ctr}],
       [...P.ref,"Promedio\núltimos 3 meses","Lista\nde Costos","Presupuesto","+ Cuentas\npor pagar","= Total\npresupuesto"].map(x=>({content:x,styles:{halign:"right",valign:"bottom"}}))];
-    const foot=[[{content:"Total"},...fila(t,{fontStyle:"bold"})]];
+    const foot=[[{content:"Total"},...fila(t,{fontStyle:"bold",halign:"right"})]];
     const colW={0:{cellWidth:166}}; for(let i=1;i<=8;i++) colW[i]={halign:"right",cellWidth:(W-2*M-166)/8};
     doc.autoTable({ startY:ctx.y, head, body:body.length?body:[["–"]], foot, theme:"plain", showFoot:"lastPage",
       styles:{fontSize:8,cellPadding:{left:3,right:4,top:4,bottom:3},textColor:[30,30,30],valign:"top",minCellHeight:24,overflow:"linebreak"},

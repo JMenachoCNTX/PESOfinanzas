@@ -1574,7 +1574,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V255";
+const APP_VERSION = "V256";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2589,7 +2589,9 @@ function renderPresupuesto(pre){
   const syL=STATE.year; let UL=[]; STATE.year="__all"; try{ UL=egresosUnificados(); } finally { STATE.year=syL; }
   const UT=UL.filter(r=>r.ca&&!/^activo/i.test(r.kcuenta||"")).map(r=>({r,txt:_cosClave([r.keytext,r.con,r.ca].join(" "))}));
   tablaCostosRows().items.forEach(i=>{ if(!empPassRow(i)) return; const v=(i.mFijoM+i.mVarM)*(CUR==="BOB"?(RATE||1):1); if(!v) return;
-    const por={}; UT.forEach(x=>{ if(!_cosCoincide(i,x.txt)) return; const c=por[x.r.ca]||(por[x.r.ca]={r:x.r,v:0}); c.v+=+x.r.usd||0; });
+    // «Equipo PESO» es la planilla: en Egresos no figura con ese nombre, sino en las cuentas de sueldos
+    const esEquipo=/^equipo\b/.test(_normTxt(i.prov));
+    const por={}; UT.forEach(x=>{ if(!(esEquipo?/sueld|salari|remunera/i.test(x.r.ca):_cosCoincide(i,x.txt))) return; const c=por[x.r.ca]||(por[x.r.ca]={r:x.r,v:0}); c.v+=+x.r.usd||0; });
     const m=Object.values(por).sort((a,b)=>b.v-a.v)[0];
     const o=m?get(m.r.grupoc||"(sin grupo)",m.r.cp||"(sin cuenta principal)",m.r.ca):get("Lista de Costos sin cuenta","Sin pagos registrados",i.prov||i.con||"(sin nombre)");
     o.lista+=v; });

@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V240";
+const APP_VERSION = "V241";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1658,7 +1658,7 @@ let STATE = {
   egSort:{key:"imp",dir:"desc"},
   mSearch:"", mTab:"graficos", mSort:{key:"fecha",dir:"desc"}, mStatus:"__all", mCuenta:"__all", mMes:"__all", mCanalitica:"__all", mContab:"__all", mCAest:"__all", mDesc:"__all", mSel:null,
   bgSearch:"", bgCat:"__all", bgTab:"graficos", bgSort:{key:"",dir:"desc"}, bgAsset:"__all", bgTipo:"__all", bgWallet:"__all", bgCanalitica:"__all", bgContab:"__all", bgCAest:"__all", bgComent:"__all", bgSel:null,
-  planSearch:"", planTipo:"__all", planCat:"__all", planOrigen:"__all", planEstado:"__all", rendTipo:"__all", rendSec:"__all", rendTab:"balance", rendGraphCur:"USD", rendSearch:"", rendSort:{key:"fecha",dir:"desc"}, ingSearch:"", ingTab:"general", ingSub:"lista", ingPasSort:{key:"mi",dir:"asc"}, ingGwSort:{key:"",dir:"asc"}, ingPasGw:"__all", ingPivMetric:"nUSD", egGenSearch:"", egGenSrc:"__all", egGenTP:"__all", egGenSort:{key:"fecha",dir:"desc"}, egGenCuenta:"__all", egGenGrupo:"__all", egGenSubg:"__all", egGenCP:"__all", egGenCA:"__all", egGenMes:"__all", egGenCosto:"__all", provTab:"matriz", provProv:"__all", provYear:null, cosSearch:"", ingresosTab:{cols:[],rows:[]}, costos:{cols:[],rows:[]}, tablaCostos:{cols:[],rows:[]}, pnl:{}, cosTab:"lista", cosProv:"", flujoTab:"uno", repTop:"reportes", socioTab:"inversiones", bancosTab:"mercury", cosPagSort:{key:"impUSD",dir:"desc"}, lcSort:{key:"mFijoM",dir:"desc"}, lcSearch:"", lcCat:"__all", lcTipo:"__all", lcEmp:"__all", lcFV:"__all", invSort:{key:"importe",dir:"desc"}, currency:"USD", empresa:"__all", resTab:"resumen", resBase:"devengado", cmpBasis:"month", cxpTab:"graficos", cxpSearch:"", cxpProv:"__all", cxpMes:"__all", cxpSort:{key:"imp",dir:"desc"}, prePrest:"__all", preSort:{key:"importe",dir:"desc"}, devPer:"__all", devCur:"USD", devSort:{key:"importe",dir:"desc"}, rhSearch:"", rhNombre:"__all", rhCargo:"__all", rhEstado:"__all", rhSort:{key:"_tot",dir:"desc"}, rhTab:"resumen", rhPagSort:{key:"fecha",dir:"desc"}, rhPlanYear:null, rhPlanMes:null, iaMsgs:[], iaBusy:false, iaKey:"", iaInput:"", cieYear:null, cieMes:null,
+  planSearch:"", planTipo:"__all", planCat:"__all", planOrigen:"__all", planEstado:"__all", rendTipo:"__all", rendSec:"__all", rendTab:"balance", rendGraphCur:"USD", rendSearch:"", rendSort:{key:"fecha",dir:"desc"}, ingSearch:"", ingTab:"general", ingSub:"lista", ingPasSort:{key:"mi",dir:"asc"}, ingGwSort:{key:"",dir:"asc"}, ingPasGw:"__all", ingPivMetric:"nUSD", egGenSearch:"", egGenSrc:"__all", egGenTP:"__all", egGenSort:{key:"fecha",dir:"desc"}, egGenCuenta:"__all", egGenGrupo:"__all", egGenSubg:"__all", egGenCP:"__all", egGenCA:"__all", egGenMes:"__all", egGenCosto:"__all", provTab:"matriz", provProv:"__all", provYear:null, cosSearch:"", ingresosTab:{cols:[],rows:[]}, costos:{cols:[],rows:[]}, tablaCostos:{cols:[],rows:[]}, pnl:{}, cosTab:"lista", cosProv:"", flujoTab:"uno", repTop:"reportes", socioTab:"inversiones", bancosTab:"bitgo", cosPagSort:{key:"impUSD",dir:"desc"}, lcSort:{key:"mFijoM",dir:"desc"}, lcSearch:"", lcCat:"__all", lcTipo:"__all", lcEmp:"__all", lcFV:"__all", invSort:{key:"importe",dir:"desc"}, currency:"USD", empresa:"__all", resTab:"resumen", resBase:"devengado", cmpBasis:"month", cxpTab:"graficos", cxpSearch:"", cxpProv:"__all", cxpMes:"__all", cxpSort:{key:"imp",dir:"desc"}, prePrest:"__all", preSort:{key:"importe",dir:"desc"}, devPer:"__all", devCur:"USD", devSort:{key:"importe",dir:"desc"}, rhSearch:"", rhNombre:"__all", rhCargo:"__all", rhEstado:"__all", rhSort:{key:"_tot",dir:"desc"}, rhTab:"resumen", rhPagSort:{key:"fecha",dir:"desc"}, rhPlanYear:null, rhPlanMes:null, iaMsgs:[], iaBusy:false, iaKey:"", iaInput:"", cieYear:null, cieMes:null,
   calY:null, calM:null, calDay:null, calFuente:"__all", tareas:[], taForm:{t:"",prio:"Media",vence:""}, taFiltro:"pendientes"
 };
 
@@ -1710,7 +1710,8 @@ function moneyK(n){
 }
 /* Tipo de cambio (venta) del DÍA del pago — para P&L histórico en BOB */
 function tcRateFor(fecha){
-  const tc=[...(STATE.tc||[])].sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  if(STATE._tcSrc!==STATE.tc||STATE._tcN!==(STATE.tc||[]).length){ STATE._tcSrc=STATE.tc; STATE._tcN=(STATE.tc||[]).length; STATE._tcOrd=[...(STATE.tc||[])].sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))); }
+  const tc=STATE._tcOrd;
   if(tc.length){ let r=tc[0].venta;
     for(const t of tc){ if(String(t.fecha)<=String(fecha||"9999-99-99")){ if(t.venta) r=t.venta; } else break; }
     if(r) return r;
@@ -1888,7 +1889,10 @@ function pnlRows(allYears){
   const _cH=STATE.clasifHoja===true;   // V178: true = clasificación antigua (columnas de las hojas), solo para comparar
   try{ ensureHuellas(); ensureHuellasMerc(); ensureHuellasBitgo(); }catch(_){}
   const _aE=s=>{ if(_cH) return {kcuenta:s.kcuenta,grupoc:s.grupoc,ksubgrupo:s.ksubgrupo,cp:s.cp,ca:s.ca||s.cc}; const a=ancEgreso(s); return a; };
-  (STATE.egresos||[]).forEach(e=>{ _expandEgreso(e).forEach(s=>{ if(!yOk(s.g)) return; if(!empPassRow(s)) return; if(STATE._pnlSoloPagado && /pendiente|presupuestado/i.test(String(s.e||""))) return; const A=_aE(s); add(A.kcuenta, A.grupoc, A.ksubgrupo, A.cp, A.ca, (+s.imp||0), (s.impBOB!=null?s.impBOB:bobOf(+s.imp||0,s.fecha)), s.m, s.g, "Egresos"); }); });
+  (STATE.egresos||[]).forEach(e=>{ _expandEgreso(e).forEach(s=>{ if(!yOk(s.g)) return; if(!empPassRow(s)) return; if(STATE._pnlSoloPagado && /pendiente|presupuestado/i.test(String(s.e||""))) return; const A=_aE(s), _b=(s.impBOB!=null?s.impBOB:bobOf(+s.imp||0,s.fecha));
+    // V241: un gasto sin cuenta completa antes desaparecía del Estado de Resultados; ahora queda a la vista en «Sin clasificar»
+    if(S(A.kcuenta)&&S(A.grupoc)&&S(A.ksubgrupo)&&S(A.cp)&&S(A.ca)) add(A.kcuenta, A.grupoc, A.ksubgrupo, A.cp, A.ca, (+s.imp||0), _b, s.m, s.g, "Egresos");
+    else add("EGRESOS","SIN CLASIFICAR","Sin clasificar","Falta cuenta analítica",S(s.ben)||S(s.con)||"(sin concepto)", (+s.imp||0), _b, s.m, s.g, "Egresos"); }); });
   const find=(cols,...n)=>{ for(const x of n){ const c=cols.find(k=>normHdr(k)===x); if(c)return c; } for(const x of n){ const c=cols.find(k=>normHdr(k).includes(x)); if(c)return c; } return null; };
   const bg=STATE.bitgo||{cols:[],rows:[]}, bc=bg.cols||[];
   const bAmt=find(bc,"amount","monto","importe"), bDate=find(bc,"mmddyyyy","fecha","date","datetime"),
@@ -1901,7 +1905,7 @@ function pnlRows(allYears){
   if(bAmt && showLLC()) (bg.rows||[]).forEach(r=>{ const v=toNum(r[bAmt]); const tok=bCont?contabTok(r[bCont]):null;
     const esEgreso = bCont ? (tok==="si") : (v<0);
     if(!esEgreso) return; const usd=Math.abs(v); if(!usd) return;
-    const d=bDate?new Date(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const m=(d&&!isNaN(d))?MONTHS[d.getMonth()]:null; const iso=bDate?gdUS(r[bDate]).iso:null;
+    const d=bDate?_fd(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const m=(d&&!isNaN(d))?MONTHS[d.getMonth()]:null; const iso=bDate?gdUS(r[bDate]).iso:null;
     let cu=bCu&&r[bCu], gr=bGr&&r[bGr], sg=bSg&&r[bSg], cp=bCP&&r[bCP], ca=bCA&&r[bCA];
     if(!_cH){ const a=ancGeneric(resolveGeneric("BitGo", r._hu, (bCon2&&r[bCon2]), ca), {kcuenta:cu,grupoc:gr,ksubgrupo:sg,cp:cp}); cu=a.kcuenta; gr=a.grupoc; sg=a.ksubgrupo; cp=a.cp; ca=a.ca; }
     if(S(cu)&&S(gr)&&S(sg)&&S(cp)&&S(ca)){ add(cu,gr,sg,cp,ca, usd, bobOf(usd,iso), m, g, "BitGo"); }
@@ -1937,7 +1941,7 @@ function pnlRows(allYears){
   const canEmpIng=!!(iEmp||iPas);
   if(iAmt) (it.rows||[]).forEach(r=>{ const v=toNum(r[iAmt]); if(!v) return;
     if(STATE.empresa!=="__all"){ if(!canEmpIng) return; const remp=iEmp?empNorm(r[iEmp]):empDePasarela(r[iPas]); if(remp!==STATE.empresa) return; }
-    const d=iDate?new Date(r[iDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const m=(d&&!isNaN(d))?MONTHS[d.getMonth()]:null; const iso=iDate?gd(r[iDate]).iso:null; const usd=Math.abs(v); add(iCu&&r[iCu], iGr&&r[iGr], iSg&&r[iSg], iCP&&r[iCP], iCA&&r[iCA], usd, bobOf(usd,iso), m, g, "Ingresos"); });
+    const d=iDate?_fd(r[iDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const m=(d&&!isNaN(d))?MONTHS[d.getMonth()]:null; const iso=iDate?gd(r[iDate]).iso:null; const usd=Math.abs(v); add(iCu&&r[iCu], iGr&&r[iGr], iSg&&r[iSg], iCP&&r[iCP], iCA&&r[iCA], usd, bobOf(usd,iso), m, g, "Ingresos"); });
   // INGRESOS y VOLÚMENES de cada pasarela → árbol "Ingresos ▸ Pasarelas ▸ <pasarela> ▸ (Volumenes | Ingresos <pasarela>) ▸ <concepto>".
   // Ingresos = ingreso real (suma a la Utilidad, convertido a la moneda activa).
   // Volumenes = dato informativo (NO suma, se muestra en su moneda nativa, marcado dato:true).
@@ -3024,7 +3028,7 @@ function SUBTABS_MAP(){ return {
   costos:{key:"cosTab", items:[["lista","Lista de Costos"],["costingreso","Costos por Ingreso",{key:"cosProv",items:PNL_TABS.map(t=>[t,t])}],["pagados","Costos Pagados"],["detalle","Detalle por proveedor"],["graficos","Gráficos"]]},
   calendario:{key:"calTab", items:[["cal","Calendario"],["tareas","Tareas"]]},
   cxp:{key:"cxpTab", items:[["graficos","Gráficos"],["lista","Lista"],["presupuesto","Presupuesto"]]},
-  bancos:{key:"bancosTab", items:[["mercury","Mercury"],["bitgo","BitGo"],["tesabiz","CIDRE"],["altitude","Altitude"],["otras","Pagos Externos"]]},
+  bancos:{key:"bancosTab", items:[["bitgo","BitGo"],["tesabiz","CIDRE"],["altitude","Altitude"],["otras","Pagos Externos"],["mercury","Mercury (cerrada)"]]},
   reportes:{key:"repTop", items:[["reportes","Reportes"],["cierre","Cierre de Mes"]]},
   flujo:{key:"flujoTab", items:[["uno","Flujo"],["dos","Flujo 2"]]},
   socios:{key:"socioTab", items:[["inversiones","Inversiones"],["prestamos","Préstamos"],["egsocios","Egresos de socios"],["devoluciones","Devoluciones"],["rendiciones","Rendiciones"]]},
@@ -3331,7 +3335,7 @@ function gStripRender(sh){
 function renderInicio(){
   const M=window.NUMMEROS_MARCA;
   const ACC=[["resumen","reporte","Resumen P&L","Utilidad y estado de resultados"],["ingresos","ingreso","Ingresos","Lo que entra por empresa"],
-    ["egresos","factura","Egresos","Gastos pagados y pendientes"],["bancos","banco","Bancos","Mercury, BitGo y saldos"],
+    ["egresos","factura","Egresos","Gastos pagados y pendientes"],["bancos","banco","Bancos","BitGo, CIDRE, Altitude y saldos"],
     ["rrhh","equipo","RRHH","Colaboradores y sueldos"],["calendario","calendario","Calendario","Pagos y vencimientos"],
     ["tareas","aprobado","Tareas","Pendientes del equipo"],["archivos","archivo","Archivos","Tus enlaces de uso diario"]];
   const acc=M?ACC.map(([s,ic,t,d])=>`<button type="button" class="ini-acc" data-go="${s}"><span class="ini-ic">${M.icono(ic,_esOscuro()?"dark":"light",t)}</span><span class="ini-tx"><b>${esc(t)}</b><span>${esc(d)}</span></span></button>`).join(""):"";
@@ -3802,7 +3806,7 @@ function egresosUnificados(){
     const a=ancEgreso(e);
     out.push({ origen:/altitude/i.test(String(e.tipo||""))?"Altitude":"Egresos", egId:e._id||null, fecha:e.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Egresos", hu:e._hu,
       keytext:e.ben||"", con:e.con||e.ben||"", moneda:e.moneda||"USD", usd:(e.impUSD!=null?+e.impUSD:(+e.imp||0)), bob:(e.impBOB!=null?+e.impBOB:null),
-      estado:e.e||"", tipo:e.tipo||"", costo:e._costo||"", m:e.m, g:e.g, mi:monthIdx(e.m), orig:(e.impOrig!=null?+e.impOrig:+e.imp||0), cuentaPago:e.tipo||"",
+      estado:e.e||"", tipo:e.tipo||"", costo:e._costo||egCostoDe(e.ben,e.con), m:e.m, g:e.g, mi:monthIdx(e.m), orig:(e.impOrig!=null?+e.impOrig:+e.imp||0), cuentaPago:e.tipo||"",
       extra:[e.ben,e.coment,e.pagadopor,e.pais,e.codc].filter(Boolean).join(" ") });
   });
   const mHasContab=(STATE.mercury||[]).some(r=> String(r.contab==null?"":r.contab).trim()!=="");
@@ -3811,7 +3815,7 @@ function egresosUnificados(){
     if(!esEgreso) return; const usd=Math.abs(v); if(!usd) return;
     const res=resolveGeneric("Mercury", r._hu, r.desc, (r.ca||r.canalitica)); const a=ancGeneric(res,{kcuenta:r.kcuenta,grupoc:r.grupoc,ksubgrupo:r.ksubgrupo,cp:r.cp});
     out.push({ origen:"Mercury", fecha:r.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Mercury", hu:r._hu,
-      keytext:r.desc||"", con:r.desc||"", moneda:"USD", usd, bob:bobOf(usd,r.fecha), estado:r.status||"", tipo:"", m:(r.mi>=0?MONTHS[r.mi]:null), g:r.g, mi:r.mi, orig:usd, cuentaPago:"Mercury", extra:r.bankdesc||"" });
+      keytext:r.desc||"", con:r.desc||"", moneda:"USD", usd, bob:bobOf(usd,r.fecha), estado:r.status||"", tipo:"", costo:egCostoDe(r.desc,""), m:(r.mi>=0?MONTHS[r.mi]:null), g:r.g, mi:r.mi, orig:usd, cuentaPago:"Mercury", extra:r.bankdesc||"" });
   }); }
   const bg=STATE.bitgo||{cols:[],rows:[]}, bc=bg.cols||[];
   const find=(...n)=>{ for(const x of n){ const c=bc.find(k=>normHdr(k)===x); if(c)return c; } for(const x of n){ const c=bc.find(k=>normHdr(k).includes(x)); if(c)return c; } return null; };
@@ -3821,10 +3825,10 @@ function egresosUnificados(){
   if(bAmt && showLLC()){ ensureHuellasBitgo(); (bg.rows||[]).forEach(r=>{ const v=toNum(r[bAmt]); const tok=bCont?contabTok(r[bCont]):null;
     const esEgreso = bCont ? (tok==="si") : (v<0);
     if(!esEgreso) return; const usd=Math.abs(v); if(!usd) return;
-    const d=bDate?new Date(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const iso=bDate?gdUS(r[bDate]).iso:null;
+    const d=bDate?_fd(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const iso=bDate?gdUS(r[bDate]).iso:null;
     const res=resolveGeneric("BitGo", r._hu, (bCon&&r[bCon]), (bCA&&r[bCA])); const a=ancGeneric(res,{kcuenta:bCu&&r[bCu],grupoc:bGr&&r[bGr],ksubgrupo:bSg&&r[bSg],cp:bCP&&r[bCP]});
     out.push({ origen:"BitGo", fecha:iso, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"BitGo", hu:r._hu,
-      keytext:(bCon&&r[bCon])||"", con:(bCon&&r[bCon])||"", moneda:"USD", usd, bob:bobOf(usd,iso), estado:"", tipo:"", m:(d&&!isNaN(d)?MONTHS[d.getMonth()]:null), g, mi:(d&&!isNaN(d)?d.getMonth():-1), orig:usd, cuentaPago:"BitGo - Wallet "+(r._cat||"") });
+      keytext:(bCon&&r[bCon])||"", con:(bCon&&r[bCon])||"", moneda:"USD", usd, bob:bobOf(usd,iso), estado:"", tipo:"", costo:egCostoDe((bCon&&r[bCon])||"",""), m:(d&&!isNaN(d)?MONTHS[d.getMonth()]:null), g, mi:(d&&!isNaN(d)?d.getMonth():-1), orig:usd, cuentaPago:"BitGo - Wallet "+(r._cat||"") });
   }); }
   return out;
 }
@@ -4133,7 +4137,7 @@ function resolveGeneric(fuente, huella, keyText, sheetCa, conText){
    V233: también con un nombre antiguo de una cuenta corregida (campo «alias» del plan, ej. «N8n Cloud1» → «N8n Cloud») */
 function caNombre(v){ const t=String(v||"").trim(); if(!t) return t;
   if(STATE._caCodSrc!==STATE.plan){ const m={}, al={}; ((STATE.plan&&(STATE.plan.rows||STATE.plan))||[]).forEach(r=>{ if(!/anal/i.test(r.categoria||"")) return; const n=String(r.nombre||"").trim();
-      m[String(r.codigo).trim()]=n; (r.alias||[]).forEach(a=>{ if(String(a).trim()) al[_normTxt(a)]=n; }); });
+      m[String(r.codigo).trim()]=n; (r.alias||[]).forEach(a=>{ const x=String(a).trim(); if(!x) return; al[_normTxt(x)]=n; if(/^\d{6,}$/.test(x)) m[x]=n; }); });
     STATE._caCod=m; STATE._caAl=al; STATE._caCodSrc=STATE.plan; }
   if(/^\d{6,}$/.test(t)){ const n=STATE._caCod[t]; return n&&!/^\d+$/.test(n)?n:t; }
   return STATE._caAl[_normTxt(t)]||t; }
@@ -4414,6 +4418,12 @@ function tipoStdName(raw){ const s=_normTxt(raw);
   return String(raw).trim();
 }
 // Índice de reglas por proveedor (de Tabla Costos): proveedor normalizado -> {empresaResp,_emp,tipo,centro,fv}
+/* V241: fijo/variable de un gasto según la Lista de Costos (antes se leía de una columna vacía y siempre daba $0) */
+function egCostoDe(ben,con){ const src=STATE.tablaCostos;
+  if(STATE._ecSrc!==src||!STATE._ecIt){ STATE._ecSrc=src; STATE._ecC={}; try{ STATE._ecIt=(tablaCostosRows().items||[]).filter(i=>i.fv); }catch(_){ STATE._ecIt=[]; } }
+  const k=_cosClave((ben||"")+" "+(con||"")), C=STATE._ecC; if(k in C) return C[k];
+  const M=STATE._ecIt.filter(i=>_cosCoincide(i,k)).sort((a,b)=>(b.mFijoM+b.mVarM)-(a.mFijoM+a.mVarM));
+  return C[k]=M.length?M[0].fv:""; }
 function reglasCostosIndex(){
   const src=STATE.tablaCostos||{};
   if(STATE._rcSrc===src && STATE._rcIdx) return STATE._rcIdx;
@@ -4452,7 +4462,7 @@ function renderEgresos(){
   if(STATE.egGrupo!=="__all")   rows=rows.filter(r=>String(ancEgreso(r).grupoc||"")===STATE.egGrupo);
   if(STATE.egSubg!=="__all")    rows=rows.filter(r=>String(ancEgreso(r).ksubgrupo||"")===STATE.egSubg);
   if(STATE.egCA!=="__all")      rows=rows.filter(r=>String(resolveEgreso(r).ca||"")===STATE.egCA);
-  if(STATE.egCosto!=="__all")   rows=rows.filter(r=>String(r._costo||"")===STATE.egCosto);
+  if(STATE.egCosto!=="__all")   rows=rows.filter(r=>String(r._costo||egCostoDe(r.ben,r.con)||"")===STATE.egCosto);
   if(STATE.egBenef!=="__all")   rows=rows.filter(r=>String(r.ben||"")===STATE.egBenef);
   if(STATE.egCAest==="sin")     rows=rows.filter(r=>!resolveEgreso(r).ca);
   else if(STATE.egCAest==="con") rows=rows.filter(r=>!!resolveEgreso(r).ca);
@@ -4477,7 +4487,7 @@ function renderEgresos(){
   const lGrupos=[...new Set(base.map(e=>String(ancEgreso(e).grupoc||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const lSubg=[...new Set(base.map(e=>String(ancEgreso(e).ksubgrupo||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const lCA=[...new Set(base.map(e=>String(resolveEgreso(e).ca||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  const lCostos=[...new Set(base.map(e=>e._costo).filter(Boolean))].sort();
+  const lCostos=[...new Set(base.map(e=>e._costo||egCostoDe(e.ben,e.con)).filter(Boolean))].sort();
   const lBenef=[...new Set(base.map(e=>String(e.ben||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const lEmpResp=[...new Set(base.map(e=>{const g=reglaCosto(e.ben);return (g&&g.empresaResp)||"";}).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const lTipo=[...new Set(base.map(e=>{const g=reglaCosto(e.ben);return (g&&g.tipo)||"";}).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
@@ -4644,7 +4654,7 @@ function bitgoSueldos(){
         assetCol=find("asset","moneda","coin"), txCol=find("txid");
   const isSueldo=r=>{ const cat=String(r._cat||"").toLowerCase(); const w=walletCol?String(r[walletCol]||"").toLowerCase():""; return cat.includes("sueldo")||w.includes("sueldo"); };
   return (data.rows||[]).filter(isSueldo).map(r=>{
-    const d=dateCol?new Date(r[dateCol]):null; const ok=d&&!isNaN(d);
+    const d=dateCol?_fd(r[dateCol]):null; const ok=d&&!isNaN(d);
     const v=amountCol?toNum(r[amountCol]):0;
     return { fecha: dateCol? r[dateCol]:"", y: ok?d.getFullYear():null, mi: ok?d.getMonth():-1,
       monto: Math.abs(v), tipo: typeCol?String(r[typeCol]||""):"", asset: assetCol?String(r[assetCol]||""):"",
@@ -5272,7 +5282,7 @@ function bitgoDataPnl(){
   if(!showLLC()) return {months,years,total};
   if(amountCol) rows.forEach(r=>{ const v=toNum(r[amountCol]); const tok=contCol?contabTok(r[contCol]):null;
     const esEgreso = contCol ? (tok==="si") : (v<0); if(!esEgreso) return; const amt=Math.abs(v);
-    const d=dateCol?new Date(r[dateCol]):null; const yr=(d&&!isNaN(d))?d.getFullYear():null;
+    const d=dateCol?_fd(r[dateCol]):null; const yr=(d&&!isNaN(d))?d.getFullYear():null;
     if(STATE.year!=="__all" && yr!==STATE.year) return;
     total+=amt; if(d&&!isNaN(d)) months[d.getMonth()]+=amt; if(yr!=null) years[yr]=(years[yr]||0)+amt; });
   return {months,years,total};
@@ -5455,7 +5465,8 @@ function renderCxP(){
   const isPresu = tab==="presupuesto";
   const estadoKey = isPresu ? "presupuestado" : "pendiente";
   const isSel=r=>String(r.e||"").trim().toLowerCase()===estadoKey;
-  let rows=all.filter(isSel).filter(r=> STATE.year==="__all"||r.g===STATE.year);
+  let rows=all.filter(isSel).filter(r=> STATE.year==="__all"||r.g===STATE.year||r.g==null);   // V241: sin fecha también se ven (son deuda igual)
+  const sinMes=rows.filter(r=>r.g==null);
   if(STATE.cxpProv!=="__all") rows=rows.filter(r=>String(r.ben||"(Sin proveedor)")===STATE.cxpProv);
   if(STATE.cxpMes!=="__all")  rows=rows.filter(r=>String(r.m||"")===STATE.cxpMes);
   const q=String(STATE.cxpSearch||"").trim().toLowerCase();
@@ -5470,7 +5481,8 @@ function renderCxP(){
 
   const isGraf=tab==="graficos";
   const c1 = isPresu ? "#163832" : "#B42318";
-  const kpisHTML=`<div class="grid kpis">
+  const avisoMes=(!isPresu&&sinMes.length)?`<div class="card" style="border-left:4px solid #B42318;margin-bottom:12px"><b>${sinMes.length} pendiente${sinMes.length>1?"s":""} sin fecha ($${f2(sinMes.reduce((a,r)=>a+(+r.imp||0),0))})</b><div class="mini">Aparecen aquí, pero no entran al Estado de Resultados porque no se sabe a qué mes corresponden. Ábrelos con ✎, revisa la fecha de contabilización y guarda.</div></div>`:"";
+  const kpisHTML=avisoMes+`<div class="grid kpis">
       ${kpi(isPresu?"Total presupuestado (USD)":"Total por pagar (USD)",fmt(total),rows.length+(isPresu?" presupuestados":" pendientes"),c1,"◆")}
       ${kpi("Equivalente (BOB)","Bs "+f2(totalBOB),"al TC por fecha","#235347","≈")}
       ${kpi("Proveedores",String(nProv),isPresu?"con presupuesto":"con saldo pendiente","#8EB69B","◧")}
@@ -6274,7 +6286,7 @@ const MANUALES = {
     que:"El P&L por proveedor/pasarela (Tesabiz, Manteca, Bridge, BitGo, Didit, Cta.USA, Yango, Chanchito) y los costos fijos.",
     fuente:"Hojas de cada pasarela + hoja <b>Tabla Costos</b>." },
   bancos:{ titulo:"Cómo funciona Bancos",
-    que:"Los extractos de las cuentas y la rendición por cuenta (entradas, salidas y saldo). Sub-pestañas: Mercury, BitGo, Tesabiz y Otras.",
+    que:"Los extractos de las cuentas y la rendición por cuenta (entradas, salidas y saldo). Sub-pestañas: BitGo, CIDRE, Altitude, Pagos Externos y Mercury (cuenta cerrada, solo historial).",
     fuente:"Extracto <b>Mercury</b> (archivo aparte) y <b>BitGo</b> (multi-wallet).",
     como:"La rendición cuenta TODOS los movimientos del periodo (incluye fondeo/Traspasos), y el saldo = entradas − salidas." },
   mercury:{ titulo:"Cómo funciona Mercury",
@@ -6516,8 +6528,8 @@ function buildContextoIA(){
   const nom=acts.reduce((a,r)=>a+(+r.sf||0)+(+r.be||0)+(+r.bk||0),0);
   out.push("RRHH: "+acts.length+" colaboradores activos, nómina mensual ≈$"+r0(nom)+".");
   const _u=e=>(e.impUSD!=null?+e.impUSD:(+e.imp||0));
-  const fijoT=(STATE.egresos||[]).filter(e=>e._costo==="fijo").reduce((a,e)=>a+_u(e),0);
-  const varT=(STATE.egresos||[]).filter(e=>e._costo==="variable").reduce((a,e)=>a+_u(e),0);
+  const fijoT=(STATE.egresos||[]).filter(e=>(e._costo||egCostoDe(e.ben,e.con))==="fijo").reduce((a,e)=>a+_u(e),0);
+  const varT=(STATE.egresos||[]).filter(e=>(e._costo||egCostoDe(e.ben,e.con))==="variable").reduce((a,e)=>a+_u(e),0);
   if(fijoT||varT) out.push("COSTOS FIJOS vs VARIABLES (consolidado, de Egresos registrados): Fijos=$"+r0(fijoT)+", Variables=$"+r0(varT)+".");
   // CUBO GRANULAR: egresos por Empresa · Cuenta Analítica · Mes (base devengado), para consultas específicas.
   try{
@@ -6667,7 +6679,7 @@ function iaFabRender(){
 function cieData(Y,M){
   const save={empresa:STATE.empresa, resBase:STATE.resBase, year:STATE.year};
   STATE.resBase="devengado"; STATE.year="__all";
-  const inMonth=iso=>{ if(!iso) return false; const d=new Date(iso); return !isNaN(d)&&d.getFullYear()===Y&&d.getMonth()===M; };
+  const inMonth=iso=>{ if(!iso) return false; const d=_fd(iso); return !isNaN(d)&&d.getFullYear()===Y&&d.getMonth()===M; };
   const pnl=pnlRows(true);
   const ingOp = pnl.filter(r=>r.income && r.g===Y && monthIdx(r.m)===M).reduce((a,r)=>a+r.usd,0);
   const egrRows = pnl.filter(r=>!r.income && r.g===Y && monthIdx(r.m)===M);
@@ -6689,7 +6701,7 @@ function cieData(Y,M){
     try{ const bg=STATE.bitgo||{cols:[],rows:[]}; const cols=bg.cols||[];
       const find=(...n)=>{for(const x of n){const c=cols.find(k=>normHdr(k)===x);if(c)return c;}for(const x of n){const c=cols.find(k=>normHdr(k).includes(x));if(c)return c;}return null;};
       const aC=find("amount","monto"), dC=find("mmddyyyy","fecha","date","datetime");
-      if(aC&&dC) (bg.rows||[]).forEach(r=>{ const d=new Date(r[dC]); if(!isNaN(d)&&d.getFullYear()===Y&&d.getMonth()===M){ const v=toNum(r[aC]); if(v>0)bIn+=v; else bOut+=v; } });
+      if(aC&&dC) (bg.rows||[]).forEach(r=>{ const d=_fd(r[dC]); if(!isNaN(d)&&d.getFullYear()===Y&&d.getMonth()===M){ const v=toNum(r[aC]); if(v>0)bIn+=v; else bOut+=v; } });
     }catch(e){}
   }
   const byBen={}; (STATE.egresos||[]).filter(e=>empPassRow(e)&&inMonth(e.fecha)).forEach(e=>{ const k=e.ben||e.con||"—"; byBen[k]=(byBen[k]||0)+(+e.imp||0); });
@@ -8055,16 +8067,16 @@ function renderRendiciones(){
 
 /* ---------- BANCOS (contenedor con sub-pestañas: Mercury / BitGo / Tesabiz / Otras Cuentas) ---------- */
 function renderBancos(){
-  const tab=STATE.bancosTab||"mercury";
+  const tab=STATE.bancosTab||"bitgo";
   const subs={ mercury:renderMercury, bitgo:renderBitgo, tesabiz:()=>STATE.cidreSub==="concil"?renderCidre():renderBancosTesabiz(), cidre:renderCidre, altitude:()=>renderBancosLista('Pagos hechos desde la cuenta <b>Altitude</b> (Tipo de Pago = Altitude). Cuando tengamos el extracto de Altitude, aquí se verán también los abonos.'), otras:renderOtrasCuentas };
   (subs[tab]||renderMercury)();          // llena #app con el diseño existente de cada sección
   const seg=`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div class="seg" id="bancosTabs" style="flex-wrap:wrap">
-        <button data-t="mercury" class="${tab==='mercury'?'on':''}">Mercury</button>
         <button data-t="bitgo" class="${tab==='bitgo'?'on':''}">BitGo</button>
         <button data-t="tesabiz" class="${tab==='tesabiz'?'on':''}">CIDRE</button>
         <button data-t="altitude" class="${tab==='altitude'?'on':''}">Altitude</button>
         <button data-t="otras" class="${tab==='otras'?'on':''}">Pagos Externos</button>
+        <button data-t="mercury" class="${tab==='mercury'?'on':''}">Mercury (cerrada)</button>
       </div>
       ${tab==='tesabiz'?`<div class="seg" id="cidreSub"><button data-c="pagos" class="${STATE.cidreSub!=='concil'?'on':''}">Pagos CIDRE</button><button data-c="concil" class="${STATE.cidreSub==='concil'?'on':''}">Conciliación CIDRE</button></div>`:''}
       ${tab==='bitgo'?`<button class="btn primary" id="bgImportBtn" title="Elige el CSV tal como lo descargas de BitGo">⬆ Importar extracto BitGo</button><input type="file" id="bgImportFile" accept=".csv,text/csv" hidden>`:''}
@@ -8510,7 +8522,7 @@ function renderBancosLista(intro){ renderEgresos(); const app=$("#app"); if(!app
 function bancosResumenHTML(tab){
   let ab=0, de=0, n=0; const usd=x=>(x<0?"-$":"$")+f2(Math.abs(x)); const yOk=g=>STATE.year==="__all"||g===STATE.year;
   if(tab==="mercury"){ (STATE.mercury||[]).forEach(r=>{ if(!yOk(r.g)) return; const v=+r.monto||0; if(v>0) ab+=v; else de+=-v; n++; }); }
-  else if(tab==="bitgo"){ const bc=bitgoCols(); const bg=STATE.bitgo||{rows:[]}; if(bc.amtCol) (bg.rows||[]).forEach(r=>{ const d=bc.dateCol?new Date(r[bc.dateCol]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const v=toNum(r[bc.amtCol]); if(!v) return; if(v>0) ab+=v; else de+=-v; n++; }); }
+  else if(tab==="bitgo"){ const bc=bitgoCols(); const bg=STATE.bitgo||{rows:[]}; if(bc.amtCol) (bg.rows||[]).forEach(r=>{ const d=bc.dateCol?_fd(r[bc.dateCol]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const v=toNum(r[bc.amtCol]); if(!v) return; if(v>0) ab+=v; else de+=-v; n++; }); }
   else { (STATE.egresos||[]).filter(r=>yOk(r.g)&&bancoListaFiltro(r,tab)).forEach(r=>{ de+=(r.impUSD!=null?(+r.impUSD||0):(+r.imp||0)); n++; }); }
   return `<div class="caja" style="margin-bottom:16px"><div class="c"><div class="l">Abonos (+) · entradas</div><div class="v" style="color:var(--emerald)">${usd(ab)}</div></div>
     <div class="c"><div class="l">Débitos (−) · salidas</div><div class="v neg">${usd(de)}</div></div>
@@ -8832,7 +8844,7 @@ function renderBitgo(){
   let rendHTML="";
   if(STATE.section==="bancos"){
     let bgBase=allRows.slice();
-    if(dateCol && STATE.year!=="__all") bgBase=bgBase.filter(r=>{const d=new Date(r[dateCol]); return !isNaN(d)&&d.getFullYear()===STATE.year;});
+    if(dateCol && STATE.year!=="__all") bgBase=bgBase.filter(r=>{const d=_fd(r[dateCol]); return !isNaN(d)&&d.getFullYear()===STATE.year;});
     const inTot=bgBase.filter(r=>amt(r)>0).reduce((a,r)=>a+amt(r),0);
     const outTot=bgBase.filter(r=>amt(r)<0).reduce((a,r)=>a+amt(r),0);
     const fondeo=contCol?bgBase.filter(r=>contabTok(r[contCol])==="traspaso").reduce((a,r)=>a+Math.abs(amt(r)),0):0;
@@ -8847,7 +8859,7 @@ function renderBitgo(){
 
   if(isGraf && showNet){
     const net=Array(12).fill(0);
-    rows.forEach(r=>{ const d=new Date(r[dateCol]); if(!isNaN(d)) net[d.getMonth()]+=amt(r); });
+    rows.forEach(r=>{ const d=_fd(r[dateCol]); if(!isNaN(d)) net[d.getMonth()]+=amt(r); });
     drawNetMonthly(net,"chartBgNet");
   }
   const si=$("#bgSearch");
@@ -9581,12 +9593,15 @@ const HMAP = {
   cuentaprincipal:"cp", cuentacontable:"cc", subcuenta:"sc", concepto:"con",
   beneficiario:"ben", importe:"imp", gestion:"g", mes:"m", estado:"e", fecha:"fecha"
 };
+/* V241: una fecha «AAAA-MM-DD» se lee como día local. new Date("2026-10-01") la toma como medianoche UTC, que en Bolivia
+   es 30 de septiembre: todo lo fechado el día 1 caía en el mes (o año) anterior. */
+function _fd(v){ const m=typeof v==="string"&&v.match(/^(\d{4})-(\d{2})-(\d{2})$/); return m?new Date(+m[1],+m[2]-1,+m[3]):new Date(v); }
 function gd(v){
   if(v==null) return {iso:null,year:null};
   if(typeof v==="string"){
     const m=v.match(/Date\((\d+),(\d+),(\d+)/);
     if(m){ const d=new Date(+m[1],+m[2],+m[3]); return {iso:d.toISOString().slice(0,10),year:d.getFullYear()}; }
-    const d=new Date(v); if(!isNaN(d)) return {iso:v.slice(0,10),year:d.getFullYear()};
+    const d=_fd(v); if(!isNaN(d)) return {iso:v.slice(0,10),year:d.getFullYear()};
     const y=v.match(/\d{4}/); return {iso:v,year:y?+y[0]:null};
   }
   const d=new Date(v); if(!isNaN(d)) return {iso:d.toISOString().slice(0,10),year:d.getFullYear()};
@@ -10748,7 +10763,7 @@ function abrirFormEgreso(ed){
   { const cc=$("#f_cc"), h=$("#f_ccSug"); if(cc) cc.dataset.sug=""; if(h) h.style.display="none"; }
   poblarDatalists();
   if(edit){ const R=edit._raw, set=(id,v)=>{ const el=$("#"+id); if(el) el.value=(v==null?"":String(v)); };
-    set("f_fechaPago",R.fechadepago); set("f_fechaCont",R.fechadecontabilizacion); set("f_concepto",R.concepto); set("f_importe",R.importe);
+    if(R.fechadepago) set("f_fechaPago",R.fechadepago); if(R.fechadecontabilizacion) set("f_fechaCont",R.fechadecontabilizacion); set("f_concepto",R.concepto); set("f_importe",R.importe);
     set("f_moneda",String(R.moneda||"USD").toUpperCase()); set("f_estado",R.estado||"Pagado"); set("f_pais",R.pais); set("f_cp",R.cuentaprincipal);
     set("f_sc",R.subgrupo); set("f_cc",R.cuentaanalitica); set("f_grupo",R.grupo); set("f_codc",R.codigocontable); set("f_ctipo",R.cuenta);
     set("f_coment",R.comentarios); set("f_ben",R.beneficiario); set("f_tipo",R.tipodepago); set("f_pagadopor",R.pagadopor); }

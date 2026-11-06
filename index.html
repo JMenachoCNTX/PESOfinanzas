@@ -1581,7 +1581,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V263";
+const APP_VERSION = "V264";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -11102,7 +11102,7 @@ function egSugerirCA(){
   try{ autoFillCuenta(); }catch(_){} }
 function abrirFormEgreso(ed){
   const hoy=new Date().toISOString().slice(0,10);
-  const edit=(ed&&ed._raw&&ed._id&&STATE.egFB)?ed:null; STATE._egEdit=edit?edit._id:null;   // V216: editar un gasto existente
+  const edit=(ed&&ed._raw&&ed._id&&STATE.egFB)?ed:null; STATE._egEdit=edit?edit._id:null; STATE._egCaOrig=null;   // V216: editar un gasto existente
   const fp=$("#f_fechaPago"), fc=$("#f_fechaCont");
   if(fp) fp.value=hoy; if(fc) fc.value=hoy;
   ["f_concepto","f_importe","f_meses","f_sc","f_cc","f_ben","f_tipo","f_pagadopor","f_coment","f_cp","f_pais","f_codc","f_ctipo","f_grupo"].forEach(id=>{const el=$("#"+id); if(el) el.value="";});
@@ -11111,10 +11111,11 @@ function abrirFormEgreso(ed){
   { const cc=$("#f_cc"), h=$("#f_ccSug"); if(cc) cc.dataset.sug=""; if(h) h.style.display="none"; }
   poblarDatalists();
   if(edit){ const R=edit._raw, set=(id,v)=>{ const el=$("#"+id); if(el) el.value=(v==null?"":String(v)); };
-    if(R.fechadepago) set("f_fechaPago",R.fechadepago); if(R.fechadecontabilizacion) set("f_fechaCont",R.fechadecontabilizacion); set("f_meses",R.mesesadistribuir); set("f_concepto",R.concepto); set("f_importe",R.importe);
+    if(R.fechadepago) set("f_fechaPago",R.fechadepago); set("f_fechaCont",R.fechadecontabilizacion||R.fechadepago||""); set("f_meses",R.mesesadistribuir); set("f_concepto",R.concepto); set("f_importe",R.importe);
     set("f_moneda",String(R.moneda||"USD").toUpperCase()); set("f_estado",R.estado||"Pagado"); set("f_pais",R.pais); set("f_cp",R.cuentaprincipal);
     set("f_sc",R.subgrupo); set("f_cc",R.cuentaanalitica); set("f_grupo",R.grupo); set("f_codc",R.codigocontable); set("f_ctipo",R.cuenta);
-    set("f_coment",R.comentarios); set("f_ben",R.beneficiario); set("f_tipo",R.tipodepago); set("f_pagadopor",R.pagadopor); }
+    set("f_coment",R.comentarios); set("f_ben",R.beneficiario); set("f_tipo",R.tipodepago); set("f_pagadopor",R.pagadopor);
+    try{ const caR=ancEgreso(edit).ca; if(caR){ set("f_cc",caR); STATE._egCaOrig=caR; autoFillCuenta(); } }catch(_){} }   // V264: se ve la cuenta real, aunque venga de una regla
   const tt=$("#egFormTitle"); if(tt) tt.textContent=edit?"Editar gasto":"Registrar gasto";
   const ld=$("#egFormLead"); if(ld) ld.innerHTML=edit?"Los cambios se guardan en <b>Firebase</b> y se ven al instante para todos.":(STATE.egFB?"Se guardará en <b>Firebase</b> y aparecerá al instante en el sistema.":"Se guardará en la hoja <b>HistorialEgresos</b> del archivo principal y aparecerá en el dashboard.");
   const del=$("#egFormDel"); if(del) del.style.display=edit?"":"none";
@@ -11176,7 +11177,10 @@ async function guardarEgresoFB(m){
   const btn=$("#egFormSave"), txt=btn.textContent; btn.textContent="Guardando…"; btn.disabled=true; m.className="msg"; m.textContent="";
   try{
     if(editId){ const f=egresoFilaDesdeDatos(datos); ["tipodecambio","empresa"].forEach(k=>delete f[k]);   // el formulario no tiene esos campos: se conservan
-      await egresoActualizar(editId,f,false); }
+      const caOrig=STATE._egCaOrig, caNuevo=$("#f_cc").value.trim();
+      await egresoActualizar(editId,f,false);
+      if(caOrig&&caNuevo&&caNuevo!==caOrig){ ensureHuellas(); const nu=(STATE.egresos||[]).find(e=>e._id===editId);   // V264: la cuenta elegida a mano le gana a las reglas
+        if(nu&&nu._hu){ await NMFB.asigGuardar([{fuente:"Egresos",huella:nu._hu,ca:caNuevo}]); STATE.asigManual=(STATE.asigManual||[]).filter(a=>!(a.fuente==="Egresos"&&a.huella===nu._hu)).concat([{fuente:"Egresos",huella:nu._hu,ca:caNuevo}]); STATE._amSrc=null; STATE._amIdx=null; } } }
     else { const r=await egresosRegistrarLote("",[datos]); if(!r||r.error) throw new Error((r&&r.error)||"No se pudo guardar.");
       try{ compMarcarRegistrado(datos); }catch(_){}
       await egresosRefrescar(); }

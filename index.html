@@ -683,7 +683,7 @@ tr.lc-hijo>td{background:rgba(142,182,155,.12)}
 html.tema-oscuro #pnlTable tr.pnl-l1>td,html.tema-oscuro #lcGrp tr.pnl-l1>td{background:#235347!important;color:#fff}
 html.tema-oscuro #pnlTable tr.pnl-l2>td,html.tema-oscuro #lcGrp tr.pnl-l2>td{background:#1b4038!important;color:#fff}
 html.tema-oscuro #pnlTable tr.pnl-l3>td,html.tema-oscuro #lcGrp tr.pnl-l3>td{background:#12302a!important;color:#fff}
-#lcGrp tfoot td{position:sticky;bottom:0;z-index:2;background:#235347;color:#fff;font-weight:700}
+#lcGrp tfoot td,#lcCmp tfoot td{position:sticky;bottom:0;z-index:2;background:#235347;color:#fff;font-weight:700}
 #pnlTable tfoot td{position:sticky;bottom:0;z-index:2;background:#235347;color:#fff;font-weight:700;border-top:2px solid var(--border2)}
 #pnlTable tfoot tr:nth-last-child(2) td{bottom:34px}
 #pnlTable tfoot tr:nth-last-child(3) td{bottom:68px}
@@ -1574,7 +1574,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V253";
+const APP_VERSION = "V254";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -6211,6 +6211,11 @@ function renderCostos(){
     const accion=STATE.cosFB?`<button class="btn primary" id="lcAdd">+ Agregar costo</button>`:(NMFB.esAdmin()&&nmFbActivo()?`<button class="btn primary" id="lcMigrar" title="Copia la hoja «Tabla Costos» a la nube del sistema; la hoja queda de respaldo">☁ Pasar la lista a la nube</button>`:"");
     const toolbar=`<div class="toolbar" style="align-items:center">${esearch("lcSearch","Buscar proveedor o concepto…",STATE.lcSearch)}${lcFB.bar}<div class="spacer"></div>${accion}</div>${lcFB.panel}
       ${STATE.cosFBErr?`<div class="msg err" style="display:block;margin:0 0 12px">${esc(STATE.cosFBErr)}</div>`:""}${!STATE.cosFB?`<div class="mini" style="margin:-4px 0 10px">La lista todavía se lee de la hoja «Tabla Costos». Para editarla aquí hay que pasarla a la nube.</div>`:""}`;
+    /* V254: «Lista vs lo pagado» se ordena con clic en los títulos */
+    const lccVal={tipo:f=>f.i.tipo,prov:f=>f.i.prov,con:f=>f.i.con,fijo:f=>f.i.mFijoM,var:f=>f.i.mVarM,prom:f=>f.prom,dif:f=>f.dif};
+    const lccTh=(k,t,n)=>{ const on=STATE.lccSort&&STATE.lccSort.key===k; return `<th class="lcc-s${n?" num":""}" data-k="${k}" style="cursor:pointer">${t}<span class="arw">${on?(STATE.lccSort.dir==="asc"?"▲":"▼"):"⇅"}</span></th>`; };
+    const lccOrden=F=>{ const o=STATE.lccSort; if(!o) return F; const v=/^p\d$/.test(o.key)?(f=>f.pag[+o.key[1]]):lccVal[o.key], d=o.dir==="asc"?1:-1;
+      return [...F].sort((a,b)=>{ const x=v(a),y=v(b); return d*(typeof x==="number"?x-y:String(x||"").localeCompare(String(y||""),"es")); }); };
     const vistaSeg=`<div class="seg" id="lcVista" style="margin:0 0 14px;flex-wrap:wrap"><button data-v="lista" class="${vista==="lista"?"on":""}">Lista</button><button data-v="agrupada" class="${vista==="agrupada"?"on":""}">Agrupada</button><button data-v="sugerencias" class="${vista==="sugerencias"?"on":""}">Sugerencias (${verOcu?costosSugerencias(items).length:sug.length})</button><button data-v="comparar" class="${vista==="comparar"?"on":""}">Lista vs lo pagado</button></div>`;
     const mesK=k=>MONTH_ES[k%12]+" "+String(Math.floor(k/12)).slice(2);
     let cuerpo;
@@ -6222,8 +6227,8 @@ function renderCostos(){
         </tbody></table></div>`:emptyState(verOcu?"No hay sugerencias ocultas para mostrar.":"Todos los pagos frecuentes ya están en la lista.")}</div>`;
     else if(vista==="comparar") cuerpo=`<div class="card"><div class="head"><h3>Lista vs lo pagado</h3><span class="mini">lo que dice la lista al mes (fijo + variable) contra lo pagado en Egresos · USD</span></div>
         <p class="section-intro">Para cada costo de la lista se buscan en <b>Egresos</b> los pagos al mismo proveedor en los <b>últimos 3 meses completos</b>. <b>Diferencia</b> en rojo = se pagó más de lo esperado; en verde = menos. Si un costo sale en 0 puede que esté a otro nombre en Egresos.</p>
-        <div class="tbl-scroll sticky-head"><table><thead><tr><th>Grupo</th><th>Proveedor</th><th>Concepto</th><th class="num">Monto fijo /mes</th><th class="num">Monto variable /mes</th>${cmp.ks.map(k=>`<th class="num">${mesK(k)}</th>`).join("")}<th class="num">Promedio pagado</th><th class="num">Diferencia</th></tr></thead><tbody>
-        ${cmp.filas.map(f=>`<tr><td><span class="tag">${esc(f.i.tipo)}</span></td><td>${esc(f.i.prov||"–")}</td><td>${esc(f.i.con||"–")}</td><td class="num">${f.i.mFijoM?"$"+f2(f.i.mFijoM):'<span class="zero">–</span>'}</td><td class="num">${f.i.mVarM?"$"+f2(f.i.mVarM):'<span class="zero">–</span>'}</td>
+        <div class="tbl-scroll sticky-head"><table id="lcCmp"><thead><tr>${lccTh("tipo","Grupo")}${lccTh("prov","Proveedor")}${lccTh("con","Concepto")}${lccTh("fijo","Monto fijo /mes",1)}${lccTh("var","Monto variable /mes",1)}${cmp.ks.map((k,j)=>lccTh("p"+j,mesK(k),1)).join("")}${lccTh("prom","Promedio pagado",1)}${lccTh("dif","Diferencia",1)}</tr></thead><tbody>
+        ${lccOrden(cmp.filas).map(f=>`<tr><td><span class="tag">${esc(f.i.tipo)}</span></td><td>${esc(f.i.prov||"–")}</td><td>${esc(f.i.con||"–")}</td><td class="num">${f.i.mFijoM?"$"+f2(f.i.mFijoM):'<span class="zero">–</span>'}</td><td class="num">${f.i.mVarM?"$"+f2(f.i.mVarM):'<span class="zero">–</span>'}</td>
           ${f.pag.map(v=>`<td class="num">${v?"$"+f2(v):'<span class="zero">–</span>'}</td>`).join("")}<td class="num"><b>${f.prom?"$"+f2(f.prom):'<span class="zero">–</span>'}</b></td>
           <td class="num" style="color:${Math.abs(f.dif)<1?"inherit":(f.dif>0?"var(--danger,#B42318)":"var(--emerald)")}">${Math.abs(f.dif)<1?"=":(f.dif>0?"+":"−")+"$"+f2(Math.abs(f.dif))}</td></tr>`).join("")}
         </tbody><tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.i.mFijoM,0))}</b></td><td class="num"><b>$${f2(cmp.filas.reduce((s,f)=>s+f.i.mVarM,0))}</b></td>
@@ -6279,6 +6284,8 @@ function renderCostos(){
     const si=$("#lcSearch"); if(si){ si.addEventListener("input",()=>{STATE.lcSearch=si.value;STATE._dynFocus="lcSearch";render();}); }
     fbWire("lcf", lcFilterDefs);
     document.querySelectorAll("#lcVista button").forEach(b=>b.addEventListener("click",()=>{ STATE.lcVista=b.dataset.v; render(); }));
+    document.querySelectorAll("#lcCmp th.lcc-s").forEach(th=>th.addEventListener("click",()=>{ const k=th.dataset.k, o=STATE.lccSort, num=th.classList.contains("num");
+      STATE.lccSort={key:k,dir:o&&o.key===k?(o.dir==="asc"?"desc":"asc"):(num?"desc":"asc")}; renderKeepScroll("#lcCmp"); }));
     document.querySelectorAll("#lcGrp tr[data-lcn]").forEach(tr=>tr.addEventListener("click",()=>{ const l=+tr.dataset.lcn;
       STATE.lcNivel=(STATE.lcNivel>l)?l:l+1; renderKeepScroll("#lcGrpScroll", tr.dataset.pid); }));
     document.querySelectorAll("#lcLista tr.lc-grp").forEach(tr=>tr.addEventListener("click",()=>{ const g=tr.querySelector(".lc-prov").dataset.g, A=STATE.lcProvAbierto;

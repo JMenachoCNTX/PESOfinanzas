@@ -1246,6 +1246,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
 .comp-drop span{font-size:12.5px;color:var(--muted)} .comp-drop.on{border-color:var(--brand);background:rgba(142,182,155,.18)}
 .comp-th{width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:inline-grid;place-items:center;font:700 11px var(--display);color:var(--muted);background:var(--field)}
 .comp-tbl td{vertical-align:middle}
+.cp-nota{width:220px;min-height:48px;resize:vertical;background:var(--field);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:6px 8px;font:inherit;font-size:12px}
 .comp-clip{border:0;background:none;cursor:pointer;font-size:14px;padding:0 2px}
 
 /* ===== V196: respaldos ===== */
@@ -1571,7 +1572,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V248";
+const APP_VERSION = "V249";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2748,18 +2749,47 @@ function compVer(c){ if(!c) return; const ov=document.createElement("div"); ov.c
 function compIdx(){ if(STATE._compIdx) return STATE._compIdx; const m={}; (STATE.comps||[]).forEach(c=>{ if(c.estado==="registrado"&&c.egreso){ m[_normTxt(c.egreso.con)+"|"+String(c.egreso.fecha||"").slice(0,10)]=c; } }); return (STATE._compIdx=m); }
 function compClipHTML(fecha,con){ const c=compIdx()[_normTxt(con)+"|"+String(fecha||"").slice(0,10)]; return c?` <button type="button" class="comp-clip" data-cid="${esc(c.id)}" title="Ver comprobante">📎</button>`:""; }
 document.addEventListener("click",ev=>{ const b=ev.target.closest&&ev.target.closest(".comp-clip"); if(!b) return; ev.preventDefault(); ev.stopPropagation(); compVer((STATE.comps||[]).find(x=>x.id===b.dataset.cid)); },true);
+/* V249: EXPLICACIÓN + CONCILIACIÓN CIDRE. La persona explica el gasto (c.nota) y el sistema busca el pago en el
+   detalle de CIDRE (mismo monto en Bs, hasta 5 días de diferencia). Con eso sugiere la cuenta y pregunta a la IA. */
+function compCidreDe(c){ const ia=(c&&c.ia)||{}, C=STATE.cidre, m=+ia.monto, f=String(ia.fecha||"").slice(0,10);
+  if(!C||!m||!/^\d{4}-\d{2}-\d{2}$/.test(f)||!/^(bob|bs\.?|)$/i.test(String(ia.moneda||"").trim())) return null;
+  const sec=(C.pagos||[]).find(s=>/cidre/i.test(s.nombre)&&!s.usd); if(!sec) return null;
+  const d=x=>new Date(String(x).slice(0,10)+"T12:00").getTime(); let best=null, bd=5*864e5+1;
+  (sec.filas||[]).forEach(x=>{ if(!x.con||Math.abs((+x.monto||0)-m)>1) return; const dd=Math.abs(d(x.f)-d(f)); if(dd<bd){ bd=dd; best=x; } });
+  return best; }
+function compSugerir(c){ const ia=(c&&c.ia)||{}, cd=compCidreDe(c);
+  if(c.iaCa) return {ca:c.iaCa, src:"ia"};
+  let r={ca:"",src:"none"}; try{ r=caSugerir(ia.proveedor||"",ia.concepto||""); }catch(_){}
+  if(r.src==="auto"||r.src==="hist") return r;
+  const a=caAdivinar([ia.proveedor,ia.concepto,c.nota,cd&&cd.con].filter(Boolean).join(" ")); return a?{ca:a,src:"adiv"}:r; }
+/* Pregunta a la IA la cuenta analítica; solo acepta una que exista en el Plan */
+async function compIaCuenta(c){ const id=c.id, ia=c.ia||{}, cd=compCidreDe(c), P=STATE.plan||[];
+  const L=P.filter(r=>/anal/i.test(r.categoria||"")&&/^(egreso|activo)$/i.test(r.tipo||"")&&!/inact|baja/i.test(r.estado||"")&&!_CA_NO.test(r.nombre||""));
+  const padre=r=>(P.find(x=>x.codigo===String(r.codigo).slice(0,6))||{}).nombre||"";
+  const sys="Eres contador de PE$O (fintech en Bolivia). Te doy las Cuentas Analíticas del Plan de Cuentas y los datos de un gasto. Elige la Cuenta Analítica que corresponde. Lo que explica la persona pesa más que el resto. Responde SOLO un JSON válido, sin texto extra: {\"ca\":\"nombre exacto de la cuenta, o vacío si ninguna encaja\",\"motivo\":\"una frase en español\",\"confianza\":\"alta|media|baja\"}";
+  const user="CUENTAS (nombre | cuenta principal):\n"+L.map(r=>r.nombre+" | "+padre(r)).join("\n")+"\n\nGASTO\nProveedor: "+(ia.proveedor||"-")+"\nConcepto: "+(ia.concepto||c.mensaje||"-")+"\nMonto: "+(ia.moneda||"")+" "+(ia.monto||"-")+"\nConcepto en el banco CIDRE: "+((cd&&cd.con)||"-")+"\nExplicación de la persona: "+(c.nota||"-");
+  const mt=String(await iaLlamar([{role:"system",content:sys},{role:"user",content:user}])).match(/\{[\s\S]*\}/); if(!mt) throw new Error("La IA no devolvió una respuesta clara.");
+  const o=JSON.parse(mt[0]), x=(STATE.comps||[]).find(k=>k.id===id)||c;
+  if(!String(o.ca||"").trim()) throw new Error("La IA no encontró una cuenta: "+(o.motivo||"explica un poco más el gasto."));
+  const cu=L.find(r=>_normTxt(r.nombre)===_normTxt(o.ca)); if(!cu) throw new Error("La IA sugirió una cuenta que no existe en el Plan ("+o.ca+").");
+  x.iaCa=cu.nombre; x.iaCaMotivo=String(o.motivo||""); x.iaCaConf=String(o.confianza||""); delete x.iaCaErr; await compGuardarLista(); }
+function compEscribiendo(){ const a=document.activeElement; return !!(a&&a.classList&&a.classList.contains("cp-nota")); }
 function compLlenarForm(c){ const ia=(c&&c.ia)||{}; const set=(id,v)=>{ const e=$("#"+id); if(e&&v!=null&&String(v).trim()!=="") e.value=v; };
   const f=String(ia.fecha||"").slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(f)){ set("f_fechaPago",f); set("f_fechaCont",f); }
   set("f_concepto",ia.concepto); if(ia.monto) set("f_importe",ia.monto); set("f_moneda",String(ia.moneda||"").toUpperCase()==="BS"?"BOB":String(ia.moneda||"").toUpperCase());
   set("f_ben",ia.proveedor); set("f_pagadopor",ia.pagado_por); set("f_pais",ia.pais);
   const ruta=[ia.banco_origen,ia.banco_destino].filter(Boolean).join(" → ");
-  const extra=[ia.numero_factura?"Factura N° "+ia.numero_factura:"", ia.nit?"NIT "+ia.nit:"", ia.referencia?"Transf. N° "+ia.referencia:"", ruta, ia.cuenta_destino?"Cta. destino "+ia.cuenta_destino:""].filter(Boolean).join(" · ");
+  const cd=compCidreDe(c);
+  const extra=[c.nota, cd?"CIDRE: "+cd.con:"", ia.numero_factura?"Factura N° "+ia.numero_factura:"", ia.nit?"NIT "+ia.nit:"", ia.referencia?"Transf. N° "+ia.referencia:"", ruta, ia.cuenta_destino?"Cta. destino "+ia.cuenta_destino:""].filter(Boolean).join(" · ");
   // V218: una factura (o proforma) todavía no está pagada: entra como Pendiente y aparece en Cuentas por pagar
   const esFactura=/factura|invoice|proforma|cuenta de cobro|nota de cobro/i.test(ia.tipo_documento||"") && !/comprobante|transferencia|recibo de pago|voucher/i.test(ia.tipo_documento||"");
   if(esFactura){ set("f_estado","Pendiente"); const cm=$("#egCompMsg"); setTimeout(()=>{ if(cm) cm.textContent="Es una factura: se guardará como Pendiente y aparecerá en Cuentas por pagar. Si ya se pagó, cambia el Estado a Pagado."; },0); }
   else if(ia.banco_origen) set("f_tipo",cuentaPagoDeBanco(ia.banco_origen));
   const co=$("#f_coment"); if(co && extra && !co.value.includes(extra)) co.value=(co.value?co.value+" · ":"")+extra;
-  STATE._compReg=c.id; egSugerirCA(); }
+  STATE._compReg=c.id;
+  const sg=compSugerir(c), cc=$("#f_cc"), hint=$("#f_ccSug");
+  if(sg.ca&&cc&&!cc.value.trim()){ cc.value=sg.ca; cc.dataset.sug=""; if(hint){ hint.style.display=""; hint.textContent="💡 Sugerida "+(sg.src==="ia"?"por la IA":"por el sistema")+" · cámbiala si no es"; } try{ autoFillCuenta(); }catch(_){} }
+  else egSugerirCA(); }
 function compMarcarRegistrado(datos){ const id=STATE._compReg; if(!id) return; const c=(STATE.comps||[]).find(x=>x.id===id); if(!c) return;
   c.estado="registrado"; c.registrado=new Date().toISOString(); c.egreso={fecha:datos.fechaPago, con:datos.concepto, imp:datos.importe, ben:datos.beneficiario};
   STATE._compReg=null; compGuardarLista();
@@ -2787,7 +2817,7 @@ document.addEventListener("change",ev=>{ if(!ev.target||ev.target.id!=="egCompFi
 function compRevisarSlack(forzar){
   if(!nmFbActivo()) return; const ahora=Date.now(); if(!forzar && STATE._slackChk && ahora-STATE._slackChk<120000) return; STATE._slackChk=ahora;
   STATE._slackMsg="Revisando Slack…"; if(STATE.section==="comprobantes") render();
-  const releer=(txt)=>NMFB.histGet("comprobantes").then(L=>{ STATE.comps=L||[]; STATE._compIdx=null; STATE._slackMsg=txt; if(STATE.section==="comprobantes") render(); }).catch(()=>{ STATE._slackMsg=txt; });
+  const releer=(txt)=>NMFB.histGet("comprobantes").then(L=>{ STATE.comps=L||[]; STATE._compIdx=null; STATE._slackMsg=txt; if(STATE.section==="comprobantes"&&!compEscribiendo()) render(); }).catch(()=>{ STATE._slackMsg=txt; });
   let pin=compPin(); if(!pin||!(window.google&&google.script&&google.script.run)){ releer(""); return; }
   google.script.run.withSuccessHandler(r=>{ const hora=new Date().toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit"});
       releer(r&&r.ok?("Slack revisado a las "+hora+(r.nuevos?" · "+r.nuevos+" comprobante(s) nuevo(s)":" · sin novedades")+(r.ignorados?" · "+r.ignorados+" archivo(s) que la IA no consideró comprobante":"")):(r&&/no permitida/i.test(r.error||"")?"":"Slack: "+((r&&r.error)||"sin respuesta"))); })
@@ -2901,23 +2931,25 @@ function renderComprobantes(){
   const f=STATE.compFiltro||"pendiente"; const V=L.filter(c=>f==="todos"||c.estado===f);
   const n=k=>L.filter(c=>c.estado===k).length;
   const subiendo=STATE._compSubiendo||"";
+  const sinCta=L.filter(c=>{ if(c.estado!=="pendiente") return false; const s=compSugerir(c).src; return s==="none"||s==="adiv"; });
   const filas=V.map(c=>{ const ia=c.ia||{}; return `<tr>
       <td>${!c.driveId?'<span class="comp-th comp-th-x" title="Registrado por mensaje en Slack, sin archivo">💬</span>':`<img class="comp-th" src="https://drive.google.com/thumbnail?id=${encodeURIComponent(c.driveId)}&sz=w120" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'comp-th comp-th-x',textContent:'${/pdf/.test(c.mime||"")?"PDF":"IMG"}'}))">`}</td>
-      <td>${esc(ia.fecha||"–")}</td><td style="text-align:left">${ia.tipo_documento?`<span class="tag">${esc(ia.tipo_documento)}</span> `:""}<b>${esc(ia.proveedor||"(sin proveedor)")}</b><span class="sub2">${esc(ia.concepto||c.mensaje||c.nombre||"")}</span>${(()=>{ if(c.estado==="registrado"||c.estado==="descartado"||!(ia.proveedor||ia.concepto)) return ""; let r={}; try{ r=caSugerir(ia.proveedor||"",ia.concepto||""); }catch(_){}
-        return r.ca?`<span class="sub2" style="color:#235347" title="Cuenta analítica que el sistema sugiere${r.src==="adiv"?" (aproximada)":""}; al Registrar puedes cambiarla">💡 ${esc(r.ca)}${r.src==="adiv"?" (aprox.)":""}</span>`:""; })()}${c.iaErr?`<span class="sub2" style="color:var(--error)">IA: ${esc(c.iaErr)}</span>`:""}</td>
+      <td>${esc(ia.fecha||"–")}</td><td style="text-align:left">${ia.tipo_documento?`<span class="tag">${esc(ia.tipo_documento)}</span> `:""}<b>${esc(ia.proveedor||"(sin proveedor)")}</b><span class="sub2">${esc(ia.concepto||c.mensaje||c.nombre||"")}</span>${(()=>{ const cd=compCidreDe(c); return cd?`<span class="sub2" title="Pago encontrado en la Conciliación CIDRE (mismo monto, fecha cercana)">🏦 CIDRE: ${esc(cd.con)}</span>`:""; })()}${(()=>{ if(c.estado==="registrado"||c.estado==="descartado") return ""; const r=compSugerir(c);
+        return r.ca?`<span class="sub2" style="color:#235347" title="${esc(r.src==="ia"?(c.iaCaMotivo||"Sugerida por la IA"):"Cuenta analítica que el sistema sugiere"+(r.src==="adiv"?" (aproximada)":""))}; al Registrar puedes cambiarla">${r.src==="ia"?"✦":"💡"} ${esc(r.ca)}${r.src==="adiv"?" (aprox.)":""}${r.src==="ia"&&c.iaCaConf?" · confianza "+esc(c.iaCaConf):""}</span>`:""; })()}${c.iaCaErr?`<span class="sub2" style="color:var(--error)">${esc(c.iaCaErr)}</span>`:""}${c.iaErr?`<span class="sub2" style="color:var(--error)">IA: ${esc(c.iaErr)}</span>`:""}</td>
+      <td style="text-align:left">${c.estado==="pendiente"?`<textarea class="cp-nota" data-id="${c.id}" rows="2" placeholder="¿Qué es este gasto? Ej.: seguro de salud del equipo" title="La IA lee esta explicación para elegir la cuenta">${esc(c.nota||"")}</textarea>`:`<span class="mini">${esc(c.nota||"–")}</span>`}</td>
       <td class="num">${ia.monto!=null&&ia.monto!==""?esc((ia.moneda||"")+" "+f2(+ia.monto)):"–"}</td>
       <td><span class="tag">${c.origen==="slack"?"Slack":(c.origen==="slack-chat"?"Slack (mensaje)":(c.origen==="billing"?"Billing":"Sistema"))}</span></td>
       <td>${c.estado==="registrado"?'<span class="st activo">Registrado</span>':(c.estado==="descartado"?'<span class="st inactivo">Descartado</span>':'<span class="st bob">Pendiente</span>')}</td>
-      <td><span class="ta-acts">${c.driveId?`<button class="btn ghost cp-ver" data-id="${c.id}">Ver</button>`:""}${c.estado!=="registrado"?`<button class="btn primary cp-reg" data-id="${c.id}" title="Crear un gasto nuevo con estos datos">Registrar</button><button class="btn ghost cp-adj" data-id="${c.id}" title="Unirlo a un pago que ya existe (factura, contrato, etc.)">Adjuntar a pago</button>`:""}${c.driveId?`<button class="btn ghost cp-ia" data-id="${c.id}" title="Volver a leer con la IA">↻ IA</button>`:""}${c.estado==="pendiente"?`<button class="btn ghost cp-desc" data-id="${c.id}" title="Descartar">✕</button>`:""}</span></td></tr>`; }).join("");
+      <td><span class="ta-acts">${c.driveId?`<button class="btn ghost cp-ver" data-id="${c.id}">Ver</button>`:""}${c.estado==="pendiente"?`<button class="btn ghost cp-iaca" data-id="${c.id}" title="La IA lee el comprobante, tu explicación y CIDRE, y elige la cuenta">✦ Cuenta</button>`:""}${c.estado!=="registrado"?`<button class="btn primary cp-reg" data-id="${c.id}" title="Crear un gasto nuevo con estos datos">Registrar</button><button class="btn ghost cp-adj" data-id="${c.id}" title="Unirlo a un pago que ya existe (factura, contrato, etc.)">Adjuntar a pago</button>`:""}${c.driveId?`<button class="btn ghost cp-ia" data-id="${c.id}" title="Volver a leer con la IA">↻ IA</button>`:""}${c.estado==="pendiente"?`<button class="btn ghost cp-desc" data-id="${c.id}" title="Descartar">✕</button>`:""}</span></td></tr>`; }).join("");
   app.innerHTML=`
     <div class="card"><div class="head"><h3>Subir comprobantes</h3><span class="mini">se guardan en Google Drive · la IA lee los datos</span></div>
       <label class="comp-drop" id="cpDrop"><input type="file" id="cpFiles" accept="image/*,application/pdf" multiple hidden>
         <b>Arrastra aquí tus comprobantes o haz clic para elegirlos</b><span>Fotos (JPG, PNG) o PDF · puedes elegir varios a la vez</span></label>
       ${subiendo?`<div class="msg" style="display:block;margin-top:10px">${esc(subiendo)}</div>`:""}
-      <p class="gcal-note">Después pulsa <b>Registrar</b>: se abre el formulario de gasto ya lleno con lo que leyó la IA. Tú completas el beneficiario, el comentario o lo que falte y guardas. Los que mandan por <b>Slack</b> también llegarán aquí.</p></div>
-    <div class="card"><div class="head"><h3>Bandeja</h3><button class="btn" id="cpSlack" title="Trae ahora los comprobantes nuevos del canal de Slack">↻ Revisar Slack ahora</button>${STATE._slackMsg?`<span class="mini">${esc(STATE._slackMsg)}</span>`:""}<div class="seg" id="cpFil"><button data-f="pendiente" class="${f==="pendiente"?"on":""}">Pendientes (${n("pendiente")})</button><button data-f="registrado" class="${f==="registrado"?"on":""}">Registrados (${n("registrado")})</button><button data-f="todos" class="${f==="todos"?"on":""}">Todos (${L.length})</button></div></div>
-      <div class="tbl-scroll"><table class="comp-tbl"><thead><tr><th></th><th>Fecha</th><th style="text-align:left">Proveedor / concepto</th><th>Monto</th><th>Origen</th><th>Estado</th><th></th></tr></thead>
-      <tbody>${filas||`<tr><td colspan="7">${emptyState(f==="pendiente"?"No hay comprobantes pendientes de registrar.":"Aún no hay comprobantes.")}</td></tr>`}</tbody></table></div></div>`;
+      <p class="gcal-note">Después pulsa <b>Registrar</b>: se abre el formulario de gasto ya lleno con lo que leyó la IA. Si el sistema no sabe qué cuenta usar, escribe en <b>Explicación</b> qué es el gasto: la IA lo lee junto con el concepto de CIDRE y elige la cuenta. Todo eso pasa a los comentarios del gasto. Los que mandan por <b>Slack</b> también llegarán aquí.</p></div>
+    <div class="card"><div class="head"><h3>Bandeja</h3><button class="btn" id="cpSlack" title="Trae ahora los comprobantes nuevos del canal de Slack">↻ Revisar Slack ahora</button>${sinCta.length?`<button class="btn" id="cpIaTodos" title="La IA elige la cuenta de los pendientes que el sistema no pudo asignar con seguridad">✦ Asignar cuentas con IA (${sinCta.length})</button>`:""}${STATE._compIaMsg?`<span class="mini">${esc(STATE._compIaMsg)}</span>`:""}${STATE._slackMsg?`<span class="mini">${esc(STATE._slackMsg)}</span>`:""}<div class="seg" id="cpFil"><button data-f="pendiente" class="${f==="pendiente"?"on":""}">Pendientes (${n("pendiente")})</button><button data-f="registrado" class="${f==="registrado"?"on":""}">Registrados (${n("registrado")})</button><button data-f="todos" class="${f==="todos"?"on":""}">Todos (${L.length})</button></div></div>
+      <div class="tbl-scroll"><table class="comp-tbl"><thead><tr><th></th><th>Fecha</th><th style="text-align:left">Proveedor / concepto</th><th style="text-align:left">Explicación</th><th>Monto</th><th>Origen</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${filas||`<tr><td colspan="8">${emptyState(f==="pendiente"?"No hay comprobantes pendientes de registrar.":"Aún no hay comprobantes.")}</td></tr>`}</tbody></table></div></div>`;
   const subir=async files=>{ files=[...files].filter(x=>/^image\/|pdf/.test(x.type)); if(!files.length) return;
     for(let i=0;i<files.length;i++){ STATE._compSubiendo="Subiendo y leyendo "+(i+1)+" de "+files.length+": "+files[i].name+"…"; render();
       try{ const r=await compSubirUno(files[i]); STATE.comps=(STATE.comps||[]).concat([compNuevo(r,"sistema")]); await compGuardarLista(); }
@@ -2929,6 +2961,13 @@ function renderComprobantes(){
   document.querySelectorAll("#cpFil button").forEach(b=>b.addEventListener("click",()=>{ STATE.compFiltro=b.dataset.f; render(); }));
   const bsl=$("#cpSlack"); if(bsl) bsl.addEventListener("click",()=>compRevisarSlack(true));
   const C=id=>(STATE.comps||[]).find(x=>x.id===id);
+  const iaUno=async c=>{ try{ await compIaCuenta(c); }catch(e){ const x=C(c.id)||c; x.iaCaErr=(e&&e.message)||"No se pudo."; delete x.iaCa; } if(STATE.section==="comprobantes"&&!compEscribiendo()) render(); };
+  document.querySelectorAll(".cp-nota").forEach(t=>t.addEventListener("change",async()=>{ const c=C(t.dataset.id); if(!c) return; const v=t.value.trim(); if(v===(c.nota||"")) return;
+    c.nota=v; delete c.iaCa; delete c.iaCaErr; await compGuardarLista(); if(v) await iaUno(c); else if(!compEscribiendo()) render(); }));
+  document.querySelectorAll(".cp-iaca").forEach(b=>b.addEventListener("click",async()=>{ const c=C(b.dataset.id); if(!c) return; b.textContent="Pensando…"; b.disabled=true; delete c.iaCa; await iaUno(c); }));
+  const bia=$("#cpIaTodos"); if(bia) bia.addEventListener("click",async()=>{ bia.disabled=true;
+    for(let i=0;i<sinCta.length;i++){ STATE._compIaMsg="Asignando "+(i+1)+" de "+sinCta.length+"…"; const m=document.querySelector("#cpIaTodos"); if(m) m.textContent=STATE._compIaMsg; await iaUno(sinCta[i]); }
+    STATE._compIaMsg=""; if(STATE.section==="comprobantes"&&!compEscribiendo()) render(); });
   document.querySelectorAll(".cp-ver").forEach(b=>b.addEventListener("click",()=>compVer(C(b.dataset.id))));
   document.querySelectorAll(".cp-reg").forEach(b=>b.addEventListener("click",()=>{ const c=C(b.dataset.id); abrirFormEgreso(); const m=$("#egCompMsg"); if(m) m.textContent="Datos leídos del comprobante · revisa y completa"; compLlenarForm(c); }));
   document.querySelectorAll(".cp-adj").forEach(b=>b.addEventListener("click",()=>compAdjuntarAPago(C(b.dataset.id))));
@@ -8352,7 +8391,7 @@ function cidreCargar(forzar){
     else { STATE.cidre={pagos:cidreParsePagos(res.pagos), treasury:res.treasury||[], costos:res.costos||[], actualizado:res.actualizado};
       try{ pnlAplicarTreasury(); }catch(e){ console.error("Treasury",e); }
       try{ nmWidgetPublicar(); }catch(_){} }   // V245: el extracto CIDRE llega después; sin esto el widget guardaba ingresos incompletos
-    if((STATE.section==="bancos"&&STATE.bancosTab==="cidre") || ["inicio","resumen","reportes","ingresos","costos","flujo"].indexOf(STATE.section)>=0) render();
+    if((STATE.section==="bancos"&&STATE.bancosTab==="cidre") || ["inicio","resumen","reportes","ingresos","costos","flujo"].indexOf(STATE.section)>=0 || (STATE.section==="comprobantes"&&!compEscribiendo())) render();
   }).catch(e=>{ STATE._cidreCargando=false; STATE.cidreErr=(e&&e.message)||String(e); if(STATE.section==="bancos"&&STATE.bancosTab==="cidre") render(); });
 }
 /* V212: INGRESOS desde la pestaña «Treasury» de la hoja de CIDRE (Peso - Costos).

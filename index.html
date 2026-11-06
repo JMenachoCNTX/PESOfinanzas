@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V247";
+const APP_VERSION = "V248";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -10071,7 +10071,8 @@ async function bitgoMigrarAFirebase(){
   await NMFB.histSet("bitgo",filas);
   const back=await bitgoLeer(d.cols);
   if(back.rows.length!==filas.length) throw new Error("Se copiaron "+back.rows.length+" de "+filas.length+" movimientos. No se cambió nada.");
-  const dif=filas.findIndex((f,i)=>JSON.stringify(f)!==JSON.stringify(bgLimpia(back.rows[i])));
+  const ord=o=>JSON.stringify(Object.keys(o).sort().map(k=>[k,o[k]]));   // Firebase devuelve los campos en otro orden
+  const dif=filas.findIndex((f,i)=>ord(f)!==ord(bgLimpia(back.rows[i])));
   if(dif>=0) throw new Error("El movimiento "+(dif+1)+" no quedó igual. No se cambió nada.");
   await NMFB.cfgSet("bitgoFB",{migrado:true,cols:d.cols,n:filas.length,fecha:new Date().toISOString()});
   return filas.length;

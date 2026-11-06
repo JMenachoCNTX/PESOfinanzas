@@ -669,6 +669,8 @@ td .pc:focus{border-color:var(--brand)}
 .pnl-caret{display:inline-block;width:10px;font-size:9px;color:var(--faint);transition:transform .15s;margin-right:7px}
 .pnl-caret.open{transform:rotate(90deg)}
 .pnl-caret-none{display:inline-block;width:10px;margin-right:7px}
+tr.lc-grp{cursor:pointer}
+tr.lc-hijo>td{background:rgba(142,182,155,.12)}
 .pnl-row.pnl-parent{cursor:pointer}
 .pnl-row.pnl-parent:hover td:first-child{color:var(--text)}
 .pnl-l0 td:first-child{font-weight:800;font-size:13.5px}
@@ -1572,7 +1574,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V251";
+const APP_VERSION = "V252";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1887,6 +1889,7 @@ function pnlRows(allYears){
   // usd = monto en USD;  bob = monto en BOB al TC del DÍA del pago (histórico). imp = moneda activa.
   const add=(cuenta,grupo,subg,cp,ca,usd,bob,m,g,src)=>{ cuenta=S(cuenta);grupo=S(grupo);subg=S(subg);cp=S(cp);ca=S(ca);
     if(!cuenta||!grupo||!subg||!cp||!ca) return; // requiere los 5 niveles asignados
+    if(/^activo/i.test(cuenta) && !STATE._pnlSoloPagado && !STATE._pnlConActivos) return; // V252: comprar un activo no es gasto del P&L (sí sale de Caja y de Egresos)
     if(!STATE.clasifHoja && esTraspasoNiv(cuenta,grupo,subg,cp,ca)) return; // V181: Traspasos Internos nunca son ingreso ni gasto
     const _usd=+usd||0, _bob=(bob==null?_usd*(RATE||0):(+bob||0));
     out.push({cuenta,grupo,subg,cp,ca, usd:_usd, bob:_bob, imp:(CUR==="BOB"?_bob:_usd), m,g,src,income:normHdr(cuenta).includes("ingreso")}); };
@@ -3476,7 +3479,7 @@ function renderInicio(){
 let RESCHART=null;
 function drawComparativo(){
   const basis=STATE.cmpBasis||"month";
-  const pr=pnlRows(true).filter(r=>!r.income); pr.forEach(r=>r._mi=monthIdx(r.m));
+  STATE._pnlConActivos=true; let pr=[]; try{ pr=pnlRows(true).filter(r=>!r.income); } finally { STATE._pnlConActivos=false; } pr.forEach(r=>r._mi=monthIdx(r.m));
   const inPeriod=(r,g,s)=> r.g===g && (basis==="year"?true:(basis==="quarter"?Q_OF[r._mi]===s:r._mi===s));
   const totOf=(g,s)=>pr.filter(r=>inPeriod(r,g,s)).reduce((a,r)=>a+r.imp,0);
   const catOf=(g,s)=>{ const o={}; pr.filter(r=>inPeriod(r,g,s)).forEach(r=>o[r.cp]=(o[r.cp]||0)+r.imp); return o; };
@@ -3914,7 +3917,7 @@ function egresosUnificados(){
   const bobOf=(usd,fecha)=>{ const r=tcRateFor(fecha); return r? usd*r : (RATE? usd*RATE : null); };
   (STATE.egresos||[]).filter(e=>yOk(e.g)&&empPassRow(e)).forEach(e=>{
     const a=ancEgreso(e);
-    out.push({ origen:/altitude/i.test(String(e.tipo||""))?"Altitude":"Egresos", egId:e._id||null, fecha:e.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Egresos", hu:e._hu,
+    out.push({ origen:/altitude/i.test(String(e.tipo||""))?"Altitude":(esCuentaCidre(e.tipo)?"CIDRE":"Pagos Externos"), egId:e._id||null, fecha:e.fecha, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"Egresos", hu:e._hu,
       keytext:e.ben||"", con:e.con||e.ben||"", moneda:e.moneda||"USD", usd:(e.impUSD!=null?+e.impUSD:(+e.imp||0)), bob:(e.impBOB!=null?+e.impBOB:null),
       estado:e.e||"", tipo:e.tipo||"", costo:e._costo||egCostoDe(e.ben,e.con), m:e.m, g:e.g, mi:monthIdx(e.m), orig:(e.impOrig!=null?+e.impOrig:+e.imp||0), cuentaPago:e.tipo||"",
       extra:[e.ben,e.coment,e.pagadopor,e.pais,e.codc].filter(Boolean).join(" ") });
@@ -4232,8 +4235,17 @@ function caMasterList(){
 /* V210: CA_SIN en la asignación manual = "quitada a propósito": el gasto queda sin cuenta analítica
    (no se usa la regla automática ni el valor de la hoja) hasta que se le asigne otra. */
 const CA_SIN="__SIN__";
+/* V252: proveedores que siempre van a la misma cuenta, aunque la base Asignación diga otra cosa o no diga nada.
+   No se usa en BitGo: ahí el texto es un comentario de la operación, no el proveedor. */
+const CA_REGLAS=[
+  [/tesabiz/,"Comisión Tesabiz"],
+  [/\b(uber|yango|taxis?|cabify|indrive|remis)\b/,"Transportes"],
+  [/\b(boa|aerolineas?|amaszonas|paranair|latam|avianca|copa airlines|jetsmart|sky airline|esky|edestinos|despegar|vuelos?|pasajes?)\b|ant\*? ?trip|trip\.com/,"Pasajes"],
+  [/\b(hotel|hoteles|hostal|airbnb)\b|booking\.com/,"Hoteles"]];
+function caRegla(txt){ const t=_normTxt(txt); const r=t&&CA_REGLAS.find(x=>x[0].test(t)); return r?r[1]:""; }
 function resolveGeneric(fuente, huella, keyText, sheetCa, conText){
   const ov=manCa(fuente,huella); if(ov===CA_SIN) return {ca:"", src:"sin"}; if(ov) return {ca:caNombre(ov), src:"manual"};
+  const rg=fuente==="BitGo"?"":caRegla((keyText||"")+" "+(conText||"")); if(rg) return {ca:rg, src:"auto"};
   const base=asigBaseIndex()[_normTxt(keyText)]; if(base) return {ca:caNombre(base), src:"auto"};
   if(sheetCa && String(sheetCa).trim()) return {ca:caNombre(String(sheetCa).trim()), src:"sheet"};
   // V232: si nadie la asignó, el sistema la deduce del historial (mismo proveedor o mismo concepto)
@@ -5976,6 +5988,8 @@ function _cosCoincide(it, txt, conToo){ const p=_cosClave(it.prov);
     const w=_normTxt(it.prov).split(/[^a-z0-9]+/).filter(x=>x.length>=4&&!/^(peso|bolivia|srl|llc|inc|corp|limited|ltda)$/.test(x)); if(w.length&&txt.includes(w[0])) return true; }
   // para las sugerencias también cuenta el concepto completo (ej. el alquiler anotado con el nombre del dueño)
   const c=_cosClave(it.con); return !!conToo&&c.length>=8&&txt.includes(c); }
+/* V252: junta los costos del mismo proveedor (sin importar mayúsculas ni acentos) */
+function _lcGrupos(L){ const m=new Map(); L.forEach((i,n)=>{ const k=_normTxt(i.prov)||("\u0000"+n); if(!m.has(k)) m.set(k,[]); m.get(k).push(i); }); return [...m.values()]; }
 function _cosGastos(){
   return (STATE.egresos||[]).filter(e=>e.g!=null&&monthIdx(e.m)>=0&&!/presupuest/i.test(String(e.e||""))).map(e=>{ const ca=(resolveEgreso(e)||{}).ca||"", a=ancEgreso(e)||{};
     return {e, k:e.g*12+monthIdx(e.m), usd:e.impUSD!=null?+e.impUSD:(+e.imp||0), ben:e.ben||"", ca, cuenta:a.kcuenta||"", txt:_cosClave([e.ben,e.con,ca].join(" "))}; });
@@ -6158,15 +6172,22 @@ function renderCostos(){
     const allF=items.filter(passF);
     const LS=STATE.lcSort||{key:"mFijoM",dir:"desc"};
     const sortIt=arr=>[...arr].sort(mkCmp(LS.key,LS.dir,["montoFijo","montoVar","mFijoM","mVarM","_fUSD","_fBOB"],[]));
+    /* V252: un proveedor repetido se ve en una sola línea; al hacer clic se despliegan sus costos */
+    if(!STATE.lcProvAbierto) STATE.lcProvAbierto=new Set();
+    const lcAbierto=g=>STATE.lcProvAbierto.has(g)||!!String(STATE.lcSearch||"").trim();
+    const lcFilas=()=>{ const uno=(L,f)=>{ const v=[...new Set(L.map(f))]; return v.length===1?v[0]:""; };
+      const G=_lcGrupos(allF).map(L=>{ if(L.length===1) return L[0]; const sum=k=>L.reduce((a,i)=>a+(+i[k]||0),0), mon=uno(L,i=>i.moneda);
+        return {_grp:_normTxt(L[0].prov),_kids:L,prov:L[0].prov,con:L.length+" costos",tipoStd:uno(L,i=>i.tipoStd),_emp:uno(L,i=>i._emp),centro:uno(L,i=>i.centro||i.cat)||"Varios",frec:uno(L,i=>i.frec)||"Varias",fv:uno(L,i=>i.fv),moneda:mon,montoFijo:mon?sum("montoFijo"):0,montoVar:mon?sum("montoVar"):0,_fUSD:sum("_fUSD"),_fBOB:sum("_fBOB")}; });
+      const out=[]; sortIt(G).forEach(g=>{ out.push(g); if(g._grp&&lcAbierto(g._grp)) sortIt(g._kids).forEach(i=>out.push(Object.assign({},i,{_hijo:1}))); }); return out; };
     const lcCols=[
       {label:"Tipo",sortKey:"tipoStd",render:i=>i.tipoStd?`<span class="tag">${esc(i.tipoStd)}</span>`:'<span class="zero">–</span>'},
       {label:"Empresa",sortKey:"_emp",render:i=>{const e=EMP_LABEL[i._emp]||i.empresa; return e?`<span class="tag">${esc(e)}</span>`:'<span class="zero">–</span>';}},
       {label:"Centro de Costo",sortKey:"centro",render:i=>esc(i.centro||i.cat||"–")},
-      {label:"Proveedor",sortKey:"prov",render:i=>esc(i.prov||"–")},
+      {label:"Proveedor",sortKey:"prov",render:i=>i._grp?`<span class="lc-prov" data-g="${esc(i._grp)}"><span class="pnl-caret ${lcAbierto(i._grp)?"open":""}">▶</span><b>${esc(i.prov)}</b></span>`:(i._hijo?`<span class="mini" style="padding-left:17px">${esc(i.prov||"–")}</span>`:esc(i.prov||"–"))},
       {label:"Concepto",sortKey:"con",render:i=>`${esc(i.con||"–")}${i.nota?`<span class="sub2">${esc(i.nota)}</span>`:""}`},
       {label:"Frecuencia",sortKey:"frec",render:i=>`<span class="mini">${esc(i.frec)}</span>`},
       {label:"Fijo/Variable",sortKey:"fv",render:i=>i.fv?`<span class="tag">${esc(costoLabel(i.fv))}</span>`:'<span class="zero">–</span>'},
-      {label:"Moneda",sortKey:"moneda",render:i=>String(i.moneda)==="BOB"?'<span class="st bob">BOB</span>':'<span class="st usd">USD</span>'},
+      {label:"Moneda",sortKey:"moneda",render:i=>!i.moneda?'<span class="zero">–</span>':(String(i.moneda)==="BOB"?'<span class="st bob">BOB</span>':'<span class="st usd">USD</span>')},
       {label:"Monto Fijo",right:1,cls:"num",sortKey:"montoFijo",render:i=>i.montoFijo?(i.moneda==="BOB"?"Bs "+f2(i.montoFijo):fmt(i.montoFijo,2)):'<span class="zero">–</span>'},
       {label:"Monto Variable",right:1,cls:"num",sortKey:"montoVar",render:i=>i.montoVar?(i.moneda==="BOB"?"Bs "+f2(i.montoVar):fmt(i.montoVar,2)):'<span class="zero">–</span>'},
       {label:"USD /mes",right:1,cls:"num",sortKey:"_fUSD",render:i=>i._fUSD?("$"+f2(i._fUSD)):'<span class="zero">–</span>'},
@@ -6175,7 +6196,7 @@ function renderCostos(){
     if(STATE.cosFB||STATE.egFB) lcCols.push({label:"",render:i=>`<span style="white-space:nowrap">${STATE.egFB&&i._id?`<button class="btn ghost lc-cxp" data-id="${esc(i._id)}" title="Crear una cuenta por pagar con este costo (ej.: Alquiler ${esc(MONTH_ES_LONG[new Date().getMonth()])})" style="padding:4px 8px">→ Por pagar</button>`:""}${STATE.cosFB&&i._id?`<button class="btn ghost lc-ed" data-id="${esc(i._id)}" title="Editar este costo" style="padding:4px 8px">✎</button>`:""}</span>`});
     const totUSD_F=allF.reduce((s,i)=>s+i._fUSD,0);
     const totRowLC=["Total ("+allF.length+")","","","","","","","","","",`<b>$${f2(totUSD_F)}</b>`, RATE?`<b>Bs ${f2(totUSD_F*RATE)}</b>`:'<span class="zero">–</span>'].concat((STATE.cosFB||STATE.egFB)?[""]:[]);
-    const tabla = allF.length? tbl(lcCols,sortIt(allF),totRowLC,LS,{sticky:true,viewKey:"costos_lista"}) : emptyState("Sin costos con los filtros actuales.");
+    const tabla = allF.length? tbl(lcCols,lcFilas(),totRowLC,LS,{sticky:true,viewKey:"costos_lista",rowClass:i=>i._grp?"lc-grp":(i._hijo?"lc-hijo":"")}) : emptyState("Sin costos con los filtros actuales.");
     const lcFilterDefs=[
       ...(tiposL.length?[{k:"lcTipo",lbl:"Tipo",disp:v=>v,opts:tiposL.map(c=>({v:c,t:c})),ph:"Todos los tipos"}]:[]),
       ...(empsL.length?[{k:"lcEmp",lbl:"Empresa",disp:v=>(EMP_LABEL[empNorm(v)]||v),opts:empsL.map(c=>({v:c,t:(EMP_LABEL[empNorm(c)]||c)})),ph:"Todas las empresas"}]:[]),
@@ -6213,19 +6234,21 @@ function renderCostos(){
       const usd=v=>v?"$"+f2(v):'<span class="zero">–</span>', bob=v=>(v&&RATE)?"Bs "+f2(v*RATE):'<span class="zero">–</span>';
       const tot=L=>({f:L.reduce((s,i)=>s+i.mFijoM,0),v:L.reduce((s,i)=>s+i.mVarM,0)});
       const car=l=>`<span class="pnl-caret ${niv>l?"open":""}">▶</span>`;
-      const fila=(cls,lvl,lbl,sub,L,caret,pad)=>{ const t=tot(L); return `<tr class="pnl-row ${cls}" ${lvl!=null?`data-lcn="${lvl}"`:""}><td style="padding-left:${pad}px">${caret}${lbl}${sub?`<span class="sub2">${sub}</span>`:""}</td><td class="num">${L.length}</td><td class="num">${usd(t.f)}</td><td class="num">${usd(t.v)}</td><td class="num"><b>${usd(t.f+t.v)}</b></td><td class="num">${bob(t.f+t.v)}</td></tr>`; };
+      let ruta=""; const fila=(cls,lvl,lbl,sub,L,caret,pad)=>{ const t=tot(L); return `<tr class="pnl-row ${cls}" ${lvl!=null?`data-lcn="${lvl}" data-pid="${esc(ruta+"|"+lbl)}"`:""}><td style="padding-left:${pad}px">${caret}${lbl}${sub?`<span class="sub2">${sub}</span>`:""}</td><td class="num">${L.length}</td><td class="num">${usd(t.f)}</td><td class="num">${usd(t.v)}</td><td class="num"><b>${usd(t.f+t.v)}</b></td><td class="num">${bob(t.f+t.v)}</td></tr>`; };
       const G=niv>2?_cosGastos():[];
       let body="";
       ["Operativo","Administrativo","Comercialización"].forEach(g=>{ const L=allF.filter(i=>i.tipo===g); if(!L.length) return;
-        body+=fila("pnl-l0 pnl-parent",0,esc(g==="Comercialización"?"Comercialización (Marketing)":g).toUpperCase(),"",L,car(0),8);
+        ruta=g; body+=fila("pnl-l0 pnl-parent",0,esc(g==="Comercialización"?"Comercialización (Marketing)":g).toUpperCase(),"",L,car(0),8);
         if(niv<1) return;
         const cs={}; L.forEach(i=>{ const c=i.centro||i.cat||"(Sin centro de costo)"; (cs[c]=cs[c]||[]).push(i); });
         Object.entries(cs).sort((a,b)=>(tot(b[1]).f+tot(b[1]).v)-(tot(a[1]).f+tot(a[1]).v)).forEach(([c,M])=>{
-          body+=fila("pnl-l1 pnl-parent",1,esc(c),"",M,car(1),26);
+          ruta=g+"|"+c; body+=fila("pnl-l1 pnl-parent",1,esc(c),"",M,car(1),26);
           if(niv<2) return;
-          M.slice().sort((a,b)=>(b.mFijoM+b.mVarM)-(a.mFijoM+a.mVarM)).forEach(i=>{
-            body+=fila("pnl-l2 pnl-parent",2,esc(i.prov||"–")+(i.con?" · "+esc(i.con):""),esc(i.frec+(i.fv?" · "+costoLabel(i.fv):"")+" · "+i.moneda),[i],car(2),46);
+          const det=i=>esc(i.frec+(i.fv?" · "+costoLabel(i.fv):"")+" · "+i.moneda), sumM=Q=>{ const t=tot(Q); return t.f+t.v; };
+          _lcGrupos(M).sort((a,b)=>sumM(b)-sumM(a)).forEach(Q=>{ const i=Q[0], varios=Q.length>1;
+            body+=fila("pnl-l2 pnl-parent",2,esc(i.prov||"–")+(!varios&&i.con?" · "+esc(i.con):""),varios?Q.length+" costos":det(i),Q,car(2),46);
             if(niv<3) return;
+            if(varios) Q.slice().sort((a,b)=>sumM([b])-sumM([a])).forEach(x=>{ body+=fila("pnl-l3",null,esc(x.con||"–"),det(x),[x],'<span class="pnl-caret-none"></span>',66); });
             const P=G.filter(x=>_cosCoincide(i,x.txt)).sort((a,b)=>String(b.e.fecha||"").localeCompare(String(a.e.fecha||""))).slice(0,6);
             body+=P.length?P.map(x=>`<tr class="pnl-row pnl-l3"><td style="padding-left:66px"><span class="pnl-caret-none"></span>${esc(String(x.e.fecha||"").slice(0,10))} · ${esc(x.e.con||x.ben||"")}${x.e.e&&!/pagad/i.test(x.e.e)?` <span class="tag">${esc(x.e.e)}</span>`:""}</td><td></td><td></td><td></td><td class="num">${usd(x.usd)}</td><td class="num">${bob(x.usd)}</td></tr>`).join("")
               :`<tr class="pnl-row pnl-l3"><td colspan="6" style="padding-left:66px" class="mini">Sin pagos encontrados en Egresos para este costo</td></tr>`;
@@ -6233,11 +6256,11 @@ function renderCostos(){
       const T=tot(allF);
       cuerpo=`<div class="card"><div class="head"><h3>Lista de Costos agrupada</h3><span class="mini">clic en una fila para abrir o cerrar ese nivel completo (como el Estado de Resultados) · montos llevados a base mensual · al abrir un costo se ven sus últimos pagos</span></div>
         <div class="toolbar" style="align-items:center;margin-bottom:10px">${esearch("lcSearch","Buscar proveedor o concepto…",STATE.lcSearch)}${lcFB.bar}<div class="spacer"></div><button class="btn ghost" id="lcAbrirTodo">Abrir todo</button><button class="btn ghost" id="lcCerrarTodo">Cerrar todo</button></div>${lcFB.panel}
-        <div class="tbl-scroll sticky-head" style="max-height:70vh"><table id="lcGrp"><thead><tr><th>Grupo ▸ Centro de costo ▸ Costo</th><th class="num">Costos</th><th class="num">Fijo /mes</th><th class="num">Variable /mes</th><th class="num tot">Total /mes</th><th class="num">BOB /mes</th></tr></thead>
+        <div class="tbl-scroll sticky-head" id="lcGrpScroll" style="max-height:70vh"><table id="lcGrp"><thead><tr><th>Grupo ▸ Centro de costo ▸ Costo</th><th class="num">Costos</th><th class="num">Fijo /mes</th><th class="num">Variable /mes</th><th class="num tot">Total /mes</th><th class="num">BOB /mes</th></tr></thead>
         <tbody>${body||`<tr><td colspan="6">${emptyState("Sin costos con los filtros actuales.")}</td></tr>`}</tbody>
         <tfoot><tr><td>Total (${allF.length})</td><td class="num">${allF.length}</td><td class="num">${usd(T.f)}</td><td class="num">${usd(T.v)}</td><td class="num">${usd(T.f+T.v)}</td><td class="num">${bob(T.f+T.v)}</td></tr></tfoot></table></div></div>`;
     }
-    else cuerpo=`<div class="card"><div class="head"><h3>Lista de Costos</h3><span class="mini">${allF.length} de ${items.length} · $${f2(totUSD_F)}/mes · clic en un encabezado para ordenar</span></div>${toolbar}${tabla}</div>`;
+    else cuerpo=`<div class="card"><div class="head"><h3>Lista de Costos</h3><span class="mini">${allF.length} de ${items.length} · $${f2(totUSD_F)}/mes · clic en un proveedor con ▶ para ver sus costos · clic en un encabezado para ordenar</span></div>${toolbar}<div id="lcLista">${tabla}</div></div>`;
     app.innerHTML=`
       <p class="section-intro">Todos los costos de la empresa desde tu hoja <b>Tabla Costos</b>: clasificados por <b>Tipo</b> (función), <b>Empresa</b>, <b>Centro de Costo</b> (área) y <b>Fijo/Variable</b> (comportamiento). Los montos se llevan a base <b>mensual</b> según su frecuencia; <b>USD /mes</b> y <b>BOB /mes</b> son el costo mensual total (fijo + variable) de cada fila${RATE?` al TC del día (Bs ${fTC(RATE)}/USD)`:""}.</p>
       ${seg}
@@ -6255,9 +6278,11 @@ function renderCostos(){
     fbWire("lcf", lcFilterDefs);
     document.querySelectorAll("#lcVista button").forEach(b=>b.addEventListener("click",()=>{ STATE.lcVista=b.dataset.v; render(); }));
     document.querySelectorAll("#lcGrp tr[data-lcn]").forEach(tr=>tr.addEventListener("click",()=>{ const l=+tr.dataset.lcn;
-      STATE.lcNivel=(STATE.lcNivel>l)?l:l+1; render(); }));
-    const lat=$("#lcAbrirTodo"); if(lat) lat.addEventListener("click",()=>{ STATE.lcNivel=2; render(); });
-    const lct=$("#lcCerrarTodo"); if(lct) lct.addEventListener("click",()=>{ STATE.lcNivel=0; render(); });
+      STATE.lcNivel=(STATE.lcNivel>l)?l:l+1; renderKeepScroll("#lcGrpScroll", tr.dataset.pid); }));
+    document.querySelectorAll("#lcLista tr.lc-grp").forEach(tr=>tr.addEventListener("click",()=>{ const g=tr.querySelector(".lc-prov").dataset.g, A=STATE.lcProvAbierto;
+      if(A.has(g)) A.delete(g); else A.add(g); renderKeepScroll("#lcLista .tbl-scroll"); }));
+    const lat=$("#lcAbrirTodo"); if(lat) lat.addEventListener("click",()=>{ STATE.lcNivel=2; renderKeepScroll("#lcGrpScroll"); });
+    const lct=$("#lcCerrarTodo"); if(lct) lct.addEventListener("click",()=>{ STATE.lcNivel=0; renderKeepScroll("#lcGrpScroll"); });
     const la=$("#lcAdd"); if(la) la.addEventListener("click",()=>costoModal(null));
     document.querySelectorAll(".lc-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const it=items.find(i=>i._id===b.dataset.id); if(it) costoModal(it); }));
     document.querySelectorAll(".lc-cxp").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const it=items.find(i=>i._id===b.dataset.id); if(it) costoACxP(it); }));
@@ -10933,6 +10958,7 @@ function autoFillCuenta(){
 /* V238: el formulario de gasto sugiere la cuenta analítica según el beneficiario y el concepto
    (base Asignación > historial > aproximada). Si la persona escribe otra cuenta, se respeta. */
 function caSugerir(ben,con){
+  const rg=caRegla((ben||"")+" "+(con||"")); if(rg) return {ca:rg, src:"auto"};
   const B=asigBaseIndex(), b=B[_normTxt(ben)]||B[_normTxt(con)]; if(b) return {ca:caNombre(b), src:"auto"};
   const H=caHistIndex(), h=H[_normTxt(ben)]||H[_normTxt(con)]; if(h) return {ca:h, src:"hist"};
   const a=caAdivinar((ben||"")+" "+(con||"")); return a?{ca:a, src:"adiv"}:{ca:"", src:"none"}; }

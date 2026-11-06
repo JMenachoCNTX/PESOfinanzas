@@ -1572,7 +1572,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V250";
+const APP_VERSION = "V251";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2877,8 +2877,9 @@ function billCruceG(g,U){
     if(r) return {r,nom:true,seguro:true,porNro:true}; }
   if(!mo) return null;
   const f=new Date(g.fecha); let best=null;
-  U.forEach(r=>{ if(!monOk(r)) return; const d=(new Date(String(r.fecha).slice(0,10)+"T12:00")-f)/864e5; if(isNaN(d)||d<-10||d>60) return;
-    const nom=nomOk(r), s=(nom?100:0)-Math.abs(d); if(!best||s>best.s) best={r,s,nom,seguro:nom}; });
+  U.forEach(r=>{ if(!monOk(r)) return; const pe=/pend/i.test(r.estado||""), d=(new Date(String(r.fecha).slice(0,10)+"T12:00")-f)/864e5;
+    if(pe?!nomOk(r):(isNaN(d)||d<-10||d>60)) return;   // una cuenta por pagar puede no tener fecha
+    const nom=nomOk(r), s=(nom?100:0)-(pe?0:Math.abs(d)); if(!best||s>best.s) best={r,s,nom,seguro:nom}; });
   return best; }
 /* V250: si el pago ya está en Egresos o Bancos, sus PDF se adjuntan solos como respaldo. Solo con coincidencia
    segura y pagos ya hechos (una cuenta por pagar cambia de fecha al pagarse). Se hace de uno en uno. */

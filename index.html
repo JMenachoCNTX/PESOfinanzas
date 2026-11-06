@@ -1574,7 +1574,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V252";
+const APP_VERSION = "V253";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4245,8 +4245,10 @@ const CA_REGLAS=[
 function caRegla(txt){ const t=_normTxt(txt); const r=t&&CA_REGLAS.find(x=>x[0].test(t)); return r?r[1]:""; }
 function resolveGeneric(fuente, huella, keyText, sheetCa, conText){
   const ov=manCa(fuente,huella); if(ov===CA_SIN) return {ca:"", src:"sin"}; if(ov) return {ca:caNombre(ov), src:"manual"};
-  const rg=fuente==="BitGo"?"":caRegla((keyText||"")+" "+(conText||"")); if(rg) return {ca:rg, src:"auto"};
-  const base=asigBaseIndex()[_normTxt(keyText)]; if(base) return {ca:caNombre(base), src:"auto"};
+  const base=asigBaseIndex()[_normTxt(keyText)];
+  // el proveedor siempre manda; el concepto solo se mira si la base no sabe (o dice «Otros»)
+  const rg=fuente==="BitGo"?"":(caRegla(keyText)||((!base||_normTxt(base)==="otros")?caRegla(conText):"")); if(rg) return {ca:rg, src:"auto"};
+  if(base) return {ca:caNombre(base), src:"auto"};
   if(sheetCa && String(sheetCa).trim()) return {ca:caNombre(String(sheetCa).trim()), src:"sheet"};
   // V232: si nadie la asignó, el sistema la deduce del historial (mismo proveedor o mismo concepto)
   if(!STATE._histBuilding){ const H=caHistIndex(); const h=H[_normTxt(keyText)]||H[_normTxt(conText)]; if(h) return {ca:h, src:"hist"};
@@ -10958,8 +10960,9 @@ function autoFillCuenta(){
 /* V238: el formulario de gasto sugiere la cuenta analítica según el beneficiario y el concepto
    (base Asignación > historial > aproximada). Si la persona escribe otra cuenta, se respeta. */
 function caSugerir(ben,con){
-  const rg=caRegla((ben||"")+" "+(con||"")); if(rg) return {ca:rg, src:"auto"};
-  const B=asigBaseIndex(), b=B[_normTxt(ben)]||B[_normTxt(con)]; if(b) return {ca:caNombre(b), src:"auto"};
+  const B=asigBaseIndex(), b=B[_normTxt(ben)]||B[_normTxt(con)];
+  const rg=caRegla(ben)||((!b||_normTxt(b)==="otros")?caRegla(con):""); if(rg) return {ca:rg, src:"auto"};
+  if(b) return {ca:caNombre(b), src:"auto"};
   const H=caHistIndex(), h=H[_normTxt(ben)]||H[_normTxt(con)]; if(h) return {ca:h, src:"hist"};
   const a=caAdivinar((ben||"")+" "+(con||"")); return a?{ca:a, src:"adiv"}:{ca:"", src:"none"}; }
 function egSugerirCA(){

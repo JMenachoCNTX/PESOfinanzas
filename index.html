@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V242";
+const APP_VERSION = "V243";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -8537,7 +8537,7 @@ function bancosResumenHTML(tab){
 function pagosExternosSociosHTML(){
   const yOk=g=>STATE.year==="__all"||g===STATE.year, m={}; let tot=0;
   (STATE.egresos||[]).filter(r=>yOk(r.g)&&bancoListaFiltro(r,"otras")).forEach(r=>{ const v=r.impUSD!=null?(+r.impUSD||0):(+r.imp||0); tot+=v;
-    const k=egSocioDe(r._raw||r)||egSocioDe(r)||"La empresa / sin socio"; m[k]=(m[k]||0)+v; });
+    const k=egSocioDe(r)||"La empresa / sin socio"; m[k]=(m[k]||0)+v; });
   const L=Object.entries(m).sort((a,b)=>b[1]-a[1]); if(!L.length) return "";
   const soc=L.filter(([k])=>k!=="La empresa / sin socio").reduce((s,[,v])=>s+v,0);
   return `<div class="caja" style="margin:-6px 0 16px">${L.slice(0,5).map(([k,v])=>`<div class="c${k==="La empresa / sin socio"?"":" hi"}"><div class="l">${k==="La empresa / sin socio"?esc(k):"Pagado por "+esc(k)}</div><div class="v">$${f2(v)}</div><div class="mini">${tot?Math.round(v/tot*100):0}% del total</div></div>`).join("")}

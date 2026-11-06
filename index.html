@@ -1571,7 +1571,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V243";
+const APP_VERSION = "V244";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2074,6 +2074,17 @@ function _rtable(head, rows){
   return `<div class="tbl-scroll sticky-head"><table class="rep-tbl"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 /* Totales de un periodo (año + mes opcional) reutilizando pnlRows */
+/* V244: caja estimada acumulada = capital + préstamos + ingresos − gastos pagados desde cuentas de la empresa (CIDRE, Altitude,
+   BitGo, Mercury) − devoluciones. Lo pagado por un socio con su tarjeta no sale de la empresa: se descuenta cuando se le devuelve. */
+function cajaEmpresa(){
+  const sv={y:STATE.year,e:STATE.empresa}; let U=[], P=[]; STATE.year="__all"; STATE.empresa="__all";
+  try{ U=egresosUnificados(); P=pnlRows(); } finally { STATE.year=sv.y; STATE.empresa=sv.e; }
+  const uE=e=>(e.impUSD!=null?+e.impUSD:(+e.imp||0))||0, pag=(STATE.egresos||[]).filter(e=>String(e.e||"").trim().toLowerCase()==="pagado");
+  const invTot=(STATE.inv||[]).reduce((s,e)=>s+(+e.importe||0),0), preTot=(STATE.pre||[]).reduce((s,e)=>s+(+e.importe||0),0), devTot=(STATE.dev||[]).reduce((s,e)=>s+devUSD(e),0);
+  const ingTot=P.filter(r=>r.income&&!r.dato).reduce((s,r)=>s+(+r.usd||0),0);
+  const egSocios=pag.filter(e=>egSocioDe(e)).reduce((s,e)=>s+uE(e),0);
+  const egPaid=pag.filter(e=>!egSocioDe(e)).reduce((s,e)=>s+uE(e),0)+U.filter(r=>r.origen==="BitGo"||r.origen==="Mercury").reduce((s,r)=>s+(+r.usd||0),0);
+  return {invTot,preTot,ingTot,egPaid,egSocios,devTot,caja:invTot+preTot+ingTot-egPaid-devTot}; }
 function _repTotales(y,mIdx){
   const saved=STATE.year; STATE.year=(y==null||y==="__all")?"__all":y;
   let rows; try{ rows=pnlRows(); } finally { STATE.year=saved; }
@@ -2137,7 +2148,7 @@ function _repData(){
   const cxpTot=cxpAll.reduce((s,e)=>s+(+e.imp||0),0);
   const cxpTotBOB=cxpAll.reduce((s,e)=>s+(e.impBOB!=null?+e.impBOB:0),0);
 
-  const caja=invTot+preTot-paidTot-devTot;
+  const caja=cajaEmpresa().caja;
   const activeMonths=Math.max(1, egM.filter(v=>v>0).length);
   const avgBurn=expenseTot>0? (mIdx!=null? expenseTot : expenseTot/activeMonths) : 0;
   const runway=avgBurn>0? caja/avgBurn : 0;
@@ -3625,26 +3636,23 @@ function renderResumen(){
       <div class="card"><div class="head"><h3>Gastos y costos por grupo</h3><span class="mini">para comparar ${annual?"año a año":"mes a mes"}</span></div>${grTbl(ggF,"Sin gastos.")}</div>`;
   } else if(tab==="caja"){
     // La caja es ACUMULADA desde el inicio (no depende del año elegido)
-    const invTot = (STATE.inv||[]).reduce((s,e)=>s+(+e.importe||0),0);
-    const preTot = (STATE.pre||[]).reduce((s,e)=>s+(+e.importe||0),0);
-    const devTot = (STATE.dev||[]).reduce((s,e)=>s+devUSD(e),0);
-    const egPaid = (STATE.egresos||[]).filter(e=>String(e.e||"").trim().toLowerCase()==="pagado").reduce((s,e)=>s+(+e.imp||0),0);
-    const caja = invTot + preTot - egPaid - devTot;
+    const {invTot,preTot,ingTot,egPaid,egSocios,devTot,caja}=cajaEmpresa();
     // Gasto mensual = promedio de los últimos 3 meses completos, de TODAS las fuentes (Egresos, BitGo, Mercury), por fecha de pago
     const hoy=new Date(), ref=[1,2,3].map(k=>{ const d=new Date(hoy.getFullYear(),hoy.getMonth()-k,1); return d.getFullYear()*12+d.getMonth(); });
     const svB=STATE.resBase; let pr=[]; try{ STATE.resBase="caja"; STATE._pnlSoloPagado=true; pr=pnlRows(true); } finally { STATE.resBase=svB; STATE._pnlSoloPagado=false; }
     const burn=pr.filter(r=>!r.income&&!r.dato&&ref.includes(r.g*12+monthIdx(r.m))).reduce((a,r)=>a+(+r.usd||0),0)/3, runway=burn>0?caja/burn:0;
-    STATE._resPDF.caja={invTot,preTot,egPaid,devTot,caja,runway};
+    STATE._resPDF.caja={invTot,preTot,ingTot,egPaid,devTot,caja,runway};
     content=`<div class="card"><div class="head"><h3>Posición de caja</h3><span class="mini">referencial · acumulado desde el inicio</span></div>
         <div class="caja">
           <div class="c"><div class="l">Capital invertido</div><div class="v" style="color:var(--emerald)">${money(invTot)}</div></div>
           <div class="c"><div class="l">Préstamos recibidos</div><div class="v">${money(preTot)}</div></div>
-          <div class="c"><div class="l">Egresos pagados</div><div class="v neg">${money(egPaid)}</div></div>
+          <div class="c"><div class="l">Ingresos</div><div class="v" style="color:var(--emerald)">${money(ingTot)}</div></div>
+          <div class="c"><div class="l">Pagado desde cuentas de la empresa</div><div class="v neg">${money(egPaid)}</div></div>
           <div class="c"><div class="l">Devoluciones</div><div class="v neg">${money(devTot)}</div></div>
           <div class="c hi"><div class="l">Caja estimada</div><div class="v">${money(caja)}</div></div>
           <div class="c hi"><div class="l">Runway</div><div class="v">${runway>0?runway.toFixed(1)+" meses":"—"}</div></div>
         </div>
-        <p class="section-intro" style="margin:10px 0 0"><b>Caja estimada</b> = capital + préstamos − egresos pagados (hoja de Egresos) − devoluciones. Es una estimación: los pagos que solo están en BitGo o Mercury no se restan aquí. <b>Runway</b> = cuántos meses alcanza esa caja al ritmo de gasto de los últimos 3 meses (${money(burn)}/mes, todas las fuentes).</p>
+        <p class="section-intro" style="margin:10px 0 0"><b>Caja estimada</b> = capital + préstamos + ingresos − lo pagado desde cuentas de la empresa (CIDRE, Altitude, BitGo, Mercury) − devoluciones. Lo que un socio pagó con su tarjeta (${money(egSocios)}) no se resta aquí: se resta cuando se le devuelve. Es una estimación; compárala con los saldos reales de los bancos. <b>Runway</b> = cuántos meses alcanza esa caja al ritmo de gasto de los últimos 3 meses (${money(burn)}/mes, todas las fuentes).</p>
       </div>
       ${estadoCuentaHTML()}`;
   }
@@ -7383,7 +7391,7 @@ function exportResumenPDF(){
   } else if(V.tab==="caja"){
     const c=V.caja||{};
     ctx.h2("Posición de caja (referencial)");
-    ctx.table(["Concepto","Monto"], [["Capital invertido",mm(c.invTot)],["Préstamos recibidos",mm(c.preTot)],["Egresos pagados",mm(c.egPaid)],["Devoluciones",mm(c.devTot)],["Runway",c.runway>0?c.runway.toFixed(1)+" meses":"—"]],
+    ctx.table(["Concepto","Monto"], [["Capital invertido",mm(c.invTot)],["Préstamos recibidos",mm(c.preTot)],["Ingresos",mm(c.ingTot)],["Pagado desde cuentas de la empresa",mm(c.egPaid)],["Devoluciones",mm(c.devTot)],["Caja estimada",mm(c.caja)],["Runway",c.runway>0?c.runway.toFixed(1)+" meses":"—"]],
       ["Caja estimada",mm(c.caja)], {0:{cellWidth:300},1:{halign:"right"}});
     const E=STATE._resEC;
     if(E){
@@ -10110,7 +10118,7 @@ function nmWidgetResumen(){
     const nCxp=(STATE.egresos||[]).filter(e=>est(e,"pendiente")).length;
     const inv=(STATE.inv||[]).reduce((a,e)=>a+(+e.importe||0),0), pre=(STATE.pre||[]).reduce((a,e)=>a+(+e.importe||0),0), dev=(STATE.dev||[]).reduce((a,e)=>a+devUSD(e),0);
     const pagado=(STATE.egresos||[]).filter(e=>est(e,"pagado")).reduce((a,e)=>a+u(e),0);
-    const caja=inv+pre-pagado-dev;
+    const caja=cajaEmpresa().caja;
     const g3=[1,2,3].map(k=>{ const d=new Date(y,mi-k,1); return _repTotales(d.getFullYear(),d.getMonth()).expense; });
     const burn=(g3[0]+g3[1]+g3[2])/3;
     const tc=tcRateLatest();

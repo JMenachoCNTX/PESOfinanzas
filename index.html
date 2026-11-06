@@ -1577,7 +1577,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V258";
+const APP_VERSION = "V259";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2575,8 +2575,9 @@ function presuDetalle(titulo,L){ const F=[...L].sort((a,b)=>String(b.fecha||"").
 const _prDet=(n,i,v)=>`<td class="pr-det" data-o="${n}" data-i="${i}" title="Ver los pagos">${money(v)}</td>`;
 /* V258: los rubros del Presupuesto en español, juntando los que son lo mismo */
 const PR_RUBROS=[[/^people/,"Sueldos y bonos"],[/^otrosbeneficios/,"Beneficios sociales"],[/^(subscription|annualsub)/,"Suscripciones"],[/^(generaladmin|serviciode|mantenimiento|materialesysuministros)/,"Oficina"],
-  [/^profesionalservices/,"Servicios profesionales"],[/^viajes/,"Viajes y viáticos"],[/^otrosgastos/,"Otros gastos"],[/^plataformatecnologica/,"Plataforma tecnológica"],[/^publicidad/,"Publicidad digital"]];
-function prRubro(cp){ const t=String(cp||"").trim(), k=_cosClave(t), r=PR_RUBROS.find(x=>x[0].test(k)); if(r) return r[1]; return t===t.toUpperCase()?t.charAt(0)+t.slice(1).toLowerCase():t; }
+  [/^profesionalservices/,"Servicios profesionales"],[/^viajes/,"Viajes y viáticos"],[/^otrosgastos/,"Otros gastos"],[/^plataformatecnologica/,"Sistemas"],[/^publicidad/,"Publicidad digital"]];
+function prRubro(cp,ca){ if(/^(comision)?(tesabiz|manteca|bridge|bitgo)/.test(_cosClave(ca))||/^(tesabiz|manteca|bridge|bitgo)/.test(_cosClave(cp))) return "Pasarelas";
+  const t=String(cp||"").trim(), k=_cosClave(t), r=PR_RUBROS.find(x=>x[0].test(k)); if(r) return r[1]; return t===t.toUpperCase()?t.charAt(0)+t.slice(1).toLowerCase():t; }
 function presuWireModo(){ document.querySelectorAll("#prModo button").forEach(b=>b.addEventListener("click",()=>{ STATE.presuModo=b.dataset.m; render(); })); }
 function renderPresupuesto(pre){
   const app=$("#app"); if(!app) return; presuCargar();
@@ -2591,7 +2592,7 @@ function renderPresupuesto(pre){
   const esTraspaso=r=>/traspaso/i.test(r.grupo+" "+r.subg+" "+r.cp+" "+r.ca);
   const inRef=r=>ref.some(x=>x.g===r.g && x.mi===monthIdx(r.m));
   const L={}; const key=(gr,cp,ca)=>gr+"\u0000"+cp+"\u0000"+ca;
-  const get=(gr,cp,ca)=>L[key(gr,cp,ca)]||(L[key(gr,cp,ca)]={gr,cp,ca,ref:[0,0,0],det:[[],[],[]],pend:0,pendDet:[],presu:0,lista:0});
+  const get=(gr,cp,ca)=>L[key(gr,cp,ca)]||(L[key(gr,cp,ca)]={gr,cp,ca,ref:[0,0,0],det:[[],[],[]],pend:0,pendDet:[],presu:0,lista:0,sinPago:0});
   rows.filter(r=>!r.income && !r.dato && !esTraspaso(r) && inRef(r)).forEach(r=>{ const o=get(r.grupo,r.cp,r.ca); const i=ref.findIndex(x=>x.g===r.g&&x.mi===monthIdx(r.m)); o.ref[i]+=(+r.imp||0); if(r.det) o.det[i].push(Object.assign({},r.det,{imp:r.imp})); });
   // Cuentas por pagar: Pendiente (todo lo no pagado hasta el mes del presupuesto) y Presupuestado del mes
   const val=e=>CUR==="BOB"?(e.impBOB!=null?+e.impBOB:(+e.imp||0)*(RATE||0)):(e.impUSD!=null?+e.impUSD:(+e.imp||0));
@@ -2609,11 +2610,13 @@ function renderPresupuesto(pre){
     const esEquipo=/^equipo\b/.test(_normTxt(i.prov));
     const por={}; UT.forEach(x=>{ if(!(esEquipo?/sueld|salari|remunera/i.test(x.r.ca):_cosCoincide(i,x.txt))) return; const c=por[x.r.ca]||(por[x.r.ca]={r:x.r,v:0}); c.v+=+x.r.usd||0; });
     const m=Object.values(por).sort((a,b)=>b.v-a.v)[0];
-    const o=m?get(m.r.grupoc||"(sin grupo)",m.r.cp||"(sin cuenta principal)",m.r.ca):get("En la Lista, sin pagos en Egresos","No se encontró ningún pago a este proveedor",i.prov||i.con||"(sin nombre)");
-    o.lista+=v; });
+    // V259: un costo de plataforma sin pagos en Egresos (Bridge, Rhino, Persona) igual entra al Presupuesto, con el monto de la Lista
+    const plat=!m&&/operat/i.test(i.tipo||"")&&/plataforma/i.test(i.centro||i.cat||"");
+    const o=m?get(m.r.grupoc||"(sin grupo)",m.r.cp||"(sin cuenta principal)",m.r.ca):(plat?get("COSTOS OPERATIVOS","PLATAFORMA TECNOLÓGICA",i.prov):get("En la Lista, sin pagos en Egresos","No se encontró ningún pago a este proveedor",i.prov||i.con||"(sin nombre)"));
+    o.lista+=v; if(plat) o.sinPago+=v; });
   const aj=(NM_PRESU&&NM_PRESU.ajustes)||{}; const ak=o=>STATE.presuMes+"|"+o.ca;
   const fx=CUR==="BOB"?(RATE||1):1; // los ajustes se guardan en USD
-  const lista=Object.values(L).map(o=>{ o.prom=(o.ref[0]+o.ref[1]+o.ref[2])/3; const a=aj[ak(o)]; o.aj=(a!=null); o.bud=(a!=null)?(+a*fx):Math.max(o.prom,o.presu); o.tot=o.bud+o.pend; return o; })
+  const lista=Object.values(L).map(o=>{ o.prom=(o.ref[0]+o.ref[1]+o.ref[2])/3; const a=aj[ak(o)]; o.aj=(a!=null); o.bud=(a!=null)?(+a*fx):Math.max(o.prom,o.presu,o.sinPago); o.tot=o.bud+o.pend; return o; })
     .filter(o=>o.prom||o.pend||o.presu||o.aj||o.lista).sort((a,b)=>String(a.gr).localeCompare(String(b.gr))||b.tot-a.tot);
   const T=k=>lista.reduce((s,o)=>s+(+o[k]||0),0);
   const MES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -2624,7 +2627,7 @@ function renderPresupuesto(pre){
   const GT={}; lista.forEach(o=>{ const g=GT[o.gr]||(GT[o.gr]={ref:[0,0,0],prom:0,lista:0,bud:0,pend:0,tot:0}); o.ref.forEach((v,i)=>g.ref[i]+=v); ["prom","lista","bud","pend","tot"].forEach(k=>g[k]+=o[k]); });
   /* V258: Grupo ▸ rubro ▸ cuenta. Un rubro con varias cuentas se ve en una línea y se despliega con un clic. */
   if(!STATE.presuCpAb) STATE.presuCpAb=new Set();
-  const cpDe=o=>prRubro(o.cp), cpId=o=>o.gr+"|"+cpDe(o);
+  const cpDe=o=>prRubro(o.cp,o.ca), cpId=o=>o.gr+"|"+cpDe(o);
   const sumaFila=(t,lbl,cls,attr,pad,abierto)=>`<tr class="${cls}" ${attr} style="cursor:pointer"><td style="text-align:left;padding-left:${pad}px"><span class="pnl-caret ${abierto?"open":""}">▶</span> <b>${esc(lbl)}</b></td>${t.ref.map(v=>`<td>${v?money(v):""}</td>`).join("")}<td><b>${money(t.prom)}</b></td><td>${t.lista?money(t.lista):""}</td><td><b>${money(t.bud)}</b></td><td>${t.pend?money(t.pend):""}</td><td><b>${money(t.tot)}</b></td></tr>`;
   const filaCa=(o,pad,sub)=>{ const n=lista.indexOf(o); return `<tr><td style="text-align:left;padding-left:${pad}px">${esc(o.ca)}${sub?`<span class="sub2">${esc(sub)}</span>`:""}</td>
       ${o.ref.map((v,i)=>v?_prDet(n,i,v):'<td><span class="zero">–</span></td>').join("")}<td><b>${money(o.prom)}</b></td><td>${o.lista?money(o.lista):'<span class="zero">–</span>'}</td>
@@ -2636,7 +2639,7 @@ function renderPresupuesto(pre){
     const M=new Map(); lista.filter(o=>o.gr===gr).forEach(o=>{ const c=cpDe(o); if(!M.has(c)) M.set(c,[]); M.get(c).push(o); });
     const suma=L=>{ const t={ref:[0,1,2].map(i=>L.reduce((a,o)=>a+o.ref[i],0))}; ["prom","lista","bud","pend","tot"].forEach(k=>t[k]=L.reduce((a,o)=>a+(+o[k]||0),0)); return t; };
     [...M.entries()].map(([c,L])=>({c,L,t:suma(L)})).sort((a,b)=>b.t.tot-a.t.tot).forEach(({c,L,t})=>{
-      if(L.length===1){ h+=filaCa(L[0],26,c); return; }
+      if(rango(gr)>1){ L.forEach(o=>{ h+=filaCa(o,26,c); }); return; }
       const id=gr+"|"+c, ab=STATE.presuCpAb.has(id); h+=sumaFila(t,c,"pr-cp",`data-cp="${esc(id)}" data-pid="${esc(id)}"`,26,ab);
       if(ab) L.forEach(o=>{ h+=filaCa(o,46); }); });
     return h; }).join("");
@@ -2656,7 +2659,7 @@ function renderPresupuesto(pre){
       ${kpi("Promedio mensual real",money(T("prom")),"pagado en "+refTxt,"#8EB69B","≈")}
     </div>
     <div class="card"><div class="head"><h3>Presupuesto de ${MES[tMi]} ${ty}</h3><span class="mini">${CUR} · los valores se pueden cambiar</span><div class="spacer" style="flex:1"></div><button class="btn ghost" id="prAbrir">Abrir todo</button><button class="btn ghost" id="prCerrar">Cerrar todo</button></div>
-      <p class="section-intro">La columna <b>Presupuesto</b> se llena sola con el <b>promedio de lo pagado</b> en ${refTxt} (o con lo <b>Presupuestado</b> registrado en Egresos si es mayor). Cámbiala si quieres ajustar algo: queda guardada para ese mes. Haz clic en el monto de un mes o de <b>Por pagar</b> para ver sus pagos. <b>Por pagar</b> son los egresos en estado <b>Pendiente</b> hasta ${MES[tMi]}. No incluye Traspasos Internos. <b>Lista de Costos</b> es solo para comparar: muestra lo esperado al mes según la Lista, en la cuenta donde más se le pagó a cada proveedor, y no cambia el Presupuesto.</p>
+      <p class="section-intro">La columna <b>Presupuesto</b> se llena sola con el <b>promedio de lo pagado</b> en ${refTxt} (o con lo <b>Presupuestado</b> registrado en Egresos si es mayor). Cámbiala si quieres ajustar algo: queda guardada para ese mes. Haz clic en el monto de un mes o de <b>Por pagar</b> para ver sus pagos. <b>Por pagar</b> son los egresos en estado <b>Pendiente</b> hasta ${MES[tMi]}. No incluye Traspasos Internos. <b>Lista de Costos</b> es solo para comparar: muestra lo esperado al mes según la Lista, en la cuenta donde más se le pagó a cada proveedor, y no cambia el Presupuesto, salvo los costos de plataforma sin pagos en Egresos (como Bridge), que entran con el monto de la Lista.</p>
       <div class="tbl-scroll sticky-head" id="prScroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Cuenta</th>${ref.map(x=>`<th>${MES[x.mi].slice(0,3)} ${String(x.g).slice(2)}</th>`).join("")}<th>Promedio</th><th>Lista de Costos</th><th>Presupuesto</th><th>Por pagar</th><th>Total</th></tr></thead>
       <tbody>${filas||`<tr><td colspan="9">${emptyState("No hay gastos pagados en los últimos 3 meses ni cuentas por pagar.")}</td></tr>`}</tbody>
       <tfoot><tr><td style="text-align:left"><b>Total</b></td>${[0,1,2].map(i=>`<td><b>${money(lista.reduce((s,o)=>s+o.ref[i],0))}</b></td>`).join("")}<td><b>${money(T("prom"))}</b></td><td><b>${money(T("lista"))}</b></td><td><b>${money(T("bud"))}</b></td><td><b>${money(T("pend"))}</b></td><td><b>${money(T("tot"))}</b></td></tr></tfoot></table></div>
@@ -6052,6 +6055,7 @@ function costoModal(it, pre){
 /* ¿Este gasto corresponde a este costo de la lista? (por proveedor) */
 function _cosClave(t){ return _normTxt(t).replace(/[^a-z0-9]/g,""); }
 function _cosCoincide(it, txt, conToo){ const p=_cosClave(it.prov);
+  if(p==="persona") return /^persona(?!l)/.test(txt);   // V259: el proveedor Persona no es «personal»
   if(p.length>=3){ if(txt.includes(p)) return true;
     const w=_normTxt(it.prov).split(/[^a-z0-9]+/).filter(x=>x.length>=4&&!/^(peso|bolivia|srl|llc|inc|corp|limited|ltda)$/.test(x)); if(w.length&&txt.includes(w[0])) return true; }
   // para las sugerencias también cuenta el concepto completo (ej. el alquiler anotado con el nombre del dueño)

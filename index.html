@@ -1585,7 +1585,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V268";
+const APP_VERSION = "V269";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2590,7 +2590,7 @@ function renderPresuComparar(pre, mopts, MES){
 /* V257: los pagos detrás de una cifra del Presupuesto, sin salir a Egresos */
 function presuDetalle(titulo,L){ const F=[...L].sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||""))), t=F.reduce((s,x)=>s+(+x.imp||0),0), tA=F.reduce((s,x)=>s+(+x.alt||0),0);
   const ov=rhModal(esc(titulo),`<p class="mini" style="margin:0 0 8px">Haz clic en un pago para abrirlo y editarlo.</p><div class="tbl-scroll"><table class="pr-tbl"><thead><tr><th style="text-align:left">Fecha</th><th style="text-align:left">Beneficiario</th><th style="text-align:left">Concepto</th><th style="text-align:left">Pagado desde</th><th>Monto</th></tr></thead>
-    <tbody>${F.map((x,n)=>`<tr${x._id||x.fuente?` class="pr-pago" data-n="${n}" title="Abrir este pago"`:""}><td style="text-align:left;white-space:nowrap">${esc(String(x.fecha||"–").slice(0,10))}</td><td style="text-align:left">${esc(x.ben||"–")}</td><td style="text-align:left">${esc(x.con||"–")}${x._nslice>1?` <span class="mini">· parte ${x._slice} de ${x._nslice}</span>`:""}</td><td style="text-align:left">${esc(x.tipo||"–")}</td><td class="num">${p2(+x.imp||0,x.alt)}</td></tr>`).join("")}</tbody>
+    <tbody>${F.map((x,n)=>`<tr${x._id||x.fuente?` class="pr-pago" data-n="${n}" title="Abrir este pago"`:""}><td style="text-align:left;white-space:nowrap">${esc(String(x.fecha||"–").slice(0,10))}</td><td style="text-align:left">${esc(x.ben||"–")}</td><td style="text-align:left">${esc(x.con||"–")}${x._nslice>1?` <span class="mini">· parte ${x._slice} de ${x._nslice}</span>`:""}</td><td style="text-align:left">${esc(x.tipo||"–")}${x._id&&bancoListaFiltro(x,"otras")?' <span class="mini">· pago externo</span>':""}</td><td class="num">${p2(+x.imp||0,x.alt)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td colspan="4" style="text-align:left"><b>Total (${F.length})</b></td><td class="num"><b>${p2(t,tA)}</b></td></tr></tfoot></table></div>`,860);
   ov.querySelectorAll(".pr-pago").forEach(tr=>tr.addEventListener("click",()=>{ const x=F[+tr.dataset.n];
     if(x._id){ const e=(STATE.egresos||[]).find(q=>q._id===x._id); if(e){ ov.remove(); abrirFormEgreso(e); } }
@@ -2694,8 +2694,11 @@ function renderPresupuesto(pre){
       if(ab) L.forEach(o=>{ h+=filaCa(o,46); pdfF.push({n:2,lbl:o.ca,v:o}); }); });
     return h; }).join("");
   const grTit=STATE.resBase==="caja"?"Últimos pagos":"Costos distribuidos";
+  /* V269: cuánto de lo gastado son Pagos Externos (lo que pagaron los socios). Ya está sumado en la tabla: aquí solo se muestra. */
+  const extM=[0,0,0], extA=[0,0,0]; rows.filter(r=>!r.income&&!r.dato&&!esTraspaso(r)&&inRef(r)&&r.src==="Egresos"&&r.det&&bancoListaFiltro(r.det,"otras")).forEach(r=>{ const i=ref.findIndex(x=>x.g===r.g&&x.mi===monthIdx(r.m)); extM[i]+=+r.imp||0; extA[i]+=+r.alt||0; });
+  const extTit=ref.map((x,i)=>MES[x.mi].slice(0,3)+" "+String(x.g).slice(2)), extTxt=extTit.map((t,i)=>t+": "+pMoney(extM[i])).join(" · ");
   const totV={ref:[0,1,2].map(i=>lista.reduce((s,o)=>s+o.ref[i],0)),refA:[0,1,2].map(i=>lista.reduce((s,o)=>s+o.refA[i],0))}; ["prom","lista","bud","pend","tot","promA","listaA","budA","pendA","totA"].forEach(k=>totV[k]=T(k));
-  STATE._resPDF={tab:"presupuesto", year:STATE.year, cur:CUR, base:STATE.resBase, presu:{mes:MES[tMi]+" "+ty, mesCorto:MES[tMi], ref:ref.map(x=>MES[x.mi].slice(0,3)+" "+String(x.g).slice(2)), grTit, filas:pdfF, tot:totV, nPend:pendRows.length, refTxt}};
+  STATE._resPDF={tab:"presupuesto", year:STATE.year, cur:CUR, base:STATE.resBase, presu:{mes:MES[tMi]+" "+ty, mesCorto:MES[tMi], ref:ref.map(x=>MES[x.mi].slice(0,3)+" "+String(x.g).slice(2)), grTit, filas:pdfF, tot:totV, nPend:pendRows.length, refTxt, extTxt}};
   app.innerHTML=(pre||"")+`
     <div class="seg" id="prModo" style="margin-bottom:14px"><button data-m="armar" class="on">Armar presupuesto</button><button data-m="comparar">Comparar con lo gastado</button></div>
     <div class="toolbar-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
@@ -2712,6 +2715,7 @@ function renderPresupuesto(pre){
     </div>
     <div class="card"><div class="head"><h3>Presupuesto de ${MES[tMi]} ${ty}</h3><span class="mini">${CUR} · los valores se pueden cambiar</span><div class="spacer" style="flex:1"></div><button class="btn ghost" id="prAbrir">Abrir todo</button><button class="btn ghost" id="prCerrar">Cerrar todo</button></div>
       <p class="section-intro">La columna <b>Presupuesto</b> se llena sola con el <b>promedio de lo pagado</b> en ${refTxt}, ${STATE.resBase==="caja"?"según el mes en que se pagó":"repartido en los meses a los que corresponde (<b>Meses a Distribuir</b> del gasto)"} (o con lo <b>Presupuestado</b> registrado en Egresos si es mayor). Cámbiala si quieres ajustar algo: queda guardada para ese mes. Haz clic en el monto de un mes o de <b>Cuentas por pagar</b> para ver sus pagos, y en un pago para editarlo. Haz clic en la <b>Lista de Costos</b> de una cuenta para editar ese costo. <b>Cuentas por pagar</b> son los egresos en estado <b>Pendiente</b> hasta ${MES[tMi]}. <b>Presupuesto + Cuentas por pagar = Total presupuesto del mes.</b> No incluye Traspasos Internos. <b>Lista de Costos</b> es solo para comparar: muestra lo esperado al mes según la Lista, en la cuenta donde más se le pagó a cada proveedor, y no cambia el Presupuesto, salvo los costos de plataforma sin pagos en Egresos (como Bridge), que entran con el monto de la Lista.</p>
+      <p class="section-intro"><b>Incluye los Pagos Externos</b> (lo que pagaron los socios): ${extTit.map((t,i)=>`${t} <b>${pMoney(extM[i])}</b>`).join(" · ")}. Ya están sumados en cada cuenta, porque es lo que se gastó. La devolución al socio no se vuelve a contar como gasto.</p>
       <div class="tbl-scroll sticky-head" id="prScroll"><table class="pr-tbl"><thead><tr class="pr-g"><th rowspan="2" style="text-align:left;vertical-align:bottom">Cuenta</th><th colspan="4" class="pr-sep">${grTit}</th><th class="pr-sep">Comparación</th><th colspan="3" class="pr-sep">Presupuesto de ${MES[tMi]}</th></tr>
         <tr>${ref.map((x,i)=>`<th${i?"":' class="pr-sep"'}>${MES[x.mi].slice(0,3)} ${String(x.g).slice(2)}</th>`).join("")}<th>Promedio<br>últimos 3 meses</th><th class="pr-sep">Lista<br>de Costos</th><th class="pr-sep">Presupuesto</th><th>+ Cuentas<br>por pagar</th><th>= Total<br>presupuesto</th></tr></thead>
       <tbody>${filas||`<tr><td colspan="9">${emptyState("No hay gastos pagados en los últimos 3 meses ni cuentas por pagar.")}</td></tr>`}</tbody>
@@ -7700,7 +7704,7 @@ function exportResumenPDF(){
         if(ci===1||ci===5||ci===6){ if(d.section==="head"){ doc.setDrawColor(142,182,155); } else { doc.setDrawColor(142,182,155); } doc.setLineWidth(1); doc.line(x.x,x.y,x.x,x.y+x.height); } } });
     ctx.y=doc.lastAutoTable.finalY+14; ctx.ensure(24);
     doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(...GREY);
-    doc.text(doc.splitTextToSize("Presupuesto + Cuentas por pagar = Total presupuesto del mes. "+P.grTit+": "+(V.base==="caja"?"lo pagado":"el gasto repartido en los meses a los que corresponde")+" en "+(P.refTxt||"los últimos 3 meses")+". Lista de Costos es solo para comparar.",W-2*M),M,ctx.y);
+    doc.text(doc.splitTextToSize("Presupuesto + Cuentas por pagar = Total presupuesto del mes. "+P.grTit+": "+(V.base==="caja"?"lo pagado":"el gasto repartido en los meses a los que corresponde")+" en "+(P.refTxt||"los últimos 3 meses")+". Lista de Costos es solo para comparar."+(P.extTxt?" Incluye Pagos Externos (socios): "+P.extTxt+"; la devolución al socio no se vuelve a contar como gasto.":""),W-2*M),M,ctx.y);
   } else if(V.tab==="caja"){
     const c=V.caja||{};
     ctx.h2("Posición de caja (referencial)");

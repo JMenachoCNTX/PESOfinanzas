@@ -1485,6 +1485,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
     <div class="modal-actions">
       <button class="btn" id="egFormDel" style="display:none;margin-right:auto;color:var(--rose)">🗑 Borrar gasto</button>
       <button class="btn" id="egFormCancel">Cancelar</button>
+      <button class="btn" id="egFormSaveOtra" style="display:none" title="Guarda esta copia y deja el formulario abierto para registrar otra">Guardar y hacer otra copia</button>
       <button class="btn primary" id="egFormSave">Guardar gasto</button>
     </div>
   </div>
@@ -1585,7 +1586,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V269";
+const APP_VERSION = "V270";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4131,7 +4132,7 @@ function renderEgresosGeneral(){
     {label:"Monto original",right:1,cls:"num",sortKey:"orig",render:r=>r.orig!=null?((r.moneda==="BOB"?"Bs ":"$")+f2(r.orig)):'<span class="zero">–</span>'},
     {label:"USD",right:1,cls:"num",sortKey:"usd",render:r=>r.usd!=null?fmt(r.usd,2):'<span class="zero">–</span>'},
     {label:"BOB",right:1,cls:"num",sortKey:"bob",render:r=>r.bob!=null?("Bs "+f2(r.bob)):'<span class="zero">–</span>'},
-    {label:"",render:r=>STATE.egFB?`<span class="ta-acts" style="flex-wrap:nowrap"><button class="btn ghost eg-cxp" data-i="${STATE._egCxpRows.push(r)-1}" title="Crear una cuenta por pagar a partir de este gasto (ej.: el mismo pago para este mes)" style="padding:4px 8px;white-space:nowrap">→ Por pagar</button>${r.egId?`<button class="btn ghost eg-ed" data-id="${esc(r.egId)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button>`:""}${(r.fuente==="BitGo"||r.fuente==="Mercury")?`<button class="btn ghost eg-div" data-i="${STATE._egCxpRows.push(r)-1}" title="Cambiar la cuenta o repartir este pago en varios meses" style="padding:4px 8px">÷</button>`:""}</span>`:""},
+    {label:"",render:r=>STATE.egFB?`<span class="ta-acts" style="flex-wrap:nowrap"><button class="btn ghost eg-cxp" data-i="${STATE._egCxpRows.push(r)-1}" title="Crear una cuenta por pagar a partir de este gasto (ej.: el mismo pago para este mes)" style="padding:4px 8px;white-space:nowrap">→ Por pagar</button>${r.egId?`<button class="btn ghost eg-ed" data-id="${esc(r.egId)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button><button class="btn ghost eg-dup" data-id="${esc(r.egId)}" title="Duplicar: abre un gasto nuevo con estos mismos datos" style="padding:4px 8px">⧉</button>`:""}${(r.fuente==="BitGo"||r.fuente==="Mercury")?`<button class="btn ghost eg-div" data-i="${STATE._egCxpRows.push(r)-1}" title="Cambiar la cuenta o repartir este pago en varios meses" style="padding:4px 8px">÷</button>`:""}</span>`:""},
   ];
   const totRow=cols.map((c,i)=> i===0?("Total ("+rows.length+")"):(c.label==="USD"?fmt(totUSD,2):(c.label==="BOB"?("Bs "+f2(totBOB)):"")));
   const fijoUSD=rows.filter(r=>r.costo==="fijo").reduce((s,r)=>s+(+r.usd||0),0);
@@ -4174,6 +4175,7 @@ function renderEgresosGeneral(){
   document.querySelectorAll("#egGenSrcSeg button").forEach(b=>b.addEventListener("click",()=>{ STATE.egGenSrc=b.dataset.v; render(); }));
   tarjetaWire(); wireCaCells();
   document.querySelectorAll(".eg-ed").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const e=(STATE.egresos||[]).find(x=>x._id===b.dataset.id); if(e) abrirFormEgreso(e); }));
+  document.querySelectorAll(".eg-dup").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const e=(STATE.egresos||[]).find(x=>x._id===b.dataset.id); if(e) abrirFormEgreso(e,true); }));
   document.querySelectorAll(".eg-div").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const r=STATE._egCxpRows[+b.dataset.i]; if(r) pagoBancoModal({fuente:r.fuente,hu:r.hu,fecha:r.fecha,ben:r.con,imp:CUR==="BOB"?r.bob:r.usd,ca:r.ca}); }));
   document.querySelectorAll(".eg-cxp").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const r=STATE._egCxpRows[+b.dataset.i]; if(r) egresoACxP(r); }));
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
@@ -11164,9 +11166,10 @@ function egSugerirCA(){
     if(hint){ hint.style.display=""; hint.textContent="💡 Sugerida por el sistema "+(r.src==="adiv"?"(aproximada, por palabras parecidas)":r.src==="auto"?"(base Asignación)":"(según el historial)")+" · cámbiala si no es"; } }
   else if(cc.dataset.sug==="1"){ cc.value=""; cc.dataset.sug=""; if(hint) hint.style.display="none"; }
   try{ autoFillCuenta(); }catch(_){} }
-function abrirFormEgreso(ed){
+function abrirFormEgreso(ed, copia){
   const hoy=new Date().toISOString().slice(0,10);
-  const edit=(ed&&ed._raw&&ed._id&&STATE.egFB)?ed:null; STATE._egEdit=edit?edit._id:null; STATE._egCaOrig=null;   // V216: editar un gasto existente
+  const src=(ed&&ed._raw&&ed._id&&STATE.egFB)?ed:null, edit=copia?null:src;   // V270: copia = mismos datos, pero se guarda como gasto nuevo
+  STATE._egEdit=edit?edit._id:null; STATE._egCaOrig=null; STATE._egCopia=!!(copia&&src); STATE._egOtra=false;   // V216: editar un gasto existente
   const fp=$("#f_fechaPago"), fc=$("#f_fechaCont");
   if(fp) fp.value=hoy; if(fc) fc.value=hoy;
   ["f_concepto","f_importe","f_meses","f_sc","f_cc","f_ben","f_tipo","f_pagadopor","f_coment","f_cp","f_pais","f_codc","f_ctipo","f_grupo"].forEach(id=>{const el=$("#"+id); if(el) el.value="";});
@@ -11174,21 +11177,23 @@ function abrirFormEgreso(ed){
   const mon=$("#f_moneda"); if(mon) mon.value="USD";
   { const cc=$("#f_cc"), h=$("#f_ccSug"); if(cc) cc.dataset.sug=""; if(h) h.style.display="none"; }
   poblarDatalists();
-  if(edit){ const R=edit._raw, set=(id,v)=>{ const el=$("#"+id); if(el) el.value=(v==null?"":String(v)); };
+  if(src&&(edit||copia)){ const R=src._raw, set=(id,v)=>{ const el=$("#"+id); if(el) el.value=(v==null?"":String(v)); };
     if(R.fechadepago) set("f_fechaPago",R.fechadepago); set("f_fechaCont",R.fechadecontabilizacion||R.fechadepago||""); set("f_meses",R.mesesadistribuir); set("f_concepto",R.concepto); set("f_importe",R.importe);
     set("f_moneda",String(R.moneda||"USD").toUpperCase()); set("f_estado",R.estado||"Pagado"); set("f_pais",R.pais); set("f_cp",R.cuentaprincipal);
     set("f_sc",R.subgrupo); set("f_cc",R.cuentaanalitica); set("f_grupo",R.grupo); set("f_codc",R.codigocontable); set("f_ctipo",R.cuenta);
     set("f_coment",R.comentarios); set("f_ben",R.beneficiario); set("f_tipo",R.tipodepago); set("f_pagadopor",R.pagadopor);
-    try{ const caR=ancEgreso(edit).ca; if(caR){ set("f_cc",caR); STATE._egCaOrig=caR; autoFillCuenta(); } }catch(_){} }   // V264: se ve la cuenta real, aunque venga de una regla
-  const tt=$("#egFormTitle"); if(tt) tt.textContent=edit?"Editar gasto":"Registrar gasto";
+    try{ const caR=ancEgreso(src).ca; if(caR){ set("f_cc",caR); STATE._egCaOrig=caR; autoFillCuenta(); } }catch(_){} }   // V264: se ve la cuenta real, aunque venga de una regla
+  const tt=$("#egFormTitle"); if(tt) tt.textContent=edit?"Editar gasto":(STATE._egCopia?"Duplicar gasto":"Registrar gasto");
   const ld=$("#egFormLead"); if(ld) ld.innerHTML=edit?"Los cambios se guardan en <b>Firebase</b> y se ven al instante para todos.":(STATE.egFB?"Se guardará en <b>Firebase</b> y aparecerá al instante en el sistema.":"Se guardará en la hoja <b>HistorialEgresos</b> del archivo principal y aparecerá en el dashboard.");
   const del=$("#egFormDel"); if(del) del.style.display=edit?"":"none";
-  const sv=$("#egFormSave"); if(sv) sv.textContent=edit?"Guardar cambios":"Guardar gasto";
+  const sv=$("#egFormSave"); if(sv) sv.textContent=edit?"Guardar cambios":(STATE._egCopia?"Guardar copia":"Guardar gasto");
+  const so=$("#egFormSaveOtra"); if(so) so.style.display=STATE._egCopia?"":"none";
+  if(STATE._egCopia&&ld) ld.innerHTML="Es una <b>copia</b> del gasto: cambia la <b>fecha</b>, el <b>importe</b> o lo que haga falta y guárdala. Se registra como un gasto nuevo; el original no cambia.";
   const m=$("#egFormMsg"); m.className="msg"; m.textContent="";
   $("#egForm").classList.add("show");
-  const c=$("#f_concepto"); if(c) c.focus();
+  const c=STATE._egCopia?$("#f_fechaPago"):$("#f_concepto"); if(c) c.focus();
 }
-function cerrarFormEgreso(){ $("#egForm").classList.remove("show"); STATE._egEdit=null; STATE._compReg=null; const cm=$("#egCompMsg"); if(cm) cm.textContent=""; }
+function cerrarFormEgreso(){ $("#egForm").classList.remove("show"); STATE._egEdit=null; STATE._egCopia=false; STATE._egOtra=false; STATE._compReg=null; const cm=$("#egCompMsg"); if(cm) cm.textContent=""; }
 function guardarEgreso(){
   const m=$("#egFormMsg");
   const concepto=$("#f_concepto").value.trim();
@@ -11247,8 +11252,13 @@ async function guardarEgresoFB(m){
         if(nu&&nu._hu){ await NMFB.asigGuardar([{fuente:"Egresos",huella:nu._hu,ca:caNuevo}]); STATE.asigManual=(STATE.asigManual||[]).filter(a=>!(a.fuente==="Egresos"&&a.huella===nu._hu)).concat([{fuente:"Egresos",huella:nu._hu,ca:caNuevo}]); STATE._amSrc=null; STATE._amIdx=null; } } }
     else { const r=await egresosRegistrarLote("",[datos]); if(!r||r.error) throw new Error((r&&r.error)||"No se pudo guardar.");
       try{ compMarcarRegistrado(datos); }catch(_){}
-      await egresosRefrescar(); }
-    m.className="msg ok"; m.textContent=editId?"Cambios guardados ✓":"Gasto guardado ✓";
+      await egresosRefrescar();
+      if(STATE._egCopia){ const caNuevo=$("#f_cc").value.trim(); ensureHuellas();   // V270: la copia conserva la cuenta que se ve en el formulario
+        const nu=(STATE.egresos||[]).filter(e=>e._raw&&e._raw._orden).sort((a,b)=>(a._raw._orden||0)-(b._raw._orden||0)).pop();
+        if(nu&&nu._hu&&caNuevo&&ancEgreso(nu).ca!==caNuevo){ await NMFB.asigGuardar([{fuente:"Egresos",huella:nu._hu,ca:caNuevo}]); STATE.asigManual=(STATE.asigManual||[]).filter(a=>!(a.fuente==="Egresos"&&a.huella===nu._hu)).concat([{fuente:"Egresos",huella:nu._hu,ca:caNuevo}]); STATE._amSrc=null; STATE._amIdx=null; } } }
+    const otra=STATE._egCopia&&STATE._egOtra; STATE._egOtra=false;
+    m.className="msg ok"; m.textContent=editId?"Cambios guardados ✓":(otra?"Copia guardada ✓ · cambia la fecha o el importe y guarda otra":"Gasto guardado ✓");
+    if(otra){ btn.textContent=txt; btn.disabled=false; const f=$("#f_fechaPago"); if(f) f.focus(); render(); return; }
     setTimeout(()=>{ btn.textContent=txt; btn.disabled=false; cerrarFormEgreso(); render(); },600);
   }catch(e){ btn.textContent=txt; btn.disabled=false; m.className="msg err"; m.textContent="No se pudo guardar: "+((e&&e.message)||e); }
 }
@@ -11433,6 +11443,7 @@ $("#pin").addEventListener("keydown",e=>{ if(e.key==="Enter") conectar($("#pin")
 $("#egFormClose").addEventListener("click",cerrarFormEgreso);
 $("#egFormCancel").addEventListener("click",cerrarFormEgreso);
 $("#egFormSave").addEventListener("click",guardarEgreso);
+{ const o=$("#egFormSaveOtra"); if(o) o.addEventListener("click",()=>{ STATE._egOtra=true; guardarEgreso(); }); }
 $("#egFormDel").addEventListener("click",borrarEgresoForm);
 $("#egForm").addEventListener("click",e=>{ if(e.target.id==="egForm") cerrarFormEgreso(); });
 $("#f_cc").addEventListener("input",()=>{ const cc=$("#f_cc"), h=$("#f_ccSug"); cc.dataset.sug=""; if(h) h.style.display="none"; autoFillCuenta(); });

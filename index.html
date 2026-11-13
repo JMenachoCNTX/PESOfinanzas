@@ -1586,7 +1586,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V270";
+const APP_VERSION = "V271";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4829,6 +4829,7 @@ function renderEgresos(){
       {label:"USD",right:1,cls:"num",sortKey:"impUSD",render:r=>r.impUSD!=null?fmt(r.impUSD,2):'<span class="zero">–</span>'},
       {label:"BOB",right:1,cls:"num",sortKey:"impBOB",render:r=>r.impBOB!=null?("Bs "+f2(r.impBOB)):'<span class="zero">–</span>'},
       {label:"TC",sortKey:"rate",render:r=>{ if(!(r.rate>0)) return '<span class="zero">–</span>'; const man=r.tcFuente==="Manual"; return '<span style="font-family:var(--mono)">'+fTC(r.rate)+'</span> <span class="tc-src '+(man?'tc-man':'tc-sys')+'">'+(man?'Manual':'Sistema')+'</span>'; }},
+      {label:"",noMenu:true,render:r=>(STATE.egFB&&r._id)?`<span class="ta-acts" style="flex-wrap:nowrap"><button class="btn ghost eg-ed" data-id="${esc(r._id)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button><button class="btn ghost eg-dup" data-id="${esc(r._id)}" title="Duplicar: abre un gasto nuevo con estos mismos datos" style="padding:4px 8px">⧉</button></span>`:""},
     ];
     // Fila de totales alineada por etiqueta (robusta ante cambios de columnas)
     const egTotalRow=cols.map(c=> c.label==="Cuenta" ? "Total ("+Math.min(rows.length,600)+")" : (c.label==="USD"?fmt(totalUSD):(c.label==="BOB"?"Bs "+f2(totalBOB):"")));
@@ -4869,7 +4870,8 @@ function renderEgresos(){
   const si=$("#egSearch");
   si.addEventListener("input",()=>{STATE.egSearch=si.value;STATE._focus=true;render();});
   fbWire("egf", egFilterDefs);
-  const egAdd=$("#egAdd"); if(egAdd) egAdd.addEventListener("click",abrirFormEgreso);
+  const egAdd=$("#egAdd"); if(egAdd) egAdd.addEventListener("click",()=>abrirFormEgreso());
+  document.querySelectorAll("#app .eg-ed,#app .eg-dup").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); const e=(STATE.egresos||[]).find(x=>x._id===b.dataset.id); if(e) abrirFormEgreso(e,b.classList.contains("eg-dup")); }));   // V271: editar y duplicar también en Bancos
   tarjetaWire();
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
   if(!isGraf){

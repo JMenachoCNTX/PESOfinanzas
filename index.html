@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V284";
+const APP_VERSION = "V285";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -5329,21 +5329,27 @@ function renderRRHH(){
   const q=String(STATE.rhSearch||"").trim().toLowerCase();
   if(q) fr=fr.filter(r=>(String(r.nombre||"")+" "+(r.correo||"")+" "+(r.cargo||"")).toLowerCase().includes(q));
   const nominaFr=fr.reduce((s,r)=>s+r._tot,0);
+  // V285: «KPI a pagar»: lo que se pagará este mes por bonos KPI (no siempre el 100%). Es una ayuda para sumar; se borra una vez pagado.
+  rhKpiCargar(); const KP=(NM_RHKPI&&NM_RHKPI.montos)||{}; const kpEd=nmFbActivo()&&NMFB.esAdmin();
+  fr.forEach(r=>{ r._kpiP=+KP[r.nombre]||0; }); const kpSum=fr.reduce((s,r)=>s+r._kpiP,0);
   const sfSum=fr.reduce((s,r)=>s+(+r.sf||0),0), beSum=fr.reduce((s,r)=>s+(+r.be||0),0), bkSum=fr.reduce((s,r)=>s+(+r.bk||0),0);
   const S=STATE.rhSort||{key:"_tot",dir:"desc"};
-  const ordered=[...fr].sort(mkCmp(S.key,S.dir,["sf","be","bk","_tot"],["ingreso"]));
+  const ordered=[...fr].sort(mkCmp(S.key,S.dir,["sf","be","bk","_tot","_kpiP"],["ingreso"]));
   const cols=[
     {label:"Colaborador",sortKey:"nombre",render:r=>`${esc(r.nombre)}${r.correo?`<span class="sub2">${esc(r.correo)}</span>`:""}`},
     {label:"Cargo",sortKey:"cargo",render:r=>r.cargo?esc(r.cargo):'<span class="zero">–</span>'},
     {label:"Sueldo fijo",right:1,cls:"num",sortKey:"sf",render:r=>money(r.sf)},
     {label:"Bonos extra",right:1,cls:"num",sortKey:"be",render:r=>r.be?money(r.be):'<span class="zero">–</span>'},
     {label:"Bonos KPI",right:1,cls:"num",sortKey:"bk",render:r=>r.bk?money(r.bk):'<span class="zero">–</span>'},
+    {label:"KPI a pagar",right:1,cls:"num",sortKey:"_kpiP",fval:r=>r._kpiP?fmt(r._kpiP,2):"",render:r=>{ if(!rrhhIsAct(r)&&!r._kpiP) return '<span class="zero">–</span>';
+      if(!kpEd) return r._kpiP?money(r._kpiP):'<span class="zero">–</span>';
+      return `<input type="number" class="rh-kpi" data-n="${esc(r.nombre)}" min="0" step="0.01" value="${r._kpiP?r._kpiP:""}" placeholder="0" title="Bono KPI que se pagará este mes (USD). Se borra una vez pagado." style="width:96px;text-align:right;padding:4px 6px">`; }},
     {label:"Total mes",right:1,cls:"num",sortKey:"_tot",render:r=>`<b>${money(r._tot)}</b>`},
     {label:"Estado",sortKey:"estado",render:r=>stBadge(r.estado)},
     {label:"Ingreso",sortKey:"ingreso",render:r=>`<span class="mini">${fmtDate(r.ingreso)}</span>`},
   ];
   if(nmFbActivo()) cols.push({label:"Ficha",render:r=>`<button class="xbtn rh-ficha" data-n="${esc(r.nombre)}" title="Datos, historial, documentos y cambios">Ficha ›</button>`});
-  const totRow=["Total mostrados","",`<b>${money(sfSum)}</b>`, beSum?`<b>${money(beSum)}</b>`:'<span class="zero">–</span>', bkSum?`<b>${money(bkSum)}</b>`:'<span class="zero">–</span>', `<b>${money(nominaFr)}</b>`,"",""].concat(nmFbActivo()?[""]:[]);
+  const totRow=["Total mostrados","",`<b>${money(sfSum)}</b>`, beSum?`<b>${money(beSum)}</b>`:'<span class="zero">–</span>', bkSum?`<b>${money(bkSum)}</b>`:'<span class="zero">–</span>', kpSum?`<b>${money(kpSum)}</b>`:'<span class="zero">–</span>', `<b>${money(nominaFr)}</b>`,"",""].concat(nmFbActivo()?[""]:[]);
   const tableHTML=tbl(cols,ordered,totRow,S,{sticky:true,compact:true,rowClass:r=>rrhhIsAct(r)?"":"row-inactivo"});
   const rhFilterDefs=[
     {k:"rhNombre",lbl:"Nombre",disp:v=>v,opts:nombres.map(n=>({v:n,t:n})),ph:"Todos los nombres"},
@@ -5378,6 +5384,8 @@ function renderRRHH(){
       <div class="card"><div class="head"><h3>Costo de nómina · detalle</h3>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <span class="mini">${fr.length} de ${rows.length} · clic en un encabezado para ordenar</span>
+          ${kpSum?`<span class="tag" title="Suma de la columna «KPI a pagar»">KPI a pagar: <b>${money(kpSum)}</b></span>`:""}
+          ${(kpEd&&Object.keys(KP).length)?`<button class="btn ghost" id="rhKpiBorrar" title="Ya se pagaron: deja la columna «KPI a pagar» en blanco">Borrar KPI a pagar</button>`:""}
           <button class="xbtn xbtn-icon" id="rhFull" title="Ampliar">⛶</button>
           <button class="btn btn-icon icon-only" id="rhPdf" title="Descargar PDF" aria-label="PDF">${svgPdf}</button>
         </div></div>
@@ -5395,6 +5403,9 @@ function renderRRHH(){
   const fcls=$("#rhFsClose"); if(fcls) fcls.addEventListener("click",()=>{STATE.rhFull=false;render();});
   const pbtn=$("#rhPdf"); if(pbtn) pbtn.addEventListener("click",exportRRHHPDF);
   document.querySelectorAll("#app .rh-ficha").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); STATE.rhFicha=b.dataset.n; STATE.rhFichaTab="datos"; render(); try{window.scrollTo(0,0);}catch(_){} }));
+  document.querySelectorAll("#app .rh-kpi").forEach(inp=>inp.addEventListener("change",()=>{ const v=Math.max(0,+String(inp.value).replace(",",".")||0);
+    const m=Object.assign({},(NM_RHKPI&&NM_RHKPI.montos)||{}); if(v) m[inp.dataset.n]=Math.round(v*100)/100; else delete m[inp.dataset.n]; rhKpiGuardar(m).then(render); }));
+  const kb=$("#rhKpiBorrar"); if(kb) kb.onclick=()=>{ if(!confirm("¿Borrar todos los montos de «KPI a pagar»?\nHazlo cuando ya se pagaron (se verán en el extracto de BitGo).")) return; rhKpiGuardar({}).then(render); };
   const rb1=$("#rhBtnNuevo"); if(rb1) rb1.onclick=()=>rhNuevo();
   const rb2=$("#rhBtnEditar"); if(rb2) rb2.onclick=()=>rhEditar("");
   const rb3=$("#rhBtnNov"); if(rb3) rb3.onclick=()=>rhNovedad("","sol");
@@ -5402,6 +5413,10 @@ function renderRRHH(){
   if(STATE._focus){const el=$("#rhSearch"); if(el){el.focus(); el.setSelectionRange(el.value.length,el.value.length);} STATE._focus=false;}
 }
 
+/* V285: montos de «KPI a pagar» este mes (config/rhKpiPagar) */
+let NM_RHKPI=null;
+function rhKpiCargar(){ if(NM_RHKPI||!nmFbActivo()) return; NM_RHKPI={montos:{}}; NMFB.cfgGet("rhKpiPagar").then(d=>{ NM_RHKPI={montos:(d&&d.montos)||{}}; if(STATE.section==="rrhh") render(); }).catch(()=>{}); }
+function rhKpiGuardar(m){ return NMFB.cfgSet("rhKpiPagar",{montos:m,actualizado:new Date().toISOString(),por:(NMFB.sesion&&NMFB.sesion.email)||""}).then(()=>{ NM_RHKPI={montos:m}; }).catch(e=>alert("No se pudo guardar: "+((e&&e.message)||e))); }
 /* ---------- INVERSIONES ---------- */
 function renderInversiones(){
   const allRows=yearFilter(STATE.inv);

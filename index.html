@@ -1586,7 +1586,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V272";
+const APP_VERSION = "V273";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4851,7 +4851,7 @@ function renderEgresos(){
         <button type="button" class="btn" id="egBulkAuto">↻ Volver a automático</button>
         <button type="button" class="btn ghost" id="egBulkClear">Limpiar selección</button>
       </div>
-      ${tbl(cols,sorted.slice(0,600),egTotalRow,S,{sticky:true})}
+      ${tbl(cols,sorted.slice(0,600),egTotalRow,S,enBanco?{sticky:true,viewKey:"banco-"+STATE.bancosTab}:{sticky:true})}
       ${rows.length>600?`<div class="mini" style="margin-top:12px">Mostrando los primeros 600 de ${rows.length}. El "seleccionar todo" abarca las ${rows.length} filtradas; usa la búsqueda o filtros para acotar.</div>`:""}
     </div>`;
   }
@@ -8995,7 +8995,7 @@ function renderMercury(){
       <div class="head"><h3>Movimientos Mercury</h3><span class="mini">${rows.length} movimientos (${crows.length} clasif.) · neto clasif. ${money(neto)} · clic en un encabezado para ordenar</span></div>
       ${caLeyenda()}
       ${bulkBarHTML("m",STATE.mSel)}
-      ${tbl(cols,ordered.slice(0,600),null,S,{sticky:true})}
+      ${tbl(cols,ordered.slice(0,600),null,S,{sticky:true,viewKey:"banco-mercury"})}
       ${ordered.length>600?`<div class="mini" style="margin-top:12px">Mostrando 600 de ${ordered.length}. Usa el buscador o filtros.</div>`:""}
     </div>`;
   }
@@ -9189,7 +9189,7 @@ function renderBitgo(){
       <div class="head"><h3>Movimientos BitGo</h3><span class="mini">${rows.length} movimientos · clic en un encabezado para ordenar</span></div>
       ${caLeyenda()}
       ${bulkBarHTML("bg",STATE.bgSel)}
-      ${tbl(tcols,ordered.slice(0,600),null,S,{sticky:true})}
+      ${tbl(tcols,ordered.slice(0,600),null,S,{sticky:true,viewKey:"banco-bitgo"})}
       ${ordered.length>600?`<div class="mini" style="margin-top:12px">Mostrando 600 de ${ordered.length}. Usa el buscador o los filtros.</div>`:""}
     </div>`;
   }

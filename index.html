@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V278";
+const APP_VERSION = "V279";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2691,7 +2691,7 @@ function renderPresupuesto(pre){
   /* V255: lo que dice la Lista de Costos, solo para comparar (no cambia el Presupuesto). La Lista va por proveedor:
      cada costo se pone en la cuenta donde más se le pagó a ese proveedor; si nunca se le pagó, queda en un grupo aparte. */
   const syL=STATE.year; let UL=[]; STATE.year="__all"; try{ UL=egresosUnificados(); } finally { STATE.year=syL; }
-  const UT=UL.filter(r=>r.ca&&!/^activo/i.test(r.kcuenta||"")).map(r=>({r,txt:_cosClave([r.keytext,r.con,r.ca].join(" "))}));
+  const UT=UL.filter(r=>r.ca&&!/^activo/i.test(r.kcuenta||"")).map(r=>({r,txt:_normTxt([r.keytext,r.con,r.ca].join(" ")).replace(/[^a-z0-9]+/g," ").trim()}));
   tablaCostosRows().items.forEach(i=>{ if(!empPassRow(i)) return; const v=(i.mFijoM+i.mVarM)*(CUR==="BOB"?(RATE||1):1), vA=(i.mFijoM+i.mVarM)*(CUR==="BOB"?1:(RATE||1)); if(!v) return;
     // «Equipo PESO» es la planilla: en Egresos no figura con ese nombre, sino en las cuentas de sueldos
     const esEquipo=/^equipo\b/.test(_normTxt(i.prov));
@@ -6266,8 +6266,10 @@ function costoModal(it, pre){
 /* ¿Este gasto corresponde a este costo de la lista? (por proveedor) */
 function _cosClave(t){ return _normTxt(t).replace(/[^a-z0-9]/g,""); }
 function _cosCoincide(it, txt, conToo){ const p=_cosClave(it.prov);
+  // V279: si el texto viene con espacios, un nombre corto (CRE, AXS…) debe ser una PALABRA entera, no parte de otra («creativo», «crédito»)
+  let words=null; if(/\s/.test(txt)){ words=" "+txt.trim()+" "; txt=txt.replace(/\s+/g,""); }
   if(p==="persona") return /^persona(?!l)/.test(txt);   // V259: el proveedor Persona no es «personal»
-  if(p.length>=3){ if(txt.includes(p)) return true;
+  if(p.length>=3){ if((words&&p.length<=4)? words.includes(" "+p+" ") : txt.includes(p)) return true;
     const w=_normTxt(it.prov).split(/[^a-z0-9]+/).filter(x=>x.length>=4&&!/^(peso|bolivia|srl|llc|inc|corp|limited|ltda)$/.test(x)); if(w.length&&txt.includes(w[0])) return true; }
   // para las sugerencias también cuenta el concepto completo (ej. el alquiler anotado con el nombre del dueño)
   const c=_cosClave(it.con); return !!conToo&&c.length>=8&&txt.includes(c); }

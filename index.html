@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V280";
+const APP_VERSION = "V281";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4297,7 +4297,12 @@ function renderEgresosGeneral(){
 function renderEgresosProveedor(){
   const app=$("#app"); if(!app) return;
   const usdOf=e=>(e.impUSD!=null?+e.impUSD:(+e.imp||0));
-  const base=(STATE.egresos||[]).filter(e=>empPassRow(e) && (STATE.estado==="__all"||String(e.e||"").trim()===STATE.estado));
+  // V281: TODAS las fuentes (Egresos + Mercury + BitGo), igual que Egresos ▸ General. Mismo proveedor aunque cambien mayúsculas.
+  const _nom={};
+  const base=egresosUnificados().filter(r=>STATE.estado==="__all"||String(r.estado||"").trim()===STATE.estado).map(r=>{
+    let b=r.fuente==="BitGo"?("BitGo · "+(r.ca||"sin cuenta")):String(r.keytext||r.con||"—").trim();
+    const k=_normTxt(b); if(!_nom[k]) _nom[k]=b; b=_nom[k];
+    return {fecha:r.fecha,m:r.m,g:r.g,impUSD:+r.usd||0,con:r.con,ben:b,origen:r.origen,cp:r.cp,ca:r.ca,e:r.estado}; });
   // V280: usa el filtro AÑO de arriba (ya no hay un selector «Gestión» aparte). Con «Todos» los meses llevan su año.
   const Y=STATE.year, todosA=(Y==="__all");
   const rowsY=todosA?base.slice():base.filter(e=>e.g===Y);
@@ -4359,16 +4364,16 @@ function renderEgresosProveedor(){
     const tot=list.reduce((s,e)=>s+usdOf(e),0);
     const byMes=pers.map(()=>0); list.forEach(e=>{ const ix=pers.indexOf(perOf(e)); if(ix>=0) byMes[ix]+=usdOf(e); });
     const provSel=`<div class="select-wrap"><select id="provSelProv">${provsSorted.map(pv=>`<option value="${esc(pv)}"${pv===sel?" selected":""}>${esc(pv)}</option>`).join("")}</select></div>`;
-    const filas=list.map(e=>`<tr><td><span class="mini">${esc(fmtDate(e.fecha)||mesES(e.m))}</span></td><td>${esc(e.con||"–")}</td><td>${esc(EMP_LABEL[empNorm(e._emp)]||"–")}</td><td>${esc(ancEgreso(e).cp||"–")}</td><td>${esc(ancEgreso(e).ca||"–")}</td><td>${esc(e.e||"–")}</td><td class="num">${fmt(usdOf(e),2)}</td></tr>`).join("");
+    const filas=list.map(e=>`<tr><td><span class="mini">${esc(fmtDate(e.fecha)||mesES(e.m))}</span></td><td>${esc(e.con||"–")}</td><td><span class="tag">${esc(e.origen||"–")}</span></td><td>${esc(e.cp||"–")}</td><td>${esc(e.ca||"–")}</td><td>${esc(e.e||"–")}</td><td class="num">${fmt(usdOf(e),2)}</td></tr>`).join("");
     const mesBars=byMes.map((v,i)=>[perLbl(pers[i]),v]).filter(e=>e[1]>0);
     content=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">${provSel}<span class="mini">Total ${sel==="__all"?"":esc(sel)} en ${YL}: <b>${fmt(tot,2)} USD</b> · ${list.length} pagos</span></div>
       <div class="grid cols-3-1">
         <div class="card"><div class="head"><h3>Pagos a ${esc(sel==="__all"?"—":sel)}</h3><span class="mini">${YL} · USD</span></div>
-          <div class="tbl-scroll sticky-head"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Empresa</th><th>Cuenta Principal</th><th>Cuenta Analítica</th><th>Estado</th><th class="tot">USD</th></tr></thead><tbody>${filas||`<tr><td colspan="7" class="mini" style="padding:14px">Sin pagos.</td></tr>`}</tbody></table></div></div>
+          <div class="tbl-scroll sticky-head"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Origen</th><th>Cuenta Principal</th><th>Cuenta Analítica</th><th>Estado</th><th class="tot">USD</th></tr></thead><tbody>${filas||`<tr><td colspan="7" class="mini" style="padding:14px">Sin pagos.</td></tr>`}</tbody></table></div></div>
         <div class="card"><div class="head"><h3>Por mes</h3><span class="mini">${YL} · USD</span></div>${mesBars.length?hbars(mesBars,()=>"#6F9A7D",v=>"$"+fmt(v,0)):emptyState("Sin pagos.")}</div>
       </div>`;
   }
-  app.innerHTML=`<p class="section-intro">Cuánto se pagó <b>a cada proveedor</b> (Beneficiario), por mes. Respeta el filtro de <b>Empresa</b>. <span class="mini">Base: gastos registrados en Egresos.</span></p>
+  app.innerHTML=`<p class="section-intro">Cuánto se pagó <b>a cada proveedor</b> (Beneficiario), por mes. Respeta el filtro de <b>Empresa</b>. <span class="mini">Base: todos los pagos (Egresos, Mercury y BitGo), como en Egresos ▸ General. En BitGo el «proveedor» es su cuenta analítica.</span></p>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">${subseg}<div class="spacer"></div>${yearSel}</div>
     ${pills}${content}`;
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));

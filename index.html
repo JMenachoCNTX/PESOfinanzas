@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V283";
+const APP_VERSION = "V284";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -7980,11 +7980,12 @@ function provCanonMap(rows){
   const map={}, vars={}, tipo={};
   Object.values(G).forEach(g=>{
     const ca=Object.entries(g.reduce((o,n)=>{ Object.entries(n.cas).forEach(([c,v])=>o[c]=(o[c]||0)+v); return o; },{})).sort((a,b)=>b[1]-a[1])[0][0]||"";
-    const txt=_normTxt(g.map(n=>n.b).join(" ")+" "+ca).replace(/[^a-z0-9]+/g," ").trim();
+    const esBg=g.every(n=>/^bitgo · /i.test(n.b));   // pagos de BitGo: se buscan por su cuenta, no por «BitGo»
+    const txt=_normTxt((esBg?"":g.map(n=>n.b).join(" ")+" ")+ca).replace(/[^a-z0-9]+/g," ").trim();
     let its=items.filter(it=>!/^equipo\b/.test(_normTxt(it.prov))&&_cosCoincide(it,txt));
     if(/sueld|salari/i.test(ca)) its=items.filter(it=>/^equipo\b/.test(_normTxt(it.prov))&&/^sueldo/.test(_normTxt(it.con)));
     else if(/^bonos?$/i.test(ca.trim())) its=items.filter(it=>/^equipo\b/.test(_normTxt(it.prov))&&/^bono/.test(_normTxt(it.con)));
-    const kca=key(ca); const porCA=g.find(n=>kca&&n.k===kca);
+    const kca=key(ca); const porCA=g.filter(n=>kca&&n.k===kca).sort((a,b)=>a.b.length-b.b.length)[0];
     const nom=(g.length>1&&porCA)?porCA.b:(g.length>1&&its[0]&&g.some(n=>lev(n.k,key(its[0].prov))<=2)?its[0].prov:g.slice().sort((a,b)=>b.v-a.v)[0].b);
     const fv=new Set(its.map(it=>it.fv||(it.montoVar&&!it.montoFijo?"variable":"fijo")));
     const t=!its.length?"Fuera de la lista":(fv.size>1?"Fijo y variable":(fv.has("variable")?"Variable":"Fijo"));

@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V275";
+const APP_VERSION = "V276";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1887,6 +1887,17 @@ function contabTok(v){
   if(s==="no") return "no";
   return "";
 }
+/* V276: BitGo ya no usa la columna «Contabilizado?» en pantalla. Clasificación efectiva de un movimiento:
+   lo que ya estaba marcado se respeta; si está vacío: Deposit (entradas) y salidas de Treasury = traspaso interno (fondeo),
+   salidas de Refunds = reembolso a clientes, y las demás salidas (Sueldos, Marketing…) = gasto. */
+function bgTok(r,col,v){ const t=col?contabTok(r[col]):""; if(t) return t;
+  if(+v>0) return "traspaso"; const w=String(r._cat||"")+" "+String(r.WALLET_LABEL||"");
+  if(/treasury/i.test(w)) return "traspaso"; if(/refund/i.test(w)) return "reembolso"; return "si"; }
+/* V276: cuenta analítica de BitGo: la manual manda; traspasos y reembolsos llevan su propia cuenta */
+function resolveBitgo(r,col,v,keyText,sheetCa){
+  if(manCa("BitGo",r._hu)) return resolveGeneric("BitGo",r._hu,keyText,sheetCa);
+  const t=bgTok(r,col,v); if(t==="traspaso") return {ca:"Traspasos internos",src:"auto"}; if(t==="reembolso") return {ca:"Reembolso a clientes",src:"auto"};
+  return resolveGeneric("BitGo",r._hu,keyText,sheetCa); }
 /* Etiqueta legible del token de "Contabilizado?". */
 function contabLabel(t){ return t==="si"?"SI":t==="traspaso"?"Traspasos Internos":t==="cashback"?"CashBack":t==="nocorresponde"?"No Corresponde":t==="reembolso"?"Reembolso a Clientes":t==="no"?"No":"(otro)"; }
 /* V247: valor que se guarda en «Contabilizado?» (SI y No se escriben como en la hoja) */
@@ -1955,12 +1966,12 @@ function pnlRows(allYears){
   // BitGo: si existe la columna "Contabilizado?", EGRESO sólo cuando dice "SI"
   // (traspasos internos/fondeo y demás quedan FUERA del Estado de Resultados).
   // Si esa columna aún no existe, se mantiene el criterio anterior por signo (salida<0).
-  if(bAmt && showLLC()) (bg.rows||[]).forEach(r=>{ _dist=distDe("BitGo",r._hu); const v=toNum(r[bAmt]); const tok=bCont?contabTok(r[bCont]):null;
-    const esEgreso = bCont ? (tok==="si") : (v<0);
+  if(bAmt && showLLC()) (bg.rows||[]).forEach(r=>{ _dist=distDe("BitGo",r._hu); const v=toNum(r[bAmt]); const tok=bgTok(r,bCont,v);
+    const esEgreso = tok==="si" && v<0;
     if(!esEgreso) return; const usd=Math.abs(v); if(!usd) return;
     const d=bDate?_fd(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)&&!_dist) return; const m=(d&&!isNaN(d))?MONTHS[d.getMonth()]:null; const iso=bDate?gdUS(r[bDate]).iso:null; _det={fecha:iso,ben:"BitGo",con:(bCon2&&r[bCon2])||(bCon&&r[bCon])||"",tipo:"BitGo",fuente:"BitGo",hu:r._hu};
     let cu=bCu&&r[bCu], gr=bGr&&r[bGr], sg=bSg&&r[bSg], cp=bCP&&r[bCP], ca=bCA&&r[bCA];
-    if(!_cH){ const a=ancGeneric(resolveGeneric("BitGo", r._hu, (bCon2&&r[bCon2]), ca), {kcuenta:cu,grupoc:gr,ksubgrupo:sg,cp:cp}); cu=a.kcuenta; gr=a.grupoc; sg=a.ksubgrupo; cp=a.cp; ca=a.ca; }
+    if(!_cH){ const a=ancGeneric(resolveBitgo(r,bCont,v,(bCon2&&r[bCon2]), ca), {kcuenta:cu,grupoc:gr,ksubgrupo:sg,cp:cp}); cu=a.kcuenta; gr=a.grupoc; sg=a.ksubgrupo; cp=a.cp; ca=a.ca; }
     if(S(cu)&&S(gr)&&S(sg)&&S(cp)&&S(ca)){ add(cu,gr,sg,cp,ca, usd, bobOf(usd,iso), m, g, "BitGo"); }
     else { const con=(bCon&&S(r[bCon]))||"(sin concepto)"; add("Bancos","BitGo","Sin clasificar", con, "(movimiento)", usd, bobOf(usd,iso), m, g, "BitGo"); }
   });
@@ -2679,7 +2690,8 @@ function renderPresupuesto(pre){
   tablaCostosRows().items.forEach(i=>{ if(!empPassRow(i)) return; const v=(i.mFijoM+i.mVarM)*(CUR==="BOB"?(RATE||1):1), vA=(i.mFijoM+i.mVarM)*(CUR==="BOB"?1:(RATE||1)); if(!v) return;
     // «Equipo PESO» es la planilla: en Egresos no figura con ese nombre, sino en las cuentas de sueldos
     const esEquipo=/^equipo\b/.test(_normTxt(i.prov));
-    const por={}; UT.forEach(x=>{ if(!(esEquipo?/sueld|salari|remunera/i.test(x.r.ca):_cosCoincide(i,x.txt))) return; const c=por[x.r.ca]||(por[x.r.ca]={r:x.r,v:0}); c.v+=+x.r.usd||0; });
+    const esBono=esEquipo&&/^bono/.test(_normTxt(i.con));   // V276: Bonos va a la cuenta Bonos, no junto con Sueldos
+    const por={}; UT.forEach(x=>{ if(!(esEquipo?(esBono?/bono/i.test(x.r.ca):/sueld|salari|remunera/i.test(x.r.ca)):_cosCoincide(i,x.txt))) return; const c=por[x.r.ca]||(por[x.r.ca]={r:x.r,v:0}); c.v+=+x.r.usd||0; });
     const m=Object.values(por).sort((a,b)=>b.v-a.v)[0];
     // V259: un costo de plataforma sin pagos en Egresos (Bridge, Rhino, Persona) igual entra al Presupuesto, con el monto de la Lista
     const plat=!m&&/operat/i.test(i.tipo||"")&&/plataforma/i.test(i.centro||i.cat||"");
@@ -4149,11 +4161,11 @@ function egresosUnificados(){
   const bAmt=find("amount","monto","importe"), bDate=find("mmddyyyy","fecha","date","datetime"),
     bCu=find("cuenta"), bGr=find("grupo"), bSg=find("subgrupo"), bCP=find("cuentaprincipal"), bCA=find("cuentaanalitica"),
     bCon=find("comments","comentarios","concepto","descripcion","memo","txtype","type"), bAsset=find("asset","moneda","coin"), bCont=find("contabilizado");
-  if(bAmt && showLLC()){ ensureHuellasBitgo(); (bg.rows||[]).forEach(r=>{ const v=toNum(r[bAmt]); const tok=bCont?contabTok(r[bCont]):null;
-    const esEgreso = bCont ? (tok==="si") : (v<0);
+  if(bAmt && showLLC()){ ensureHuellasBitgo(); (bg.rows||[]).forEach(r=>{ const v=toNum(r[bAmt]); const tok=bgTok(r,bCont,v);
+    const esEgreso = tok==="si" && v<0;
     if(!esEgreso) return; const usd=Math.abs(v); if(!usd) return;
     const d=bDate?_fd(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)) return; const iso=bDate?gdUS(r[bDate]).iso:null;
-    const res=resolveGeneric("BitGo", r._hu, (bCon&&r[bCon]), (bCA&&r[bCA])); const a=ancGeneric(res,{kcuenta:bCu&&r[bCu],grupoc:bGr&&r[bGr],ksubgrupo:bSg&&r[bSg],cp:bCP&&r[bCP]});
+    const res=resolveBitgo(r,bCont,v,(bCon&&r[bCon]), (bCA&&r[bCA])); const a=ancGeneric(res,{kcuenta:bCu&&r[bCu],grupoc:bGr&&r[bGr],ksubgrupo:bSg&&r[bSg],cp:bCP&&r[bCP]});
     out.push({ origen:"BitGo", fecha:iso, kcuenta:a.kcuenta, grupoc:a.grupoc, ksubgrupo:a.ksubgrupo, cp:a.cp, ca:a.ca, casrc:a.src, fuente:"BitGo", hu:r._hu,
       keytext:(bCon&&r[bCon])||"", con:(bCon&&r[bCon])||"", moneda:"USD", usd, bob:bobOf(usd,iso), estado:"", tipo:"", costo:egCostoDe((bCon&&r[bCon])||"",""), m:(d&&!isNaN(d)?MONTHS[d.getMonth()]:null), g, mi:(d&&!isNaN(d)?d.getMonth():-1), orig:usd, cuentaPago:"BitGo - Wallet "+(r._cat||"") });
   }); }
@@ -5655,8 +5667,8 @@ function bitgoDataPnl(){
   const amountCol=find("amount","monto","importe"), dateCol=find("mmddyyyy","fecha","date","datetime"), contCol=find("contabilizado");
   const months=Array(12).fill(0), years={}; let total=0;
   if(!showLLC()) return {months,years,total};
-  if(amountCol) rows.forEach(r=>{ const v=toNum(r[amountCol]); const tok=contCol?contabTok(r[contCol]):null;
-    const esEgreso = contCol ? (tok==="si") : (v<0); if(!esEgreso) return; const amt=Math.abs(v);
+  if(amountCol) rows.forEach(r=>{ const v=toNum(r[amountCol]); const tok=bgTok(r,contCol,v);
+    const esEgreso = tok==="si" && v<0; if(!esEgreso) return; const amt=Math.abs(v);
     const d=dateCol?_fd(r[dateCol]):null; const yr=(d&&!isNaN(d))?d.getFullYear():null;
     if(STATE.year!=="__all" && yr!==STATE.year) return;
     total+=amt; if(d&&!isNaN(d)) months[d.getMonth()]+=amt; if(yr!=null) years[yr]=(years[yr]||0)+amt; });
@@ -9174,7 +9186,7 @@ function renderBitgo(){
   const allRows=data.rows||[];
   ensureHuellasBitgo();
   if(!STATE.bgSel) STATE.bgSel=new Set();
-  const bgres=r=>resolveGeneric("BitGo", r._hu, (commentsCol&&r[commentsCol]), (caCol&&r[caCol]));
+  const bgres=r=>resolveBitgo(r,contCol,(amountCol?toNum(r[amountCol]):0),(commentsCol&&r[commentsCol]), (caCol&&r[caCol]));
   const bganc=r=>ancGeneric(bgres(r),{kcuenta:cuCol&&r[cuCol],grupoc:grCol&&r[grCol],ksubgrupo:sgCol&&r[sgCol],cp:cpCol&&r[cpCol]});
   const cats=[...new Set(allRows.map(r=>r._cat))];
   const assets = assetCol? [...new Set(allRows.map(r=>String(r[assetCol]||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b)) : [];
@@ -9183,14 +9195,14 @@ function renderBitgo(){
   const canaliticas= caCol?[...new Set(allRows.map(r=>String(bgres(r).ca||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b)) : [];
   const comentarios= commentsCol?[...new Set(allRows.map(r=>String(r[commentsCol]||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b)) : [];
   const _tokOrder={si:0,traspaso:1,reembolso:2,cashback:3,nocorresponde:4,no:5};
-  const contabToks= contCol? [...new Set(allRows.map(r=>contabTok(r[contCol])).filter(Boolean))].sort((a,b)=>(_tokOrder[a]==null?9:_tokOrder[a])-(_tokOrder[b]==null?9:_tokOrder[b])) : [];
+  const contabToks= false? [...new Set(allRows.map(r=>contabTok(r[contCol])).filter(Boolean))].sort((a,b)=>(_tokOrder[a]==null?9:_tokOrder[a])-(_tokOrder[b]==null?9:_tokOrder[b])) : [];
 
   let rows=allRows.slice();
   if(assetCol&&STATE.bgAsset!=="__all") rows=rows.filter(r=>String(r[assetCol]||"")===STATE.bgAsset);
   if(typeCol&&STATE.bgTipo!=="__all") rows=rows.filter(r=>String(r[typeCol]||"")===STATE.bgTipo);
   if(walletCol&&STATE.bgWallet!=="__all") rows=rows.filter(r=>String(r[walletCol]||"")===STATE.bgWallet);
   if(caCol&&STATE.bgCanalitica!=="__all") rows=rows.filter(r=>String(bgres(r).ca||"")===STATE.bgCanalitica);
-  if(contCol&&STATE.bgContab&&STATE.bgContab!=="__all") rows=rows.filter(r=>contabTok(r[contCol])===STATE.bgContab);
+  if(false&&contCol&&STATE.bgContab&&STATE.bgContab!=="__all") rows=rows.filter(r=>contabTok(r[contCol])===STATE.bgContab);
   if(commentsCol&&STATE.bgComent!=="__all") rows=rows.filter(r=>String(r[commentsCol]||"")===STATE.bgComent);
   if(STATE.bgCAest==="sin") rows=rows.filter(r=>!bgres(r).ca);
   else if(STATE.bgCAest==="con") rows=rows.filter(r=>!!bgres(r).ca);
@@ -9234,7 +9246,7 @@ function renderBitgo(){
   tcols.push({label:"Tipo",render:r=>{const g=reglaCosto(commentsCol&&r[commentsCol]); return dimAuto(g&&g.tipo||"");}});
   tcols.push({label:"Centro de Costo",render:r=>{const g=reglaCosto(commentsCol&&r[commentsCol]); return dimAuto(g&&g.centro||"");}});
   const bgEdit=!!STATE.bitgoFB&&nmFbActivo()&&NMFB.esAdmin(); STATE._bgRows=[];   // V247: se clasifica aquí, ya no en la hoja
-  if(contCol)     tcols.push({label:"Contabilizado?",sortKey:contCol,render:r=>{
+  if(false)       tcols.push({label:"Contabilizado?",sortKey:contCol,render:r=>{   // V276: columna quitada (todo lo que está en el sistema ya está contabilizado)
     // V274: solo se clasifica en Treasury; en las demás wallets se muestra en gris (sin poder cambiarlo)
     if(!/treasury/i.test(String(r._cat||"")+" "+String(walletCol?r[walletCol]:""))) return r[contCol]?`<span class="mini" style="opacity:.55" title="Solo se clasifica en Treasury">${esc(contabLabel(contabTok(r[contCol])))}</span>`:'<span class="zero">–</span>';
     if(!bgEdit) return contabBadge(r[contCol]); const v=contabLabelHoja(r[contCol]);
@@ -9246,7 +9258,7 @@ function renderBitgo(){
   if(amountCol)   tcols.push({label:"Monto",right:1,cls:"num",sortKey:amountCol,render:r=>{const v=amt(r); return v<0?`<span class="neg">${money(v)}</span>`:(v>0?`<span style="color:var(--emerald)">+${money(v)}</span>`:'<span class="zero">–</span>');}});
   const allSelBg=rows.length>0 && rows.every(r=>STATE.bgSel.has(r._hu));
   tcols.unshift(selCol("bg",STATE.bgSel,allSelBg));
-  tcols=colsOrden(tcols,["Fecha de pago","Monto","Fee","Wallet","Movimiento","Comentario","Cuenta Analítica","Tipo","Centro de Costo","Contabilizado?"],{"Fecha de pago":"Fecha"});   // V272
+  tcols=colsOrden(tcols,["Fecha de pago","Monto","Fee","Wallet","Movimiento","Comentario","Cuenta Analítica","Tipo","Centro de Costo"],{"Fecha de pago":"Fecha"});   // V272 · V276 sin Contabilizado
 
   const _subClas=nSinClasif?(nSinClasif+" sin clasificar"):"todos clasificados";
   const kpis = hasNeg ? `
@@ -9305,7 +9317,7 @@ function renderBitgo(){
     if(dateCol && STATE.year!=="__all") bgBase=bgBase.filter(r=>{const d=_fd(r[dateCol]); return !isNaN(d)&&d.getFullYear()===STATE.year;});
     const inTot=bgBase.filter(r=>amt(r)>0).reduce((a,r)=>a+amt(r),0);
     const outTot=bgBase.filter(r=>amt(r)<0).reduce((a,r)=>a+amt(r),0);
-    const fondeo=contCol?bgBase.filter(r=>contabTok(r[contCol])==="traspaso").reduce((a,r)=>a+Math.abs(amt(r)),0):0;
+    const fondeo=contCol?bgBase.filter(r=>bgTok(r,contCol,amt(r))==="traspaso"&&amt(r)<0).reduce((a,r)=>a+Math.abs(amt(r)),0):0;
     const rmap={}; bgBase.forEach(r=>{ const k=String((walletCol&&r[walletCol])||r._cat||"—"); if(!rmap[k])rmap[k]={label:k,ent:0,sal:0}; const v=amt(r); if(v>=0)rmap[k].ent+=v; else rmap[k].sal+=v; });
     rendHTML=rendicionCard(inTot,outTot,fondeo,Object.values(rmap),"Wallet", STATE.year==="__all"?"todos los años":STATE.year);
   }

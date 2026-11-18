@@ -271,6 +271,28 @@ td.num,th.tot{font-family:var(--mono)}
 .tc-src{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.02em;padding:1px 6px;border-radius:6px;margin-left:5px;vertical-align:middle}
 .tc-man{background:#DAF1DE;color:#0B2B26}
 .tc-sys{background:#DAF1DE;color:#235347}
+/* V274: filtros desde el título de cada columna */
+.hf-btn{display:inline-flex;align-items:center;justify-content:center;margin-left:5px;padding:2px 3px;border-radius:5px;opacity:.35;cursor:pointer;vertical-align:middle}
+th:hover .hf-btn{opacity:.75}
+.hf-btn:hover{opacity:1;background:var(--elev)}
+.hf-btn.on{opacity:1;color:#fff;background:var(--accent,#235347)}
+#hfPop{position:fixed;z-index:9999;display:none;flex-direction:column;width:270px;max-height:440px;background:var(--surface);border:1px solid var(--border2);border-radius:11px;box-shadow:var(--shadow);padding:10px;font-size:13px;color:var(--text);text-align:left;font-weight:400}
+#hfPop.open{display:flex}
+#hfPop .hf-h{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+#hfPop .hf-h b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hfPop .hf-x{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:15px}
+#hfPop .hf-q{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2);color:var(--text);font:inherit}
+#hfPop .hf-list{overflow:auto;flex:1;min-height:60px;max-height:260px;margin:6px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:4px 0}
+#hfPop .hf-it{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer}
+#hfPop .hf-it:hover{background:var(--elev)}
+#hfPop .hf-it input{flex:none;width:14px;height:14px;cursor:pointer}
+#hfPop .hf-it span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hfPop .hf-it .n{flex:none;color:var(--muted);font-size:11px}
+#hfPop .hf-f{display:flex;gap:8px;justify-content:flex-end}
+.hf-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;color:var(--muted)}
+.hf-chip{display:inline-flex;align-items:center;gap:5px;background:#DAF1DE;color:#0B2B26;border-radius:12px;padding:3px 9px;font-weight:600}
+.hf-chip button,.hf-clrall{border:none;background:transparent;cursor:pointer;color:inherit;font:inherit;padding:0}
+.hf-clrall{color:var(--accent,#235347);font-weight:700;text-decoration:underline}
 /* Selector de columnas por lista */
 .tbl-block{position:relative}
 .colmenu{position:relative;display:flex;justify-content:flex-end;margin-bottom:8px}
@@ -1586,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V273";
+const APP_VERSION = "V274";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3955,8 +3977,72 @@ function hbars(entries,colorFn,fmtFn){
   });
   return h+"</div>";
 }
+/* ---------- V274: filtros desde el título de cada columna (como en Excel) ---------- */
+const HF_SVG='<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M2 4h20l-8 9.5V20l-4 2v-8.5z"/></svg>';
+function hfDec(s){ return String(s).replace(/&nbsp;/g," ").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,"&"); }
+/* Texto que se ve en una celda (para comparar y listar valores) */
+function hfTxt(c,r){
+  try{
+    if(typeof c.fval==="function"){ const v=c.fval(r); return v==null?"":String(v).trim(); }
+    let h=c.render(r); h=h==null?"":String(h);
+    if(h.indexOf("<")<0) return hfDec(h).replace(/\s+/g," ").trim();
+    h=h.replace(/<select[\s\S]*?<\/select>/gi,m=>{ const o=m.match(/<option[^>]*\bselected\b[^>]*>([\s\S]*?)<\/option>/i); return o?o[1]:""; });
+    h=h.replace(/<input[^>]*\bvalue="([^"]*)"[^>]*>/gi," $1 ").replace(/<(br|\/div|\/p)[^>]*>/gi," ").replace(/<[^>]*>/g,"");
+    h=hfDec(h).replace(/\s+/g," ").trim();
+    return /^[–—-]$/.test(h)?"":h;
+  }catch(e){ return ""; }
+}
+/* Lee un número tal como se muestra: 1.234,56 · (1.234) · -12,5 · $1.234 */
+function hfNum(s){
+  s=String(s||""); const m=s.match(/\d[\d.,]*/); if(!m) return null;
+  const antes=s.slice(0,m.index); const neg=/\(/.test(antes)||/[-−]\s*$/.test(antes);
+  let t=m[0].replace(/[.,]$/,""); const lc=t.lastIndexOf(","), ld=t.lastIndexOf(".");
+  if(lc>=0&&ld>=0) t= lc>ld ? t.replace(/\./g,"").replace(",",".") : t.replace(/,/g,"");
+  else if(lc>=0) t=(t.split(",").length>2)?t.replace(/,/g,""):t.replace(",",".");
+  else if(ld>=0&&/^\d{1,3}(\.\d{3})+$/.test(t)) t=t.replace(/\./g,"");
+  const v=parseFloat(t); return isNaN(v)?null:(neg?-v:v);
+}
+function hfKey(vkey,cols){ return vkey+"|"+cols.filter(c=>c.label&&!c.sel).map(c=>String(c.label)).join("·"); }
+/* ¿La fila pasa los filtros por columna? (salvo el de "excepto") */
+function hfPasaFn(F,cols,excepto){
+  const L=Object.keys(F||{}).filter(l=>l!==excepto).map(l=>({c:cols.find(c=>c.label===l),set:new Set(F[l])})).filter(x=>x.c);
+  if(!L.length) return null;
+  const t=r=>L.every(x=>x.set.has(hfTxt(x.c,r)));
+  return r=>t(r)||(Array.isArray(r._kids)&&r._kids.some(t));
+}
 function tbl(cols,rows,totalRow,sortState,opts){
   if(!rows.length) return emptyState();
+  opts=opts||{};
+  // V274: la columna de botones (editar, duplicar…) va al INICIO, justo después de la casilla de selección
+  { const sel=[],act=[],rest=[]; cols.forEach((c,i)=>{ (c.sel?sel:(!String(c.label||"").trim()?act:rest)).push(i); });
+    if(act.length){ const ord=sel.concat(act,rest); cols=ord.map(i=>cols[i]); if(totalRow) totalRow=ord.map(i=>totalRow[i]); } }
+  // V274: filtros por columna
+  const hfOn=!opts.noHF;
+  const hkey=hfKey((opts.viewKey)||STATE.section||"",cols);
+  if(!STATE.hf) STATE.hf={}; if(!STATE._hfSrc) STATE._hfSrc={};
+  const HF=(hfOn&&STATE.hf[hkey])||{};
+  const hfLabels=Object.keys(HF).filter(l=>cols.some(c=>c.label===l));
+  const totalAll=rows.length;
+  if(hfOn){ STATE._hfSrc[hkey]={cols:cols,rows:rows};
+    const pasa=hfPasaFn(HF,cols,null); if(pasa) rows=rows.filter(pasa); }
+  const rowsF=rows;
+  if(opts.limit&&rows.length>opts.limit) rows=rows.slice(0,opts.limit);
+  if(hfLabels.length&&totalRow){
+    if(typeof opts.totFn==="function") totalRow=opts.totFn(rowsF);
+    else totalRow=totalRow.map((t,i)=>{ const c=cols[i]; const s=t==null?"":String(t); const plain=hfDec(s.replace(/<[^>]*>/g,"")).replace(/\s+/g," ").trim();
+      if(!plain||c.sel) return t;
+      const esN=!!(c.right||c.cls==="num"||c.cls==="tot");
+      if(!esN) return /\(\d+\)/.test(plain)? s.replace(/\(\d+\)/,"("+rowsF.length+")") : t;
+      const m=plain.match(/\d[\d.,]*/); if(!m) return t;
+      let sum=0; rowsF.forEach(r=>{ if(r._hijo) return; const v=hfNum(hfTxt(c,r)); if(v!=null) sum+=v; });
+      const num=m[0]; const dec=num.indexOf(",")>=0?num.length-num.lastIndexOf(",")-1:0;
+      const pre=plain.slice(0,m.index).replace(/[(\-−]\s*$/,""), suf=plain.slice(m.index+num.length).replace(/^\s*\)/,"");
+      const out=(sum<0?"(":"")+pre.replace(/^\(/,"")+nmNum(Math.abs(sum),dec)+suf+(sum<0?")":"");
+      return /<b[ >]/.test(s)?"<b>"+out+"</b>":out; });
+  }
+  const fBtn=c=>{ if(!hfOn||c.sel||c.noHF||!String(c.label||"").trim()) return "";
+    return `<span class="hf-btn${HF[c.label]?" on":""}" data-hk="${esc(hkey)}" data-hl="${esc(c.label)}" title="Filtrar por esta columna">${HF_SVG}</span>`; };
+  const hfBar=hfLabels.length?'<div class="hf-bar">Filtrado por: '+hfLabels.map(l=>`<span class="hf-chip">${esc(l)}: ${HF[l].length===1?esc(HF[l][0]||"(vacío)"):HF[l].length+" valores"} <button type="button" class="hf-rm" data-hk="${esc(hkey)}" data-hl="${esc(l)}" title="Quitar este filtro">✕</button></span>`).join("")+` <span>· ${rowsF.length} de ${totalAll} filas</span> <button type="button" class="hf-clrall" data-hk="${esc(hkey)}">Quitar filtros</button></div>`:"";
   const cls = (opts&&opts.sticky)?"tbl-scroll sticky-head":"tbl-scroll";
   const tcls = (opts&&opts.compact)?' class="compact"':'';
   // Columna numérica (importes/valores) -> derecha; texto -> izquierda.
@@ -3974,14 +4060,14 @@ function tbl(cols,rows,totalRow,sortState,opts){
   const vcols=visIdx.map(i=>cols[i]);
   const vtot=totalRow?visIdx.map(i=>totalRow[i]):null;
   const menu=vkey?colMenuHTML(vkey,cols,hidden):"";
-  let h='<div class="tbl-block">'+menu+'<div class="'+cls+'"><table'+tcls+'><thead><tr>';
+  let h='<div class="tbl-block">'+menu+hfBar+'<div class="'+cls+'"><table'+tcls+'><thead><tr>';
   vcols.forEach(c=>{
     if(c.sortKey){
       const on = sortState && sortState.key===c.sortKey;
       const arw = on ? (sortState.dir==="asc"?"▲":"▼") : "⇅";
-      h+=`<th class="sortable${c.right?' tot':''}" data-k="${c.sortKey}"${lftStyle(c)}>${c.label}<span class="arw">${arw}</span></th>`;
+      h+=`<th class="sortable${c.right?' tot':''}" data-k="${c.sortKey}"${lftStyle(c)}>${c.label}<span class="arw">${arw}</span>${fBtn(c)}</th>`;
     } else {
-      h+=`<th${c.right?' class="tot"':''}${lftStyle(c)}>${c.label}</th>`;
+      h+=`<th${c.right?' class="tot"':''}${lftStyle(c)}>${c.label}${fBtn(c)}</th>`;
     }
   });
   h+='</tr></thead><tbody>';
@@ -3992,12 +4078,15 @@ function tbl(cols,rows,totalRow,sortState,opts){
     vcols.forEach(c=>h+=`<td class="${c.cls||""}"${lftStyle(c)}>${clipWrap(c,c.render(r))}</td>`);
     h+="</tr>";
   });
+  if(!rows.length) h+=`<tr><td colspan="${vcols.length}" style="text-align:center;padding:22px" class="mini">Ninguna fila cumple el filtro de columna. <button type="button" class="hf-clrall" data-hk="${esc(hkey)}">Quitar filtros</button></td></tr>`;
   if(vtot){
     h+='<tr class="tr-total">';
     vcols.forEach((c,i)=>h+=`<td class="${c.cls||""}"${lftStyle(c)}>${vtot[i]!=null?vtot[i]:""}</td>`);
     h+="</tr>";
   }
-  return h+"</tbody></table></div></div>";
+  h+="</tbody></table></div>";
+  if(opts.limit&&rowsF.length>opts.limit) h+=`<div class="mini" style="margin-top:10px">Mostrando ${opts.limit} de ${rowsF.length}. Usa los filtros para acotar.</div>`;
+  return h+"</div>";
 }
 /* Botón + menú "Columnas" (casillas para elegir qué columnas ver en una lista) */
 function colMenuHTML(vkey,cols,hidden){
@@ -4167,7 +4256,7 @@ function renderEgresosGeneral(){
         <span class="ca-cell ca-auto" style="cursor:default;pointer-events:none">Automática</span>
         <span class="ca-cell ca-man" style="cursor:default;pointer-events:none">Manual</span>
         <span style="color:var(--muted)">· Clic en la cuenta para cambiarla o dejar el gasto <b>sin cuenta</b> (filtro «sin cuenta analítica» para reasignarlos). La columna <b>Concepto</b> muestra Beneficiario · Description · COMMENTS según la fuente.</span></div>
-      ${rows.length?tbl(cols,sorted.slice(0,1000),totRow,S,{sticky:true}):emptyState("No hay egresos con los filtros actuales.")}
+      ${rows.length?tbl(cols,sorted,totRow,S,{sticky:true,limit:1000}):emptyState("No hay egresos con los filtros actuales.")}
       ${rows.length>1000?`<div class="mini" style="margin-top:10px">Mostrando 1000 de ${rows.length}. Usa la búsqueda o filtros.</div>`:""}</div>`;
   STATE._tx=Object.assign(STATE._tx||{},{eggen:{cols,rows:sorted,tot:totRow}});
   const si=$("#egGenSearch"); if(si){ si.addEventListener("input",()=>{STATE.egGenSearch=si.value;STATE._focus=true;render();}); }
@@ -4851,7 +4940,7 @@ function renderEgresos(){
         <button type="button" class="btn" id="egBulkAuto">↻ Volver a automático</button>
         <button type="button" class="btn ghost" id="egBulkClear">Limpiar selección</button>
       </div>
-      ${tbl(cols,sorted.slice(0,600),egTotalRow,S,enBanco?{sticky:true,viewKey:"banco-"+STATE.bancosTab}:{sticky:true})}
+      ${tbl(cols,sorted,egTotalRow,S,enBanco?{sticky:true,limit:600,viewKey:"banco-"+STATE.bancosTab}:{sticky:true,limit:600})}
       ${rows.length>600?`<div class="mini" style="margin-top:12px">Mostrando los primeros 600 de ${rows.length}. El "seleccionar todo" abarca las ${rows.length} filtradas; usa la búsqueda o filtros para acotar.</div>`:""}
     </div>`;
   }
@@ -5547,7 +5636,7 @@ function renderDynSheet(secKey, data, title, intro, extraTop){
   app.innerHTML = `
     <p class="section-intro">${esc(intro||"")}</p>${extraTop||""}
     <div class="toolbar">${esearch(sk,"Buscar en "+esc(title)+"…",STATE[sk])}<div class="spacer"></div><span class="count">${fr.length} de ${rows.length} filas · ${cols.length} columnas</span></div>
-    <div class="card">${tbl(tcols,fr.slice(0,800),null,null,{sticky:true})}${fr.length>800?`<div class="mini" style="margin-top:10px">Mostrando 800 de ${fr.length}. Usa la búsqueda para acotar.</div>`:""}</div>`;
+    <div class="card">${tbl(tcols,fr,null,null,{sticky:true,limit:800})}</div>`;
   const si=$("#"+sk); if(si){ si.addEventListener("input",()=>{STATE[sk]=si.value;STATE._dynFocus=sk;render();}); }
   if(STATE._dynFocus===sk){ const el=$("#"+sk); if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);} STATE._dynFocus=null; }
 }
@@ -5814,7 +5903,7 @@ function renderCxP(){
       <div class="head"><h3>${isPresu?"Lista de presupuesto":"Lista de cuentas por pagar"}</h3><span class="mini">${rows.length} ${isPresu?"presupuestados":"por pagar"} · ${fmt(total)} · Bs ${f2(totalBOB)}</span></div>
       ${toolbarHTML}
       <div class="count" style="margin:-4px 0 10px">clic en un encabezado para ordenar</div>
-      ${tbl(cols,sorted.slice(0,600),["Total","","","","","",fmt(total),"Bs "+f2(totalBOB)].concat(puedeEd?[""]:[]),S,{sticky:true})}
+      ${tbl(cols,sorted,["Total","","","","","",fmt(total),"Bs "+f2(totalBOB)].concat(puedeEd?[""]:[]),S,{sticky:true,limit:600})}
       ${rows.length>600?`<div class="mini" style="margin-top:12px">Mostrando los primeros 600 de ${rows.length}. Usa la búsqueda o filtros para acotar.</div>`:""}
     </div>`;
 
@@ -6298,7 +6387,7 @@ function renderCostos(){
       <div class="grid cols-3-1">
         <div class="card"><div class="head"><h3>Detalle de costos</h3><span class="mini">${fmt(pUSD)} · Bs ${f2(pBOB)}</span></div>
           <div class="toolbar" style="margin-bottom:12px">${esearch("cosSearch","Buscar…",STATE.cosSearch)}<div class="spacer"></div><span class="count">${prows.length} de ${pbase.length} · clic para ordenar</span></div>
-          ${tbl(cols,sorted.slice(0,600),totRow,PS,{sticky:true})}
+          ${tbl(cols,sorted,totRow,PS,{sticky:true,limit:600})}
           ${prows.length>600?`<div class="mini" style="margin-top:10px">Mostrando 600 de ${prows.length}.</div>`:""}
         </div>
         <div class="card"><div class="head"><h3>Por proveedor</h3></div>${kwBars.length?hbars(kwBars,()=>"#B42318",money):emptyState("Sin costos que coincidan.")}</div>
@@ -8995,7 +9084,7 @@ function renderMercury(){
       <div class="head"><h3>Movimientos Mercury</h3><span class="mini">${rows.length} movimientos (${crows.length} clasif.) · neto clasif. ${money(neto)} · clic en un encabezado para ordenar</span></div>
       ${caLeyenda()}
       ${bulkBarHTML("m",STATE.mSel)}
-      ${tbl(cols,ordered.slice(0,600),null,S,{sticky:true,viewKey:"banco-mercury"})}
+      ${tbl(cols,ordered,null,S,{sticky:true,limit:600,viewKey:"banco-mercury"})}
       ${ordered.length>600?`<div class="mini" style="margin-top:12px">Mostrando 600 de ${ordered.length}. Usa el buscador o filtros.</div>`:""}
     </div>`;
   }
@@ -9133,7 +9222,10 @@ function renderBitgo(){
   tcols.push({label:"Tipo",render:r=>{const g=reglaCosto(commentsCol&&r[commentsCol]); return dimAuto(g&&g.tipo||"");}});
   tcols.push({label:"Centro de Costo",render:r=>{const g=reglaCosto(commentsCol&&r[commentsCol]); return dimAuto(g&&g.centro||"");}});
   const bgEdit=!!STATE.bitgoFB&&nmFbActivo()&&NMFB.esAdmin(); STATE._bgRows=[];   // V247: se clasifica aquí, ya no en la hoja
-  if(contCol)     tcols.push({label:"Contabilizado?",sortKey:contCol,render:r=>{ if(!bgEdit) return contabBadge(r[contCol]); const v=contabLabelHoja(r[contCol]);
+  if(contCol)     tcols.push({label:"Contabilizado?",sortKey:contCol,render:r=>{
+    // V274: solo se clasifica en Treasury; en las demás wallets se muestra en gris (sin poder cambiarlo)
+    if(!/treasury/i.test(String(r._cat||"")+" "+String(walletCol?r[walletCol]:""))) return r[contCol]?`<span class="mini" style="opacity:.55" title="Solo se clasifica en Treasury">${esc(contabLabel(contabTok(r[contCol])))}</span>`:'<span class="zero">–</span>';
+    if(!bgEdit) return contabBadge(r[contCol]); const v=contabLabelHoja(r[contCol]);
     return `<select class="bg-cont" data-i="${STATE._bgRows.push(r)-1}" title="Cambiar la clasificación de este movimiento">${["","SI","No","Traspasos Internos","Reembolso a Clientes","CashBack","No Corresponde"].concat(BG_CONTAB_OTRO(v)).map(o=>`<option value="${esc(o)}"${o===v?" selected":""}>${esc(o||"–")}</option>`).join("")}</select>`; }});
   if(commentsCol) tcols.push({label:"Comentario",sortKey:commentsCol,render:r=>{const v=r[commentsCol]; return v?esc(String(v).slice(0,90)):'<span class="zero">–</span>';}});
   if(assetCol)    tcols.push({label:"Asset",sortKey:assetCol,render:r=>r[assetCol]?`<span class="tag">${esc(r[assetCol])}</span>`:'<span class="zero">–</span>'});
@@ -9189,7 +9281,7 @@ function renderBitgo(){
       <div class="head"><h3>Movimientos BitGo</h3><span class="mini">${rows.length} movimientos · clic en un encabezado para ordenar</span></div>
       ${caLeyenda()}
       ${bulkBarHTML("bg",STATE.bgSel)}
-      ${tbl(tcols,ordered.slice(0,600),null,S,{sticky:true,viewKey:"banco-bitgo"})}
+      ${tbl(tcols,ordered,null,S,{sticky:true,limit:600,viewKey:"banco-bitgo"})}
       ${ordered.length>600?`<div class="mini" style="margin-top:12px">Mostrando 600 de ${ordered.length}. Usa el buscador o los filtros.</div>`:""}
     </div>`;
   }
@@ -9284,7 +9376,7 @@ function renderTC(){
     <div class="card"><div class="head"><h3>Evolución (Venta)</h3><span class="mini">Bs por USDT</span></div><div id="tcChart"></div></div>
     <div class="card">
       <div class="count" style="margin-bottom:10px">${H.length} registros · clic en un encabezado para ordenar</div>
-      ${tbl(cols,ordered.slice(0,800),null,S)}
+      ${tbl(cols,ordered,null,S,{limit:800})}
     </div>`;
   drawTCLine(H,"tcChart");
   const reg=$("#tcReg"); if(reg) reg.addEventListener("click",registrarCotizacionHoy);
@@ -9554,7 +9646,7 @@ function renderPlanCuentas(){
         ${planFB.bar}
       </div>${planFB.panel}
       <div class="count" style="margin-bottom:10px">${Math.min(view.length,CAP)} de ${P.length} cuentas${view.length>CAP?" (usa el buscador o filtros para acotar)":""} · clic en un encabezado para ordenar</div>
-      ${tbl(cols,view.slice(0,CAP),null,S)}
+      ${tbl(cols,view,null,S,{limit:CAP})}
     </div>`;
   const ps=$("#planSearch"); if(ps) ps.addEventListener("input",()=>{STATE.planSearch=ps.value;STATE._focus=true;render();});
   document.querySelectorAll("#app .pl-del").forEach(b=>b.addEventListener("click",ev=>{ ev.stopPropagation(); planEliminarCA(b.dataset.c); }));
@@ -11468,6 +11560,68 @@ $("#f_cc").addEventListener("change",autoFillCuenta);
 poblarDatalists();
 
 /* ---------- init ---------- */
+/* ---- V274: ventanita de filtro de cada columna ---- */
+let HFP=null;
+function hfCerrar(){ const p=document.getElementById("hfPop"); if(p) p.classList.remove("open"); HFP=null; }
+function hfAbrir(btn){
+  const key=btn.getAttribute("data-hk"), lb=btn.getAttribute("data-hl"), src=STATE._hfSrc&&STATE._hfSrc[key]; if(!src) return;
+  const col=src.cols.find(c=>c.label===lb); if(!col) return;
+  const F=(STATE.hf&&STATE.hf[key])||{}; const pasa=hfPasaFn(F,src.cols,lb);
+  const cnt=new Map(); src.rows.forEach(r=>{ if(r._hijo) return; if(pasa&&!pasa(r)) return; const v=hfTxt(col,r); cnt.set(v,(cnt.get(v)||0)+1); });
+  if(F[lb]) F[lb].forEach(v=>{ if(!cnt.has(v)) cnt.set(v,0); });
+  let vals=[...cnt.keys()];
+  const nums=vals.every(v=>v===""||hfNum(v)!=null&&/^[\s$Bs(\-−\d.,)%]*$/.test(v));
+  vals.sort((a,b)=>{ if(a==="") return 1; if(b==="") return -1; return nums?(hfNum(a)-hfNum(b)):a.localeCompare(b,"es",{numeric:true,sensitivity:"base"}); });
+  HFP={key,lb,vals,cnt,sel:new Set(F[lb]?F[lb]:vals),q:""};
+  let p=document.getElementById("hfPop");
+  if(!p){ p=document.createElement("div"); p.id="hfPop"; document.body.appendChild(p); }
+  p.innerHTML=`<div class="hf-h"><b>${esc(lb)}</b><button type="button" class="hf-x" title="Cerrar">✕</button></div>
+    <input class="hf-q" type="text" placeholder="Buscar…" autocomplete="off">
+    <div class="hf-list"></div>
+    <div class="hf-f"><button type="button" class="btn ghost hf-clr">Quitar filtro</button><button type="button" class="btn primary hf-ok">Aplicar</button></div>`;
+  hfLista(); p.classList.add("open");
+  const rc=btn.getBoundingClientRect(), W=270, H=Math.min(440,p.offsetHeight||440);
+  let left=Math.max(8,Math.min(rc.left-10,window.innerWidth-W-8)), top=rc.bottom+6;
+  if(top+H>window.innerHeight-8) top=Math.max(8,rc.top-H-6);
+  p.style.left=left+"px"; p.style.top=top+"px";
+  const q=p.querySelector(".hf-q"); q.focus();
+  q.addEventListener("input",()=>{ HFP.q=q.value.trim(); const qq=_normTxt(HFP.q);
+    HFP.sel=new Set(qq?HFP.vals.filter(v=>_normTxt(v||"(vacío)").includes(qq)):HFP.vals); hfLista(); });
+  q.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); hfAplicar(); } else if(e.key==="Escape") hfCerrar(); });
+}
+function hfVis(){ const qq=_normTxt(HFP.q||""); return qq?HFP.vals.filter(v=>_normTxt(v||"(vacío)").includes(qq)):HFP.vals; }
+function hfLista(){
+  const p=document.getElementById("hfPop"); if(!p||!HFP) return; const V=hfVis(), MAX=400;
+  const todos=V.length>0&&V.every(v=>HFP.sel.has(v));
+  let h=`<label class="hf-it"><input type="checkbox" class="hf-all"${todos?" checked":""}><span><b>(Seleccionar todo)</b></span></label>`;
+  V.slice(0,MAX).forEach((v,i)=>{ h+=`<label class="hf-it"><input type="checkbox" class="hf-v" data-i="${HFP.vals.indexOf(v)}"${HFP.sel.has(v)?" checked":""}><span title="${esc(v||"(vacío)")}">${v===""?"<i>(vacío)</i>":esc(v)}</span><span class="n">${HFP.cnt.get(v)||0}</span></label>`; });
+  if(!V.length) h+='<div class="mini" style="padding:8px">Sin coincidencias.</div>';
+  if(V.length>MAX) h+=`<div class="mini" style="padding:6px 8px">… y ${V.length-MAX} más. Escribe arriba para buscar.</div>`;
+  p.querySelector(".hf-list").innerHTML=h;
+}
+function hfAplicar(){
+  if(!HFP) return; const vis=new Set(hfVis()); const sel=[...HFP.sel].filter(v=>vis.has(v));
+  if(!sel.length){ alert("Marca al menos un valor."); return; }
+  if(!STATE.hf) STATE.hf={}; const F=Object.assign({},STATE.hf[HFP.key]||{});
+  if(sel.length===HFP.vals.length) delete F[HFP.lb]; else F[HFP.lb]=sel;
+  STATE.hf[HFP.key]=F; hfCerrar(); render();
+}
+document.addEventListener("click",function(e){
+  const t=e.target; if(!t||!t.closest) return;
+  const b=t.closest(".hf-btn");
+  if(b){ e.preventDefault(); e.stopPropagation(); const ya=HFP&&HFP.key===b.getAttribute("data-hk")&&HFP.lb===b.getAttribute("data-hl"); hfCerrar(); if(!ya) hfAbrir(b); return; }
+  const rm=t.closest(".hf-rm");
+  if(rm){ e.preventDefault(); e.stopPropagation(); const F=STATE.hf&&STATE.hf[rm.getAttribute("data-hk")]; if(F) delete F[rm.getAttribute("data-hl")]; hfCerrar(); render(); return; }
+  const ca=t.closest(".hf-clrall");
+  if(ca){ e.preventDefault(); e.stopPropagation(); if(STATE.hf) delete STATE.hf[ca.getAttribute("data-hk")]; hfCerrar(); render(); return; }
+  const p=t.closest("#hfPop");
+  if(!p){ if(HFP) hfCerrar(); return; }
+  if(t.closest(".hf-x")){ hfCerrar(); return; }
+  if(t.closest(".hf-ok")){ hfAplicar(); return; }
+  if(t.closest(".hf-clr")){ if(STATE.hf&&STATE.hf[HFP.key]) delete STATE.hf[HFP.key][HFP.lb]; hfCerrar(); render(); return; }
+  if(t.classList.contains("hf-all")){ const V=hfVis(); if(t.checked) V.forEach(v=>HFP.sel.add(v)); else V.forEach(v=>HFP.sel.delete(v)); hfLista(); return; }
+  if(t.classList.contains("hf-v")){ const v=HFP.vals[+t.getAttribute("data-i")]; if(t.checked) HFP.sel.add(v); else HFP.sel.delete(v); const a=p.querySelector(".hf-all"); if(a){ const V=hfVis(); a.checked=V.every(x=>HFP.sel.has(x)); } return; }
+},true);
 /* ---- Selector de columnas: guardar/leer preferencia + manejar clics (delegado) ---- */
 function _loadColHidden(){ try{ var s=localStorage.getItem("peso_colhidden"); STATE.colHidden=s?JSON.parse(s):{}; }catch(e){ STATE.colHidden={}; } if(!STATE.colHidden||typeof STATE.colHidden!=="object") STATE.colHidden={}; }
 function _saveColHidden(){ try{ localStorage.setItem("peso_colhidden", JSON.stringify(STATE.colHidden||{})); }catch(e){} }

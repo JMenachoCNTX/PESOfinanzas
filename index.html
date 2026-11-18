@@ -1586,7 +1586,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V271";
+const APP_VERSION = "V272";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4539,6 +4539,10 @@ function bulkBarUpdate(prefix, set){
   const cbAll=document.getElementById(prefix+"chkall");
   if(cbAll){ const vis=document.querySelectorAll("#app ."+prefix+"chk"); let all=vis.length>0, any=false; vis.forEach(cb=>{ if(cb.checked) any=true; else all=false; }); cbAll.checked=all; cbAll.indeterminate=any&&!all; }
 }
+/* V272: columnas iguales en todas las listas de Bancos. Deja la casilla de selección al inicio,
+   las columnas pedidas en ese orden (con nombre nuevo si hace falta) y los botones sin título al final. */
+function colsOrden(cols, want, ren){ const by=l=>cols.find(c=>c.label===l);
+  return [...cols.filter(c=>c.sel), ...want.map(by).filter(Boolean).map(c=>(ren&&ren[c.label])?Object.assign({},c,{label:ren[c.label]}):c), ...cols.filter(c=>!c.sel&&!c.label)]; }
 function selCol(prefix, set, allSel){
   return {sel:true,noMenu:true,cls:"chk",label:`<input type="checkbox" id="${prefix}chkall" title="Seleccionar todo lo filtrado"${allSel?" checked":""}>`,
     render:r=>`<input type="checkbox" class="${prefix}chk" data-hu="${esc(r._hu)}"${set.has(r._hu)?" checked":""}>`};
@@ -4807,7 +4811,7 @@ function renderEgresos(){
     const sorted=[...rows].sort((a,b)=>egCmp(a,b,S.key,S.dir));
     const allHu=rows.map(r=>r._hu);
     const allSel=allHu.length>0 && allHu.every(h=>STATE.egSel.has(h));
-    const cols=[
+    let cols=[
       {sel:true,noMenu:true,cls:"chk",label:`<input type="checkbox" id="egchkall" title="Seleccionar todo lo filtrado"${allSel?" checked":""}>`,render:r=>`<input type="checkbox" class="egchk" data-hu="${esc(r._hu)}"${STATE.egSel.has(r._hu)?" checked":""}>`},
       {label:"Fecha de pago",sortKey:"fecha",render:r=>`<span class="mini" style="white-space:nowrap">${r.fecha?esc(fmtDate(String(r.fecha).slice(0,10))):(r.m?esc(mesES(r.m))+" "+(r.g||""):"–")}</span>`},
       {label:"Cuenta",sortKey:"kcuenta",render:r=>{const a=ancEgreso(r);return a.kcuenta?`<span class="tag">${esc(a.kcuenta)}</span>`:'<span class="zero">–</span>';}},
@@ -4832,7 +4836,9 @@ function renderEgresos(){
       {label:"",noMenu:true,render:r=>(STATE.egFB&&r._id)?`<span class="ta-acts" style="flex-wrap:nowrap"><button class="btn ghost eg-ed" data-id="${esc(r._id)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button><button class="btn ghost eg-dup" data-id="${esc(r._id)}" title="Duplicar: abre un gasto nuevo con estos mismos datos" style="padding:4px 8px">⧉</button></span>`:""},
     ];
     // Fila de totales alineada por etiqueta (robusta ante cambios de columnas)
-    const egTotalRow=cols.map(c=> c.label==="Cuenta" ? "Total ("+Math.min(rows.length,600)+")" : (c.label==="USD"?fmt(totalUSD):(c.label==="BOB"?"Bs "+f2(totalBOB):"")));
+    if(enBanco){ const bt=STATE.bancosTab, base=["Fecha de pago","Importe","Moneda","Concepto","Beneficiario","Cuenta Analítica"], fin=["Tipo","Centro de Costo","USD","BOB","TC","País"];
+      cols=colsOrden(cols, bt==="otras"?[...base,"Tipo de Pago",...fin]:[...base,...fin], bt==="tesabiz"?null:{"Fecha de pago":"Fecha"}); }
+    const egTotalRow=cols.map((c,i)=> i===1 ? "Total ("+Math.min(rows.length,600)+")" : (c.label==="USD"?fmt(totalUSD):(c.label==="BOB"?"Bs "+f2(totalBOB):"")));
     contentHTML=`<div class="card">
       <div class="head"><h3>Egresos · detalle</h3><span class="mini">${rows.length} resultados · ${fmt(totalUSD)} · Bs ${f2(totalBOB)} · clic en un encabezado para ordenar</span></div>
       <div class="mini" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:-2px 0 12px">Cuenta Analítica:
@@ -8961,7 +8967,7 @@ function renderMercury(){
     const cmp=mkCmp(S.key,S.dir,["monto"],["fecha"]);
     const ordered=[...rows].sort(cmp);
     const allSelM=rows.length>0 && rows.every(r=>STATE.mSel.has(r._hu));
-    const cols=[
+    let cols=[
       selCol("m",STATE.mSel,allSelM),
       {label:"Fecha de pago",sortKey:"fecha",render:r=>`<span class="mini">${fmtDate(r.fecha)}</span>`},
       {label:"Descripción",sortKey:"desc",render:r=>`${esc(r.desc||"–")}${(r.bankdesc&&r.bankdesc!==r.desc)?`<span class="sub2">${esc(r.bankdesc)}</span>`:""}`},
@@ -8978,7 +8984,13 @@ function renderMercury(){
       {label:"Estado",sortKey:"status",render:r=>r.status?`<span class="tag">${esc(r.status)}</span>`:'<span class="zero">–</span>'},
       {label:"Contabilizado?",sortKey:"contab",render:r=>contabBadge(r.contab)},
       {label:"Monto",right:1,cls:"num",sortKey:"monto",render:r=> r.monto>=0? `<span style="color:var(--emerald)">+${money(r.monto)}</span>` : `<span class="neg">${money(r.monto)}</span>`},
+      {label:"Moneda",render:r=>`<span class="tag">USD</span>`},
+      {label:"USD",right:1,cls:"num",sortKey:"monto",render:r=>fmt(+r.monto||0,2)},
+      {label:"BOB",right:1,cls:"num",render:r=>{ const t=tcRateFor(r.fecha); return t?("Bs "+f2((+r.monto||0)*t)):'<span class="zero">–</span>'; }},
+      {label:"TC",render:r=>{ const t=tcRateFor(r.fecha); return t?'<span style="font-family:var(--mono)">'+fTC(t)+'</span>':'<span class="zero">–</span>'; }},
+      {label:"País",render:r=>r.pais?`<span class="tag">${esc(r.pais)}</span>`:'<span class="zero">–</span>'},
     ];
+    cols=colsOrden(cols,["Fecha de pago","Monto","Moneda","Descripción","Cuenta de Débito","Cuenta Analítica","Tipo","Centro de Costo","USD","BOB","TC","País","Estado"],{"Fecha de pago":"Fecha"});   // V272
     contentHTML=`<div class="card">
       <div class="head"><h3>Movimientos Mercury</h3><span class="mini">${rows.length} movimientos (${crows.length} clasif.) · neto clasif. ${money(neto)} · clic en un encabezado para ordenar</span></div>
       ${caLeyenda()}
@@ -9108,7 +9120,7 @@ function renderBitgo(){
   const cmp=mkCmp(S.key,S.dir,[amountCol,feeCol].filter(Boolean),[dateCol].filter(Boolean));
   const ordered=[...rows].sort(cmp);
 
-  const tcols=[{label:"TIPO",sortKey:"_cat",render:r=>`<span class="tw" style="display:inline-block;background:${bgColor(r._cat)};margin-right:7px"></span>${esc(r._cat)}`}];
+  let tcols=[{label:"TIPO",sortKey:"_cat",render:r=>`<span class="tw" style="display:inline-block;background:${bgColor(r._cat)};margin-right:7px"></span>${esc(r._cat)}`}];
   if(dateCol)     tcols.unshift({label:"Fecha de pago",sortKey:dateCol,render:r=>`<span class="mini" style="white-space:nowrap">${fmtDate(gdUS(r[dateCol]).iso||r[dateCol])}</span>`});
   if(typeCol)     tcols.push({label:"Movimiento",sortKey:typeCol,render:r=>r[typeCol]?`<span class="tag">${esc(r[typeCol])}</span>`:'<span class="zero">–</span>'});
   if(cuCol)       tcols.push({label:"Cuenta",sortKey:cuCol,render:r=>{const a=bganc(r);return a.kcuenta?`<span class="tag">${esc(a.kcuenta)}</span>`:'<span class="zero">–</span>';}});
@@ -9130,6 +9142,7 @@ function renderBitgo(){
   if(amountCol)   tcols.push({label:"Monto",right:1,cls:"num",sortKey:amountCol,render:r=>{const v=amt(r); return v<0?`<span class="neg">${money(v)}</span>`:(v>0?`<span style="color:var(--emerald)">+${money(v)}</span>`:'<span class="zero">–</span>');}});
   const allSelBg=rows.length>0 && rows.every(r=>STATE.bgSel.has(r._hu));
   tcols.unshift(selCol("bg",STATE.bgSel,allSelBg));
+  tcols=colsOrden(tcols,["Fecha de pago","Monto","Fee","Wallet","Movimiento","Comentario","Cuenta Analítica","Tipo","Centro de Costo","Contabilizado?"],{"Fecha de pago":"Fecha"});   // V272
 
   const _subClas=nSinClasif?(nSinClasif+" sin clasificar"):"todos clasificados";
   const kpis = hasNeg ? `
@@ -10061,7 +10074,7 @@ function aplicarDatos(res){
   STATE.ingresosTab = (res.ingresosTab && res.ingresosTab.rows) ? res.ingresosTab : {cols:[],rows:[]};
   STATE.costos      = (res.costos && res.costos.rows) ? res.costos : {cols:[],rows:[]};
   STATE.tablaCostos = (res.tablaCostos && res.tablaCostos.rows) ? res.tablaCostos : {cols:[],rows:[]};
-  STATE.mercury = mapMerc(res.mercury||[]);
+  STATE.mercury = mapMerc(res.mercury||[]).filter(r=>!/fail|pend/i.test(String(r.status||"")));   // V272: pagos fallidos o pendientes no salieron del banco: no cuentan
   STATE.bitgo   = res.bitgo && res.bitgo.rows ? res.bitgo : {cols:[],rows:[]};
   STATE.pnl     = res.pnl || {}; STATE.pnlBase = STATE.pnl; try{ pnlAplicarTreasury(); }catch(e){ console.error("Treasury",e); STATE.pnl=STATE.pnlBase; }   // V212: Treasury manda
   STATE.plan    = mapPlan(res.plan||[]);

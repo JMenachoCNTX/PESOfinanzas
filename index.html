@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V274";
+const APP_VERSION = "V275";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4927,7 +4927,7 @@ function renderEgresos(){
     // Fila de totales alineada por etiqueta (robusta ante cambios de columnas)
     if(enBanco){ const bt=STATE.bancosTab, base=["Fecha de pago","Importe","Moneda","Concepto","Beneficiario","Cuenta Analítica"], fin=["Tipo","Centro de Costo","USD","BOB","TC","País"];
       cols=colsOrden(cols, bt==="otras"?[...base,"Tipo de Pago",...fin]:[...base,...fin], bt==="tesabiz"?null:{"Fecha de pago":"Fecha"}); }
-    const egTotalRow=cols.map((c,i)=> i===1 ? "Total ("+Math.min(rows.length,600)+")" : (c.label==="USD"?fmt(totalUSD):(c.label==="BOB"?"Bs "+f2(totalBOB):"")));
+    const egTotalRow=cols.map((c,i)=> i===1 ? "Total ("+rows.length+")" : (c.label==="USD"?fmt(totalUSD):(c.label==="BOB"?"Bs "+f2(totalBOB):"")));
     contentHTML=`<div class="card">
       <div class="head"><h3>Egresos · detalle</h3><span class="mini">${rows.length} resultados · ${fmt(totalUSD)} · Bs ${f2(totalBOB)} · clic en un encabezado para ordenar</span></div>
       <div class="mini" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:-2px 0 12px">Cuenta Analítica:
@@ -5130,7 +5130,7 @@ function renderRRHH(){
     const qF=_normTxt(F.q||"");
     const pagos=todos.filter(p=>(!F.y||String(p.y)===F.y)&&(!F.m||String(p.mi)===F.m)&&(!F.per||String(p.per||"")===F.per)
       &&(!F.colab||(F.colab==="__sin"?!p.colab:p.colab===F.colab))&&(!F.wallet||p.wallet===F.wallet)&&(!F.tipo||p.tipo===F.tipo)&&(!F.asset||p.asset===F.asset)
-      &&(!qF||_normTxt([p.quien,p.colab,p.wallet,p.tipo,p.asset].join(" ")).indexOf(qF)>=0));
+      &&(!qF||_normTxt([p.quien,p.com,p.colab,p.wallet,p.tipo,p.asset].join(" ")).indexOf(qF)>=0));
     const uniq=k=>[...new Set(todos.map(p=>p[k]).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
     const fSel=(k,lbl,L)=>`<label class="mini" style="display:flex;flex-direction:column;gap:4px">${lbl}<span class="select-wrap"><select class="rh-pf" data-f="${k}"><option value="">Todos</option>${L.map(([v,t])=>`<option value="${esc(v)}"${String(F[k])===String(v)?" selected":""}>${esc(t)}</option>`).join("")}</select></span></label>`;
     const hayF=Object.values(F).some(Boolean);
@@ -5157,6 +5157,7 @@ function renderRRHH(){
       {label:"Wallet",sortKey:"wallet",render:p=>p.wallet?`<span class="mini">${esc(p.wallet)}</span>`:'<span class="zero">–</span>'},
       {label:"Movimiento",sortKey:"tipo",render:p=>p.tipo?`<span class="tag">${esc(p.tipo)}</span>`:'<span class="zero">–</span>'},
       {label:"Beneficiario / detalle",sortKey:"quien",render:p=>esc(p.quien||"–")},
+      {label:"Comentario",sortKey:"com",render:p=>p.com?`<span class="mini">${esc(p.com)}</span>`:'<span class="zero">–</span>'},   // V275: comentario original de la wallet Sueldos (BitGo)
       {label:"Mes de planilla",sortKey:"per",render:p=>rhPerCelda(p)},
       {label:"Colaborador",sortKey:"colab",render:p=>p.colab?esc(p.colab)+(p.colabManual?' <span class="mini">✎</span>':''):'<span class="zero">sin asignar</span>'},
       {label:"Asset",sortKey:"asset",render:p=>p.asset?`<span class="tag">${esc(p.asset)}</span>`:'<span class="zero">–</span>'},
@@ -5172,7 +5173,7 @@ function renderRRHH(){
       </div>`;
     app.innerHTML=intro+seg+(todos.length?filtrosHTML:"")+(pagos.length?pagosKpis:"")+(pagos.length?`
       <div class="card"><div class="head"><h3>Pagos por mes ${yrForChart?("· "+yrForChart):""}</h3><span class="mini">Wallet Sueldos · BitGo</span></div><div id="rhPagChart"></div></div>
-      <div class="card"><div class="head"><h3>Detalle de pagos de sueldos</h3><span class="mini">${money(totalPag)} · clic en un encabezado para ordenar</span></div>${tbl(cols,ordered,["Total","","","","","","",money(totalPag)],S,{sticky:true})}</div>`
+      <div class="card"><div class="head"><h3>Detalle de pagos de sueldos</h3><span class="mini">${money(totalPag)} · clic en un encabezado para ordenar</span></div>${tbl(cols,ordered,["Total","","","","","","","",money(totalPag)],S,{sticky:true})}</div>`
       : emptyState(todos.length?'Ningún pago coincide con estos filtros.':'No hay pagos de sueldos. Se extraen automáticamente de la wallet <b>Sueldos</b> de BitGo. Registra pagos en esa wallet y presiona Actualizar.'));
     if(pagos.length){ drawMonthlyInto("#rhPagChart", monthTot, "rhPag", "#8EB69B", "#235347", 124); }
     rhPerWire(todos);
@@ -6095,8 +6096,19 @@ function tablaCostosRows(){
       empresa:empRaw, _emp:empNorm(empRaw), fv,
       prov:cProv?String(r[cProv]||""):"", con:cCon?String(r[cCon]||""):"",
       montoFijo, montoVar, moneda, frec:frecRaw, mFijoM, mVarM, nota:cNota?String(r[cNota]||""):"", _id:r._id||null, _row:r };
-  }).filter(it=> (it.con||it.prov||it.cat) && (it.montoFijo||it.montoVar));
-  return {ok:true, items};
+  });
+  // V275: «Sueldos» y «Bonos» del equipo se calculan solos con RRHH ▸ Datos personales (solo personal ACTIVO)
+  { const rh=Array.isArray(STATE.rrhh)?STATE.rrhh.filter(rrhhIsAct):[];
+    if(rh.length){ const usd=(r,k)=>{ const v=+r[k]||0; return String(r.moneda||"").toUpperCase().includes("BOB")?(RATE?v/RATE:0):v; };
+      const sSF=rh.reduce((a,r)=>a+usd(r,"sf"),0), sBO=rh.reduce((a,r)=>a+usd(r,"be")+usd(r,"bk"),0);
+      items.forEach(it=>{ const c=_normTxt(it.con), esEq=_normTxt(it.prov).includes("equipo")||_normTxt(it.centro)==="rrhh";
+        if(!esEq) return; const esS=/^sueldo/.test(c), esB=/^bono/.test(c); if(!esS&&!esB) return;
+        const v=esS?sSF:sBO, fac=facFrec(it.frec);
+        it.moneda="USD"; it._rrhh=true;
+        if(it.fv==="variable"||(!it.montoFijo&&it.montoVar)){ it.montoVar=v; it.montoFijo=0; it.mVarM=v*fac; it.mFijoM=0; }
+        else { it.montoFijo=v; it.montoVar=0; it.mFijoM=v*fac; it.mVarM=0; }
+        it.nota=(esS?"Sueldo fijo":"Bonos extra + bonos KPI")+" de "+rh.length+" personas activas · automático desde RRHH"; }); } }
+  return {ok:true, items: items.filter(it=> (it.con||it.prov||it.cat) && (it.montoFijo||it.montoVar||it._rrhh))};
 }
 
 /* Sub-pestañas de P&L por proveedor dentro de Costos (se alimentan de hojas del mismo Google Sheet) */

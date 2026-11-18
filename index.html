@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V277";
+const APP_VERSION = "V278";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -1967,10 +1967,14 @@ function pnlRows(allYears){
   // BitGo: si existe la columna "Contabilizado?", EGRESO sólo cuando dice "SI"
   // (traspasos internos/fondeo y demás quedan FUERA del Estado de Resultados).
   // Si esa columna aún no existe, se mantiene el criterio anterior por signo (salida<0).
+  // V278: en Devengado, los pagos de la wallet Sueldos van al MES DE PLANILLA (el mes al que corresponde el sueldo, como en RRHH ▸ Pagos)
+  const _rhPer=new Map(); if((STATE.resBase||"devengado")!=="caja" && bAmt && showLLC()){ try{ rhPlCargar(); bitgoSueldos().forEach(p=>{ if(p._r&&/^\d{4}-\d{2}$/.test(String(p.per||""))) _rhPer.set(p._r,p.per); }); }catch(e){} }
   if(bAmt && showLLC()) (bg.rows||[]).forEach(r=>{ _dist=distDe("BitGo",r._hu); const v=toNum(r[bAmt]); const tok=bgTok(r,bCont,v);
     const esEgreso = tok==="si";
     if(!esEgreso) return; const usd=Math.abs(v); if(!usd) return;
-    const d=bDate?_fd(r[bDate]):null; const g=(d&&!isNaN(d))?d.getFullYear():null; if(!yOk(g)&&!_dist) return; const m=(d&&!isNaN(d))?MONTHS[d.getMonth()]:null; const iso=bDate?gdUS(r[bDate]).iso:null; _det={fecha:iso,ben:"BitGo",con:(bCon2&&r[bCon2])||(bCon&&r[bCon])||"",tipo:"BitGo",fuente:"BitGo",hu:r._hu};
+    const d=bDate?_fd(r[bDate]):null; let g=(d&&!isNaN(d))?d.getFullYear():null; let m=(d&&!isNaN(d))?MONTHS[d.getMonth()]:null;
+    if(!_dist&&_rhPer.has(r)){ const pr=_rhPer.get(r); g=+pr.slice(0,4); m=MONTHS[+pr.slice(5,7)-1]; }
+    if(!yOk(g)&&!_dist) return; const iso=bDate?gdUS(r[bDate]).iso:null; _det={fecha:iso,ben:"BitGo",con:(bCon2&&r[bCon2])||(bCon&&r[bCon])||"",tipo:"BitGo",fuente:"BitGo",hu:r._hu};
     let cu=bCu&&r[bCu], gr=bGr&&r[bGr], sg=bSg&&r[bSg], cp=bCP&&r[bCP], ca=bCA&&r[bCA];
     if(!_cH){ const a=ancGeneric(resolveBitgo(r,bCont,v,(bCon2&&r[bCon2]), ca), {kcuenta:cu,grupoc:gr,ksubgrupo:sg,cp:cp}); cu=a.kcuenta; gr=a.grupoc; sg=a.ksubgrupo; cp=a.cp; ca=a.ca; }
     if(S(cu)&&S(gr)&&S(sg)&&S(cp)&&S(ca)){ add(cu,gr,sg,cp,ca, usd, bobOf(usd,iso), m, g, "BitGo"); }
@@ -5018,7 +5022,7 @@ function bitgoSueldos(){
     return { fecha: dateCol? r[dateCol]:"", y: ok?d.getFullYear():null, mi: ok?d.getMonth():-1,
       monto: Math.abs(v), tipo: typeCol?String(r[typeCol]||""):"", asset: assetCol?String(r[assetCol]||""):"",
       quien: String((caCol&&r[caCol])||(commentsCol&&r[commentsCol])||"—"), wallet: walletCol?String(r[walletCol]||""):"",
-      tx: txCol?String(r[txCol]||"").trim():"", com: commentsCol?String(r[commentsCol]||""):"" };
+      tx: txCol?String(r[txCol]||"").trim():"", com: commentsCol?String(r[commentsCol]||""):"", _r:r };
   }).map(rhPagoInfo);
 }
 /* V201: planillas de sueldos. Cada pago de la wallet Sueldos tiene un "mes de planilla" (el mes al que corresponde,
@@ -5026,7 +5030,7 @@ function bitgoSueldos(){
    y se pueden cambiar a mano. Cambios y cierres se guardan en Firebase config/rhPlanillas (un solo documento). */
 let NM_RHPL=null;
 function rhPlCargar(){ if(NM_RHPL||!nmFbActivo()) return; NM_RHPL={asig:{},cierres:{},_cargando:true};
-  NMFB.cfgGet("rhPlanillas").then(d=>{ NM_RHPL={asig:(d&&d.asig)||{},cierres:(d&&d.cierres)||{}}; if(STATE.section==="rrhh") render(); })
+  NMFB.cfgGet("rhPlanillas").then(d=>{ NM_RHPL={asig:(d&&d.asig)||{},cierres:(d&&d.cierres)||{}}; if(STATE.section==="rrhh"||STATE.section==="resumen"||STATE.section==="inicio") render(); })
     .catch(e=>{ console.error("rhPlanillas",e); NM_RHPL={asig:{},cierres:{}}; }); }
 function rhPlGuardar(){ if(!nmFbActivo()||!NM_RHPL) return Promise.resolve();
   return NMFB.cfgSet("rhPlanillas",{asig:NM_RHPL.asig,cierres:NM_RHPL.cierres}).catch(e=>alert("No se pudo guardar en Firebase: "+((e&&e.message)||e))); }

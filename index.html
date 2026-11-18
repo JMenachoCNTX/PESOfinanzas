@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V279";
+const APP_VERSION = "V280";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4298,10 +4298,13 @@ function renderEgresosProveedor(){
   const app=$("#app"); if(!app) return;
   const usdOf=e=>(e.impUSD!=null?+e.impUSD:(+e.imp||0));
   const base=(STATE.egresos||[]).filter(e=>empPassRow(e) && (STATE.estado==="__all"||String(e.e||"").trim()===STATE.estado));
-  const years=[...new Set(base.map(e=>e.g).filter(Boolean))].sort();
-  if(STATE.provYear==null) STATE.provYear=(STATE.year!=="__all"&&STATE.year)?STATE.year:(years.length?years[years.length-1]:new Date().getFullYear());
-  const Y=STATE.provYear;
-  const rowsY=base.filter(e=>e.g===Y);
+  // V280: usa el filtro AÑO de arriba (ya no hay un selector «Gestión» aparte). Con «Todos» los meses llevan su año.
+  const Y=STATE.year, todosA=(Y==="__all");
+  const rowsY=todosA?base.slice():base.filter(e=>e.g===Y);
+  const perOf=e=>{ const mi=monthIdx(e.m); return (mi<0||!e.g)?null:e.g*100+mi; };
+  const pers=todosA?[...new Set(rowsY.map(perOf).filter(x=>x!=null))].sort((a,b)=>a-b):[...Array(12).keys()].map(mi=>Y*100+mi);
+  const perLbl=p=>MONTH_ES_LONG[p%100].slice(0,3)+(todosA?" "+String(Math.floor(p/100)).slice(2):"");
+  const YL=todosA?"todos los años":Y;
   // proveedor = Beneficiario (si vacío, usa concepto)
   const provOf=e=>String(e.ben||e.con||"—").trim()||"—";
   const totByProv={}; rowsY.forEach(e=>{ const k=provOf(e); totByProv[k]=(totByProv[k]||0)+usdOf(e); });
@@ -4318,7 +4321,7 @@ function renderEgresosProveedor(){
       <button data-p="matriz" class="${sub==='matriz'?'on':''}">Matriz mensual</button>
       <button data-p="detalle" class="${sub==='detalle'?'on':''}">Detalle por proveedor</button>
     </div>`;
-  const yearSel=`<div class="select-wrap"><select id="provYearSel">${(years.length?years:[Y]).map(y=>`<option value="${y}"${y===Y?" selected":""}>Gestión ${y}</option>`).join("")}</select></div>`;
+  const yearSel="";
   let content="";
   if(sub==="matriz"){
     // top 12 proveedores + "Otros" (para que la matriz entre bien)
@@ -4327,42 +4330,42 @@ function renderEgresosProveedor(){
     const otros=provsSorted.slice(TOPN);
     const cols=top.concat(otros.length?["Otros"]:[]);
     const isOtro=p=>otros.indexOf(p)>=0;
-    const M={}; for(let mi=0;mi<12;mi++){ M[mi]={}; cols.forEach(c=>M[mi][c]=0); }
-    rowsY.forEach(e=>{ const mi=monthIdx(e.m); if(mi<0) return; const p=provOf(e); const col=isOtro(p)?"Otros":p; if(M[mi][col]==null) M[mi][col]=0; M[mi][col]+=usdOf(e); });
-    const colTot={}; cols.forEach(c=>colTot[c]=0); const monthTot=Array(12).fill(0);
+    const M={}; pers.forEach(pe=>{ M[pe]={}; cols.forEach(c=>M[pe][c]=0); });
+    rowsY.forEach(e=>{ const pe=perOf(e); if(pe==null||!M[pe]) return; const p=provOf(e); const col=isOtro(p)?"Otros":p; if(M[pe][col]==null) M[pe][col]=0; M[pe][col]+=usdOf(e); });
+    const colTot={}; cols.forEach(c=>colTot[c]=0); const monthTot=pers.map(()=>0);
     const m0=v=>v?fmt(v,0):'<span class="zero">–</span>';
     let head=`<tr><th style="text-align:left">Mes</th>${cols.map(c=>`<th class="tot">${esc(c)}</th>`).join("")}<th class="tot">Total</th></tr>`;
     let body="";
-    for(let mi=0;mi<12;mi++){ let rowTot=0;
-      body+=`<tr><td style="text-align:left"><b>${MONTH_ES_LONG[mi].slice(0,3)}</b></td>`;
-      cols.forEach(c=>{ const v=M[mi][c]||0; colTot[c]+=v; rowTot+=v; body+=`<td class="num">${m0(v)}</td>`; });
-      monthTot[mi]=rowTot; body+=`<td class="num"><b>${m0(rowTot)}</b></td></tr>`;
-    }
+    pers.forEach((pe,ix)=>{ let rowTot=0;
+      body+=`<tr><td style="text-align:left"><b>${perLbl(pe)}</b></td>`;
+      cols.forEach(c=>{ const v=M[pe][c]||0; colTot[c]+=v; rowTot+=v; body+=`<td class="num">${m0(v)}</td>`; });
+      monthTot[ix]=rowTot; body+=`<td class="num"><b>${m0(rowTot)}</b></td></tr>`;
+    });
     let foot=`<tr class="tr-total"><td style="text-align:left">Total</td>${cols.map(c=>`<td class="num"><b>${m0(colTot[c])}</b></td>`).join("")}<td class="num"><b>${fmt(grTot,0)}</b></td></tr>`;
     const topBars=provsSorted.slice(0,10).map(p=>[p,totByProv[p]]);
-    const monthBars=MONTH_ES_LONG.map((n,i)=>[n.slice(0,3),monthTot[i]]).filter(e=>e[1]>0);
+    const monthBars=pers.map((pe,i)=>[perLbl(pe),monthTot[i]]).filter(e=>e[1]>0);
     content=`<div class="grid cols-2" style="margin-bottom:14px">
-        <div class="card"><div class="head"><h3>Top proveedores</h3><span class="mini">${Y} · USD</span></div>${topBars.length?hbars(topBars,()=>"#B42318",v=>"$"+fmt(v,0)):emptyState("Sin datos.")}</div>
-        <div class="card"><div class="head"><h3>Egresos por mes</h3><span class="mini">${Y} · USD</span></div>${monthBars.length?hbars(monthBars,()=>"#6F9A7D",v=>"$"+fmt(v,0)):emptyState("Sin datos.")}</div>
+        <div class="card"><div class="head"><h3>Top proveedores</h3><span class="mini">${YL} · USD</span></div>${topBars.length?hbars(topBars,()=>"#B42318",v=>"$"+fmt(v,0)):emptyState("Sin datos.")}</div>
+        <div class="card"><div class="head"><h3>Egresos por mes</h3><span class="mini">${YL} · USD</span></div>${monthBars.length?hbars(monthBars,()=>"#6F9A7D",v=>"$"+fmt(v,0)):emptyState("Sin datos.")}</div>
       </div>
-      <div class="card"><div class="head"><h3>Matriz mensual por proveedor · ${Y}</h3><span class="mini">USD · ${provsSorted.length} proveedores${otros.length?` (top ${TOPN} + Otros)`:""} · desliza → para ver todos</span></div>
+      <div class="card"><div class="head"><h3>Matriz mensual por proveedor · ${YL}</h3><span class="mini">USD · ${provsSorted.length} proveedores${otros.length?` (top ${TOPN} + Otros)`:""} · desliza → para ver todos</span></div>
       <div class="tbl-scroll"><table class="matrix-tbl"><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div></div>
-      ${provMonthMatrixHTML(rowsY, provOf, usdOf, "Matriz por beneficiario y mes · "+Y, "USD · cuánto pagó cada beneficiario (proveedor) por mes")}`;
+      ${provMonthMatrixHTML(rowsY, provOf, usdOf, "Matriz por beneficiario y mes · "+YL, "USD · cuánto pagó cada beneficiario (proveedor) por mes",{key:"egprov",pers,perOf,perLbl})}`;
   } else {
     // detalle por proveedor seleccionado
     if(STATE.provProv==="__all" || provsSorted.indexOf(STATE.provProv)<0) STATE.provProv=provsSorted[0]||"__all";
     const sel=STATE.provProv;
     const list=rowsY.filter(e=>provOf(e)===sel).sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||"")));
     const tot=list.reduce((s,e)=>s+usdOf(e),0);
-    const byMes=Array(12).fill(0); list.forEach(e=>{ const mi=monthIdx(e.m); if(mi>=0) byMes[mi]+=usdOf(e); });
+    const byMes=pers.map(()=>0); list.forEach(e=>{ const ix=pers.indexOf(perOf(e)); if(ix>=0) byMes[ix]+=usdOf(e); });
     const provSel=`<div class="select-wrap"><select id="provSelProv">${provsSorted.map(pv=>`<option value="${esc(pv)}"${pv===sel?" selected":""}>${esc(pv)}</option>`).join("")}</select></div>`;
-    const filas=list.map(e=>`<tr><td><span class="mini">${esc(fmtDate(e.fecha)||mesES(e.m))}</span></td><td>${esc(e.con||"–")}</td><td>${esc(EMP_LABEL[empNorm(e._emp)]||"–")}</td><td>${esc(e.cp||"–")}</td><td>${esc(e.ca||"–")}</td><td>${esc(e.e||"–")}</td><td class="num">${fmt(usdOf(e),2)}</td></tr>`).join("");
-    const mesBars=byMes.map((v,i)=>[MONTH_ES_LONG[i].slice(0,3),v]).filter(e=>e[1]>0);
-    content=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">${provSel}<span class="mini">Total ${sel==="__all"?"":esc(sel)} en ${Y}: <b>${fmt(tot,2)} USD</b> · ${list.length} pagos</span></div>
+    const filas=list.map(e=>`<tr><td><span class="mini">${esc(fmtDate(e.fecha)||mesES(e.m))}</span></td><td>${esc(e.con||"–")}</td><td>${esc(EMP_LABEL[empNorm(e._emp)]||"–")}</td><td>${esc(ancEgreso(e).cp||"–")}</td><td>${esc(ancEgreso(e).ca||"–")}</td><td>${esc(e.e||"–")}</td><td class="num">${fmt(usdOf(e),2)}</td></tr>`).join("");
+    const mesBars=byMes.map((v,i)=>[perLbl(pers[i]),v]).filter(e=>e[1]>0);
+    content=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">${provSel}<span class="mini">Total ${sel==="__all"?"":esc(sel)} en ${YL}: <b>${fmt(tot,2)} USD</b> · ${list.length} pagos</span></div>
       <div class="grid cols-3-1">
-        <div class="card"><div class="head"><h3>Pagos a ${esc(sel==="__all"?"—":sel)}</h3><span class="mini">${Y} · USD</span></div>
+        <div class="card"><div class="head"><h3>Pagos a ${esc(sel==="__all"?"—":sel)}</h3><span class="mini">${YL} · USD</span></div>
           <div class="tbl-scroll sticky-head"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Empresa</th><th>Cuenta Principal</th><th>Cuenta Analítica</th><th>Estado</th><th class="tot">USD</th></tr></thead><tbody>${filas||`<tr><td colspan="7" class="mini" style="padding:14px">Sin pagos.</td></tr>`}</tbody></table></div></div>
-        <div class="card"><div class="head"><h3>Por mes</h3><span class="mini">${Y} · USD</span></div>${mesBars.length?hbars(mesBars,()=>"#6F9A7D",v=>"$"+fmt(v,0)):emptyState("Sin pagos.")}</div>
+        <div class="card"><div class="head"><h3>Por mes</h3><span class="mini">${YL} · USD</span></div>${mesBars.length?hbars(mesBars,()=>"#6F9A7D",v=>"$"+fmt(v,0)):emptyState("Sin pagos.")}</div>
       </div>`;
   }
   app.innerHTML=`<p class="section-intro">Cuánto se pagó <b>a cada proveedor</b> (Beneficiario), por mes. Respeta el filtro de <b>Empresa</b>. <span class="mini">Base: gastos registrados en Egresos.</span></p>
@@ -4370,7 +4373,6 @@ function renderEgresosProveedor(){
     ${pills}${content}`;
   document.querySelectorAll("#egTabs button").forEach(b=>b.addEventListener("click",()=>{STATE.egTab=b.dataset.t;render();}));
   document.querySelectorAll("#provSub button").forEach(b=>b.addEventListener("click",()=>{STATE.provTab=b.dataset.p;render();}));
-  const ys=$("#provYearSel"); if(ys) ys.addEventListener("change",e=>{STATE.provYear=+e.target.value;render();});
   const ps=$("#provSelProv"); if(ps) ps.addEventListener("change",e=>{STATE.provProv=e.target.value;render();});
 }
 /* ============================================================
@@ -7942,27 +7944,30 @@ function ingresosPivot(all, metric, byMonth){
 }
 /* Matriz reutilizable: ENTIDAD (filas) × MES (columnas), en USD. Para "cuánto gastó cada
    proveedor/beneficiario por mes". provFn(r)->nombre, usdFn(r)->monto USD. */
-function provMonthMatrixHTML(rows, provFn, usdFn, title, sub){
-  const PM={}, provTot={};
-  (rows||[]).forEach(r=>{
-    const p=(provFn(r)||"(Sin proveedor)");
-    let mi=(r&&typeof r.mi==="number"&&r.mi>=0)?r.mi:((r&&r.m!=null)?monthIdx(r.m):-1);
-    if(mi<0){ const d=parseLocalDate(r&&r.fecha); mi=d?d.getMonth():-1; }
-    if(mi<0) return;
-    const v=+usdFn(r)||0;
-    if(!PM[p]) PM[p]=Array(12).fill(0);
-    PM[p][mi]+=v; provTot[p]=(provTot[p]||0)+v;
-  });
-  const provs=Object.keys(PM).sort((a,b)=>(provTot[b]||0)-(provTot[a]||0));
-  if(!provs.length) return `<div class="card"><div class="head"><h3>${esc(title)}</h3></div>${emptyState("Sin datos para la matriz.")}</div>`;
+function provMonthMatrixHTML(rows, provFn, usdFn, title, sub, o){
+  // V280: tabla con filtros y orden desde los títulos (Beneficiario, cada mes, Total)
+  o=o||{}; const pers=o.pers||[...Array(12).keys()], perLbl=o.perLbl||(i=>MONTH_ES_LONG[i].slice(0,3));
+  const perOf=o.perOf||(r=>{ let mi=(r&&typeof r.mi==="number"&&r.mi>=0)?r.mi:((r&&r.m!=null)?monthIdx(r.m):-1); if(mi<0){ const d=parseLocalDate(r&&r.fecha); mi=d?d.getMonth():-1; } return mi<0?null:mi; });
+  const PM={};
+  (rows||[]).forEach(r=>{ const p=(provFn(r)||"(Sin proveedor)"); const ix=pers.indexOf(perOf(r)); if(ix<0) return;
+    if(!PM[p]) PM[p]={p,v:pers.map(()=>0),t:0}; const v=+usdFn(r)||0; PM[p].v[ix]+=v; PM[p].t+=v; });
+  let L=Object.values(PM);
+  if(!L.length) return `<div class="card"><div class="head"><h3>${esc(title)}</h3></div>${emptyState("Sin datos para la matriz.")}</div>`;
+  const key="pm-"+(o.key||"x"); if(!STATE.pmSort) STATE.pmSort={}; const S=STATE.pmSort[key]||{key:"t",dir:"desc"};
+  const val=(r,k)=>k==="p"?String(r.p).toLowerCase():(k==="t"?r.t:r.v[+k.slice(1)]);
+  L.sort((a,b)=>{ const x=val(a,S.key), y=val(b,S.key); const c=x<y?-1:x>y?1:0; return S.dir==="asc"?c:-c; });
   const m0=v=>v?fmt(v,0):'<span class="zero">–</span>';
-  const colTot=Array(12).fill(0); let gTot=0;
-  const head=`<tr><th style="text-align:left">Beneficiario</th>${MONTH_ES_LONG.map(n=>`<th class="tot">${n.slice(0,3)}</th>`).join("")}<th class="tot">Total</th></tr>`;
-  const body=provs.map(p=>{ let rt=0; const tds=PM[p].map((v,mi)=>{ colTot[mi]+=v; rt+=v; return `<td class="num">${m0(v)}</td>`; }).join(""); gTot+=rt; return `<tr><td style="text-align:left">${esc(p)}</td>${tds}<td class="num"><b>${m0(rt)}</b></td></tr>`; }).join("");
-  const foot=`<tr class="tr-total"><td style="text-align:left">Total</td>${colTot.map(v=>`<td class="num"><b>${m0(v)}</b></td>`).join("")}<td class="num"><b>${m0(gTot)}</b></td></tr>`;
-  return `<div class="card"><div class="head"><h3>${esc(title)}</h3><span class="mini">${esc(sub||"")} · ${provs.length} · desliza → para ver todos los meses</span></div>
-    <div class="tbl-scroll"><table class="matrix-tbl"><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div></div>`;
+  const cols=[{label:"Beneficiario",sortKey:"p",render:r=>esc(r.p)}]
+    .concat(pers.map((pe,i)=>({label:perLbl(pe),right:1,cls:"num",sortKey:"m"+i,render:r=>m0(r.v[i])})))
+    .concat([{label:"Total",right:1,cls:"num",sortKey:"t",render:r=>"<b>"+m0(r.t)+"</b>"}]);
+  const colTot=pers.map((_,i)=>L.reduce((s,r)=>s+r.v[i],0)), gTot=L.reduce((s,r)=>s+r.t,0);
+  const tot=["Total ("+L.length+")"].concat(colTot.map(v=>"<b>"+m0(v)+"</b>")).concat(["<b>"+m0(gTot)+"</b>"]);
+  return `<div class="card pm-wrap" data-pm="${esc(key)}"><div class="head"><h3>${esc(title)}</h3><span class="mini">${esc(sub||"")} · ${L.length} · clic en un título para ordenar · ▼ para filtrar</span></div>
+    ${tbl(cols,L,tot,S,{sticky:true,viewKey:key})}</div>`;
 }
+document.addEventListener("click",function(e){ const th=e.target&&e.target.closest&&e.target.closest(".pm-wrap th.sortable"); if(!th) return;
+  const key=th.closest(".pm-wrap").getAttribute("data-pm"), k=th.getAttribute("data-k"); if(!STATE.pmSort) STATE.pmSort={};
+  const S=STATE.pmSort[key]||{key:"t",dir:"desc"}; STATE.pmSort[key]= S.key===k?{key:k,dir:S.dir==="asc"?"desc":"asc"}:{key:k,dir:k==="p"?"asc":"desc"}; render(); });
 /* Tabla combinada de Ingresos: MES (filas) × cada PASARELA con Bruto USD y Neto USD juntos. */
 function ingresosComboTableHTML(all){
   const gws=[...new Set((all||[]).map(r=>r.gw))];
@@ -8494,7 +8499,7 @@ function renderRendiciones(){
     let egMtx="";
     if(secSel==="__all"||secSel==="Egresos"){
       const egMov=dm.filter(m=>m.sec==="Egresos");
-      if(egMov.length) egMtx=provMonthMatrixHTML(egMov, m=>m.ben||"(Sin proveedor)", m=>m.usd, "Egresos por beneficiario y mes"+(STATE.year!=="__all"?(" · "+STATE.year):""), "USD · cuánto gastó cada beneficiario (proveedor) por mes");
+      if(egMov.length) egMtx=provMonthMatrixHTML(egMov, m=>m.ben||"(Sin proveedor)", m=>m.usd, "Egresos por beneficiario y mes"+(STATE.year!=="__all"?(" · "+STATE.year):""), "USD · cuánto gastó cada beneficiario (proveedor) por mes",{key:"rend"});
     }
     contentHTML = chipsHTML + `<div class="toolbar">${esearch("rendSearch","Buscar concepto, fecha, importe…",STATE.rendSearch)}</div>` + egMtx + (lista || emptyState("No hay movimientos para los filtros actuales."));
   }

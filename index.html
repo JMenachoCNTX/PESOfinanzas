@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V282";
+const APP_VERSION = "V283";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4307,6 +4307,9 @@ function renderEgresosProveedor(){
     let b=r.fuente==="BitGo"?("BitGo · "+(r.ca||"sin cuenta")):String(r.keytext||r.con||"—").trim();
     const k=_normTxt(b); if(!_nom[k]) _nom[k]=b; b=_nom[k];
     return {fecha:r.fecha,m:r.m,g:r.g,impUSD:+r.usd||0,con:r.con,ben:b,origen:r.origen,cp:r.cp,ca:r.ca,e:r.estado}; });
+  // V283: un mismo proveedor escrito de varias formas (Antropic / Anthropic Claude, AWS / Amazon Web Services…) se junta en una fila
+  provUnirCargar(); const _can=provCanonMap(base); base.forEach(e=>{ const c=_can.map[e.ben]; if(c) e.ben=c; });
+  STATE._provInfo=_can;
   // V280: usa el filtro AÑO de arriba (ya no hay un selector «Gestión» aparte). Con «Todos» los meses llevan su año.
   const Y=STATE.year, todosA=(Y==="__all");
   const rowsY=todosA?base.slice():base.filter(e=>e.g===Y);
@@ -4359,7 +4362,7 @@ function renderEgresosProveedor(){
       </div>
       <div class="card"><div class="head"><h3>Matriz mensual por proveedor · ${YL}</h3><span class="mini">USD · ${provsSorted.length} proveedores${otros.length?` (top ${TOPN} + Otros)`:""} · desliza → para ver todos</span></div>
       <div class="tbl-scroll"><table class="matrix-tbl"><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div></div>
-      ${provMonthMatrixHTML(rowsY, provOf, usdOf, "Matriz por beneficiario y mes · "+YL, "USD · cuánto pagó cada beneficiario (proveedor) por mes",{key:"egprov",pers,perOf,perLbl})}`;
+      ${provMonthMatrixHTML(rowsY, provOf, usdOf, "Matriz por beneficiario y mes · "+YL, "USD · cuánto pagó cada beneficiario (proveedor) por mes",{key:"egprov",pers,perOf,perLbl,info:_can})}`;
   } else {
     // detalle por proveedor seleccionado
     if(STATE.provProv==="__all" || provsSorted.indexOf(STATE.provProv)<0) STATE.provProv=provsSorted[0]||"__all";
@@ -7953,6 +7956,65 @@ function ingresosPivot(all, metric, byMonth){
 }
 /* Matriz reutilizable: ENTIDAD (filas) × MES (columnas), en USD. Para "cuánto gastó cada
    proveedor/beneficiario por mes". provFn(r)->nombre, usdFn(r)->monto USD. */
+/* ---------- V283: proveedores con varios nombres ----------
+   Une nombres que son el mismo proveedor: iguales sin mayúsculas/acentos/«Inc»/«.com», errores de tipeo (1-2 letras),
+   o con la misma cuenta analítica y uno contenido en el otro (Granola / Granola Inc) o sigla (AWS / Amazon Web Services).
+   Además, uniones a mano guardadas en config/provUnir. */
+let NM_PROVUNIR=null;
+function provUnirCargar(){ if(NM_PROVUNIR||!nmFbActivo()) return; NM_PROVUNIR={}; NMFB.cfgGet("provUnir").then(d=>{ NM_PROVUNIR=(d&&d.map)||{}; if(STATE.section==="egresos") render(); }).catch(()=>{}); }
+function provCanonMap(rows){
+  const man=NM_PROVUNIR||{}; const manOf=b=>{ let x=b, n=0; while(man[_normTxt(x)]&&n<5){ x=man[_normTxt(x)]; n++; } return x; };
+  const lev=(a,b)=>{ const m=a.length,n=b.length; if(Math.abs(m-n)>2) return 9; let p=[...Array(n+1).keys()]; for(let i=1;i<=m;i++){ const c=[i]; for(let j=1;j<=n;j++) c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1)); p=c; } return p[n]; };
+  const STOP=/^(inc|llc|srl|sa|ltda|corp|com|co|the|de|del|la|el|y|team)$/;
+  const wds=s=>_normTxt(s).split(/[^a-z0-9]+/).filter(w=>w&&!STOP.test(w)); const key=s=>wds(s).join("");
+  const N={}; rows.forEach(r=>{ const b=manOf(r.ben); const n=N[b]||(N[b]={b,v:0,cas:{},orig:new Set()}); n.v+=+r.impUSD||0; n.cas[r.ca||""]=(n.cas[r.ca||""]||0)+(+r.impUSD||0); n.orig.add(r.ben); });
+  const L=Object.values(N); L.forEach(n=>{ n.ca=Object.entries(n.cas).sort((a,b)=>b[1]-a[1])[0][0]; n.k=key(n.b); n.w=wds(n.b); });
+  const par=L.map((_,i)=>i); const f=i=>par[i]===i?i:(par[i]=f(par[i]));
+  for(let i=0;i<L.length;i++) for(let j=i+1;j<L.length;j++){ const A=L[i],B=L[j]; if(!A.k||!B.k||/^bitgo/.test(A.k)||/^bitgo/.test(B.k)) continue;
+    let ok=A.k===B.k||(Math.min(A.k.length,B.k.length)>=6&&lev(A.k,B.k)<=2);
+    if(!ok&&A.ca&&A.ca===B.ca){ const sh=A.w.length<=B.w.length?A:B, lo=sh===A?B:A;
+      ok=(sh.k.length>=4&&lo.k.indexOf(sh.k)===0)||(sh.w.length>0&&sh.w.every(w=>w.length>=4&&lo.w.includes(w)))||(lo.w.length>=2&&lo.w.map(w=>w[0]).join("")===sh.k); }
+    if(ok) par[f(i)]=f(j); }
+  const G={}; L.forEach((n,i)=>{ (G[f(i)]=G[f(i)]||[]).push(n); });
+  let items=[]; try{ items=tablaCostosRows().items||[]; }catch(_){}
+  const map={}, vars={}, tipo={};
+  Object.values(G).forEach(g=>{
+    const ca=Object.entries(g.reduce((o,n)=>{ Object.entries(n.cas).forEach(([c,v])=>o[c]=(o[c]||0)+v); return o; },{})).sort((a,b)=>b[1]-a[1])[0][0]||"";
+    const txt=_normTxt(g.map(n=>n.b).join(" ")+" "+ca).replace(/[^a-z0-9]+/g," ").trim();
+    let its=items.filter(it=>!/^equipo\b/.test(_normTxt(it.prov))&&_cosCoincide(it,txt));
+    if(/sueld|salari/i.test(ca)) its=items.filter(it=>/^equipo\b/.test(_normTxt(it.prov))&&/^sueldo/.test(_normTxt(it.con)));
+    else if(/^bonos?$/i.test(ca.trim())) its=items.filter(it=>/^equipo\b/.test(_normTxt(it.prov))&&/^bono/.test(_normTxt(it.con)));
+    const kca=key(ca); const porCA=g.find(n=>kca&&n.k===kca);
+    const nom=(g.length>1&&porCA)?porCA.b:(g.length>1&&its[0]&&g.some(n=>lev(n.k,key(its[0].prov))<=2)?its[0].prov:g.slice().sort((a,b)=>b.v-a.v)[0].b);
+    const fv=new Set(its.map(it=>it.fv||(it.montoVar&&!it.montoFijo?"variable":"fijo")));
+    const t=!its.length?"Fuera de la lista":(fv.size>1?"Fijo y variable":(fv.has("variable")?"Variable":"Fijo"));
+    const all=[]; g.forEach(n=>n.orig.forEach(o=>{ if(all.indexOf(o)<0) all.push(o); }));
+    all.forEach(o=>{ map[o]=nom; }); vars[nom]=all; tipo[nom]=t; });
+  return {map,vars,tipo};
+}
+/* Ventana «Unir proveedores» (solo administradores): guarda en config/provUnir {map:{nombre normalizado: nombre destino}} */
+function provUnirAbrir(){
+  const inf=STATE._provInfo||{vars:{}}; const noms=Object.keys(inf.vars).sort((a,b)=>a.localeCompare(b,"es"));
+  const man=NM_PROVUNIR||{}; const lista=Object.entries(man);
+  const ov=document.createElement("div"); ov.className="modal-ov"; ov.style.cssText="position:fixed;inset:0;background:rgba(5,31,32,.45);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px";
+  const opt=noms.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  ov.innerHTML=`<div class="card" style="max-width:520px;width:100%;max-height:90vh;overflow:auto;margin:0">
+    <div class="head"><h3>Unir proveedores</h3><button type="button" class="btn ghost" data-x>✕</button></div>
+    <p class="mini" style="margin-top:0">Si dos nombres son el mismo proveedor, elige cuál se junta con cuál. Solo cambia cómo se agrupan aquí; no cambia los pagos.</p>
+    <label class="mini">Este nombre<span class="select-wrap"><select id="puA">${opt}</select></span></label>
+    <label class="mini" style="display:block;margin-top:8px">se junta con<span class="select-wrap"><select id="puB">${opt}</select></span></label>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn primary" id="puOk">Unir</button></div>
+    <div class="msg" id="puMsg" style="margin-top:8px"></div>
+    ${lista.length?`<h4 style="margin:14px 0 6px">Uniones hechas a mano</h4>`+lista.map(([k,v])=>`<div class="mini" style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"><span>${esc(k)} → <b>${esc(v)}</b></span><button type="button" class="btn ghost pu-del" data-k="${esc(k)}">Quitar</button></div>`).join(""):""}
+  </div>`;
+  document.body.appendChild(ov);
+  const cerrar=()=>ov.remove(); ov.querySelector("[data-x]").onclick=cerrar; ov.addEventListener("click",e=>{ if(e.target===ov) cerrar(); });
+  const guardar=m=>NMFB.cfgSet("provUnir",{map:m}).then(()=>{ NM_PROVUNIR=m; cerrar(); render(); }).catch(e=>{ const mm=ov.querySelector("#puMsg"); mm.className="msg err"; mm.textContent="No se pudo guardar: "+((e&&e.message)||e); });
+  ov.querySelector("#puOk").onclick=()=>{ const a=ov.querySelector("#puA").value, b=ov.querySelector("#puB").value; if(!a||!b||a===b){ const mm=ov.querySelector("#puMsg"); mm.className="msg err"; mm.textContent="Elige dos nombres distintos."; return; }
+    const m=Object.assign({},NM_PROVUNIR||{}); (inf.vars[a]||[a]).forEach(x=>{ m[_normTxt(x)]=b; }); m[_normTxt(a)]=b; guardar(m); };
+  ov.querySelectorAll(".pu-del").forEach(x=>x.onclick=()=>{ const m=Object.assign({},NM_PROVUNIR||{}); delete m[x.dataset.k]; guardar(m); });
+}
+document.addEventListener("click",e=>{ if(e.target&&e.target.closest&&e.target.closest("#provUnirBtn")) provUnirAbrir(); });
 function provMonthMatrixHTML(rows, provFn, usdFn, title, sub, o){
   // V280: tabla con filtros y orden desde los títulos (Beneficiario, cada mes, Total)
   o=o||{}; const pers=o.pers||[...Array(12).keys()], perLbl=o.perLbl||(i=>MONTH_ES_LONG[i].slice(0,3));
@@ -7962,16 +8024,19 @@ function provMonthMatrixHTML(rows, provFn, usdFn, title, sub, o){
     if(!PM[p]) PM[p]={p,v:pers.map(()=>0),t:0}; const v=+usdFn(r)||0; PM[p].v[ix]+=v; PM[p].t+=v; });
   let L=Object.values(PM);
   if(!L.length) return `<div class="card"><div class="head"><h3>${esc(title)}</h3></div>${emptyState("Sin datos para la matriz.")}</div>`;
+  const inf=o.info||null; if(inf) L.forEach(r=>{ r.tc=(inf.tipo[r.p]||"Fuera de la lista"); });   // V283: Fijo / Variable / Fuera de la lista
   const key="pm-"+(o.key||"x"); if(!STATE.pmSort) STATE.pmSort={}; const S=STATE.pmSort[key]||{key:"t",dir:"desc"};
-  const val=(r,k)=>k==="p"?String(r.p).toLowerCase():(k==="t"?r.t:r.v[+k.slice(1)]);
+  const val=(r,k)=>k==="p"?String(r.p).toLowerCase():(k==="tc"?String(r.tc||""):(k==="t"?r.t:r.v[+k.slice(1)]));
   L.sort((a,b)=>{ const x=val(a,S.key), y=val(b,S.key); const c=x<y?-1:x>y?1:0; return S.dir==="asc"?c:-c; });
   const m0=v=>v?fmt(v,0):'<span class="zero">–</span>';
-  const cols=[{label:"Beneficiario",sortKey:"p",render:r=>esc(r.p)}]
+  const cols=[{label:"Beneficiario",sortKey:"p",render:r=>{ const vs=inf&&inf.vars[r.p]; return esc(r.p)+(vs&&vs.length>1?` <span class="mini" title="${esc("Junta: "+vs.join(" · "))}" style="cursor:help;color:var(--muted)">(${vs.length} nombres)</span>`:""); }}]
+    .concat(inf?[{label:"Tipo de costo",sortKey:"tc",render:r=>{ const t=r.tc; const c=t==="Fijo"?"st usd":(t==="Variable"?"st bob":"tag"); return `<span class="${c}">${esc(t)}</span>`; }}]:[])
     .concat(pers.map((pe,i)=>({label:perLbl(pe),right:1,cls:"num",sortKey:"m"+i,render:r=>m0(r.v[i])})))
     .concat([{label:"Total",right:1,cls:"num",sortKey:"t",render:r=>"<b>"+m0(r.t)+"</b>"}]);
   const colTot=pers.map((_,i)=>L.reduce((s,r)=>s+r.v[i],0)), gTot=L.reduce((s,r)=>s+r.t,0);
-  const tot=["Total ("+L.length+")"].concat(colTot.map(v=>"<b>"+m0(v)+"</b>")).concat(["<b>"+m0(gTot)+"</b>"]);
-  return `<div class="card pm-wrap" data-pm="${esc(key)}"><div class="head"><h3>${esc(title)}</h3><span class="mini">${esc(sub||"")} · ${L.length} · clic en un título para ordenar · ▼ para filtrar</span></div>
+  const tot=["Total ("+L.length+")"].concat(inf?[""]:[]).concat(colTot.map(v=>"<b>"+m0(v)+"</b>")).concat(["<b>"+m0(gTot)+"</b>"]);
+  const unirBtn=(inf&&nmFbActivo()&&NMFB.esAdmin())?`<button type="button" class="btn ghost" id="provUnirBtn" title="Junta dos nombres que son el mismo proveedor">Unir proveedores</button>`:"";
+  return `<div class="card pm-wrap" data-pm="${esc(key)}"><div class="head"><h3>${esc(title)}</h3><span class="mini">${esc(sub||"")} · ${L.length} · clic en un título para ordenar · ▼ para filtrar</span>${unirBtn}</div>
     ${tbl(cols,L,tot,S,{sticky:true,viewKey:key})}</div>`;
 }
 document.addEventListener("click",function(e){ const th=e.target&&e.target.closest&&e.target.closest(".pm-wrap th.sortable"); if(!th) return;

@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V281";
+const APP_VERSION = "V282";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -2697,7 +2697,11 @@ function renderPresupuesto(pre){
     const esEquipo=/^equipo\b/.test(_normTxt(i.prov));
     const esBono=esEquipo&&/^bono/.test(_normTxt(i.con));   // V276: Bonos va a la cuenta Bonos, no junto con Sueldos
     const por={}; UT.forEach(x=>{ if(!(esEquipo?(esBono?/bono/i.test(x.r.ca):/sueld|salari|remunera/i.test(x.r.ca)):_cosCoincide(i,x.txt))) return; const c=por[x.r.ca]||(por[x.r.ca]={r:x.r,v:0}); c.v+=+x.r.usd||0; });
-    const m=Object.values(por).sort((a,b)=>b.v-a.v)[0];
+    // V282: si el proveedor tiene varias cuentas (Google → Google Ads y Google Workspace), gana la cuenta cuyo nombre
+    // más se parece al costo (proveedor + concepto); si empatan, donde más se pagó.
+    const _pal=t=>_normTxt(t).split(/[^a-z0-9]+/).filter(w=>w.length>=3&&!/^(del|las|los|por|para|con|una|uno)$/.test(w));
+    const _itW=new Set(_pal(i.prov+" "+i.con)); const _sc=ca=>_pal(ca).filter(w=>_itW.has(w)).length;
+    const m=Object.values(por).sort((a,b)=>(_sc(b.r.ca)-_sc(a.r.ca))||(b.v-a.v))[0];
     // V259: un costo de plataforma sin pagos en Egresos (Bridge, Rhino, Persona) igual entra al Presupuesto, con el monto de la Lista
     const plat=!m&&/operat/i.test(i.tipo||"")&&/plataforma/i.test(i.centro||i.cat||"");
     const o=m?get(m.r.grupoc||"(sin grupo)",m.r.cp||"(sin cuenta principal)",m.r.ca):(plat?get("COSTOS OPERATIVOS","PLATAFORMA TECNOLÓGICA",i.prov):get("En la Lista, sin pagos en Egresos","No se encontró ningún pago a este proveedor",i.prov||i.con||"(sin nombre)"));

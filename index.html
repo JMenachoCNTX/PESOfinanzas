@@ -1614,7 +1614,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V288";
+const APP_VERSION = "V289";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3534,6 +3534,10 @@ function applyFsList(){
   while(el && !el.classList.contains("card")){ if(el.classList.contains("toolbar")){ tb=el; break; } el=el.previousElementSibling; }
   if(tb && !card.contains(tb)){ head.insertAdjacentElement("afterend", tb); }
   const xb=card.querySelector(".xbtn"); if(xb) xb.remove();
+  // V288: en pantalla completa, «Columnas» también va al lado de Filtros
+  const fbt=tb&&tb.querySelector(".filt-btn"), cmf=card.querySelector(".tbl-block .colmenu");
+  if(fbt&&cmf){ const cb=cmf.querySelector(".colmenu-btn"); if(cb&&!cb.querySelector(".tb-lbl")) cb.insertAdjacentHTML("beforeend",'<span class="tb-lbl">Columnas</span>');
+    const grp=document.createElement("span"); grp.className="tb-tools"; grp.appendChild(cmf); fbt.insertAdjacentElement("afterend",grp); }
 }
 /* Ventana emergente animada para GRÁFICOS */
 function openChartModal(card){

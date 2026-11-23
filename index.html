@@ -213,6 +213,12 @@ table.compact td .sub2{font-size:10px}
 .card .head .xbtn{margin-left:auto}
 .xbtn-float{position:absolute;top:10px;right:12px;z-index:5;background:var(--surface)}
 .xbtn-icon{padding:3px 9px;font-size:14px;line-height:1;font-weight:400}
+/* V288: Columnas y Ampliar al lado de Filtros */
+.tb-tools{display:inline-flex;gap:8px;align-items:center}
+.tb-tools .colmenu{margin:0;display:inline-flex}
+.tb-tools .colmenu-btn,.tb-tools .xbtn{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;font-size:13px;font-weight:650;border-radius:10px;color:var(--text);background:var(--surface);border:1px solid var(--border);line-height:1}
+.tb-tools .colmenu-list{left:0;right:auto}
+.tb-tools .tb-lbl{font-size:13px}
 /* Gráficos que llenan su tarjeta y crecen en su lugar al hacer clic */
 .card.has-chart{display:flex;flex-direction:column}
 .card .chart-fill{flex:1 1 auto;min-height:190px}
@@ -1608,7 +1614,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V287";
+const APP_VERSION = "V288";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -3461,14 +3467,21 @@ function enhanceCards(){
   app.querySelectorAll(".card").forEach(card=>{
     if(card.classList.contains("fs-card")||card.classList.contains("kpi")) return;
     if(card.querySelector(".xbtn")) return;               // ya tiene su botón (RRHH u otros)
+    if(card.__tbHecho) return;                            // V288: sus botones ya están junto a Filtros
     const head=card.querySelector(".head");
     const hasTable=card.querySelector(".tbl-scroll, table");
     if(hasTable){
       const cm=card.querySelector(".colmenu");
-      if(cm && head && !head.contains(cm)) head.appendChild(cm);
       const btn=document.createElement("button");
       btn.className="xbtn xbtn-icon"; btn.type="button"; btn.innerHTML="⛶"; btn.title="Ampliar"; btn.setAttribute("aria-label","Ampliar");
       btn.addEventListener("click",e=>{ e.stopPropagation(); openListFull(card); });
+      // V288: si la lista tiene su barra de Filtros, «Columnas» y «Ampliar» van juntos, al lado del botón Filtros
+      const fb=_filtBtnDe(card);
+      if(fb){ const grp=document.createElement("span"); grp.className="tb-tools";
+        if(cm){ const cb=cm.querySelector(".colmenu-btn"); if(cb&&!cb.querySelector(".tb-lbl")) cb.insertAdjacentHTML("beforeend",'<span class="tb-lbl">Columnas</span>'); grp.appendChild(cm); }
+        btn.innerHTML='⛶<span class="tb-lbl">Ampliar</span>'; grp.appendChild(btn);
+        fb.insertAdjacentElement("afterend", grp); card.__tbHecho=true; return; }
+      if(cm && head && !head.contains(cm)) head.appendChild(cm);
       if(head){ head.appendChild(btn); }
       else { card.style.position="relative"; btn.classList.add("xbtn-float"); card.insertBefore(btn, card.firstChild); }
       return;
@@ -3486,6 +3499,13 @@ function enhanceCards(){
   });
   document.body.classList.toggle("fs-abierto", !!app.querySelector(".fs-card,.fs-overlay"));
 }
+/* V288: el botón «Filtros» de la barra que está justo antes de esta lista (si es solo de ella) */
+function _filtBtnDe(card){ let el=card.previousElementSibling;
+  while(el && !el.classList.contains("card")){
+    const fb=el.classList.contains("filt-btn")?el:el.querySelector(".filt-btn");
+    if(fb){ if(fb.__tbUsado) return null; fb.__tbUsado=true; return fb; }
+    el=el.previousElementSibling; }
+  return null; }
 /* Abre una LISTA en pantalla completa dejándola dentro de #app (por eso ordenar/filtrar siguen vivos). */
 function openListFull(card){
   const t=String((card.querySelector(".head h3")||{}).textContent||"").trim();
@@ -4242,10 +4262,11 @@ function renderEgresosGeneral(){
     {label:"Monto original",right:1,cls:"num",sortKey:"orig",render:r=>r.orig!=null?((r.moneda==="BOB"?"Bs ":"$")+f2(r.orig)):'<span class="zero">–</span>'},
     {label:"USD",right:1,cls:"num",sortKey:"usd",render:r=>r.usd!=null?fmt(r.usd,2):'<span class="zero">–</span>'},
     {label:"BOB",right:1,cls:"num",sortKey:"bob",render:r=>r.bob!=null?("Bs "+f2(r.bob)):'<span class="zero">–</span>'},
+    {label:"Tipo de cambio",render:r=>{ const t=(r.usd&&r.bob!=null&&r.bob)?Math.abs(r.bob/r.usd):tcRateFor(r.fecha); return t?'<span style="font-family:var(--mono)">'+fTC(t)+'</span>':'<span class="zero">–</span>'; }},
     {label:"",render:r=>STATE.egFB?`<span class="ta-acts" style="flex-wrap:nowrap"><button class="btn ghost eg-cxp" data-i="${STATE._egCxpRows.push(r)-1}" title="Crear una cuenta por pagar a partir de este gasto (ej.: el mismo pago para este mes)" style="padding:4px 8px;white-space:nowrap">→ Por pagar</button>${r.egId?`<button class="btn ghost eg-ed" data-id="${esc(r.egId)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button><button class="btn ghost eg-dup" data-id="${esc(r.egId)}" title="Duplicar: abre un gasto nuevo con estos mismos datos" style="padding:4px 8px">⧉</button>`:""}${(r.fuente==="BitGo"||r.fuente==="Mercury")?`<button class="btn ghost eg-div" data-i="${STATE._egCxpRows.push(r)-1}" title="Cambiar la cuenta o repartir este pago en varios meses" style="padding:4px 8px">÷</button>`:""}</span>`:""},
   ];
   // V286/V287: mismo orden que las listas de Bancos (Fecha, Monto, Moneda, Concepto, Cuenta Analítica…)
-  cols=colsOrden(cols,["Fecha","Monto original","Moneda original","Concepto","Cuenta Analítica","Cuenta","Grupo","Sub Grupo","Cuenta Principal","Origen","Tipo de Pago","Costo","Respaldo","USD","BOB"],{"Monto original":"Monto","Moneda original":"Moneda"});
+  cols=colsOrden(cols,["Fecha","Monto original","Moneda original","Concepto","Cuenta Analítica","Cuenta","Grupo","Sub Grupo","Cuenta Principal","Origen","Tipo de Pago","Costo","Respaldo","USD","BOB","Tipo de cambio"],{"Monto original":"Monto","Moneda original":"Moneda"});
   const totRow=cols.map((c,i)=> i===0?("Total ("+rows.length+")"):(c.label==="USD"?fmt(totUSD,2):(c.label==="BOB"?("Bs "+f2(totBOB)):"")));
   const fijoUSD=rows.filter(r=>r.costo==="fijo").reduce((s,r)=>s+(+r.usd||0),0);
   const varUSD=rows.filter(r=>r.costo==="variable").reduce((s,r)=>s+(+r.usd||0),0);
@@ -4818,6 +4839,46 @@ function reglasCostosIndex(){
 }
 // Regla de costos resuelta para un movimiento (por su proveedor/texto llave)
 function reglaCosto(keyText){ return reglasCostosIndex()[_normTxt(keyText)]||null; }
+/* V288: Tipo y Centro de Costo AUTOMÁTICOS (como la Cuenta Analítica). Orden:
+   1) proveedor exacto de la Lista de Costos · 2) el texto del movimiento menciona un proveedor de la Lista
+   3) sueldos/bonos → «Equipo PESO» · 4) Tipo según el Grupo de la cuenta (Costos operativos, Gastos de administración…)
+   5) Centro de Costo: el más usado en esa misma Cuenta Analítica (o Sub Grupo) por los movimientos que sí se reconocen. */
+function _dimTipoDeGrupo(g){ const n=_normTxt(g||"");
+  if(/^costos? operativ/.test(n)) return "Costos de Operación";
+  if(/^gastos de administracion/.test(n)) return "Gastos de Administración";
+  if(/^gastos de comercializacion/.test(n)) return "Gastos de Comercialización";
+  if(/^gastos financieros/.test(n)) return "Gastos Financieros";
+  if(/^(gastos|costos)\b/.test(n)) return String(g).toLowerCase().replace(/^./,c=>c.toUpperCase());
+  return ""; }
+function _dimItems(){ const src=STATE.tablaCostos;
+  if(STATE._dimSrc!==src||!STATE._dimIt){ STATE._dimSrc=src; STATE._dimC={}; STATE._dimTally=null;
+    let it=[]; try{ it=(tablaCostosRows().items)||[]; }catch(_){ it=[]; }
+    STATE._dimIt=it.filter(i=>i.prov&&(i.tipoStd||i.centro||i.empresa)).sort((a,b)=>(b.mFijoM+b.mVarM)-(a.mFijoM+a.mVarM)); }
+  return STATE._dimIt; }
+function _dimPorTexto(txt){ const its=_dimItems(); const t=_normTxt(txt||"").replace(/[^a-z0-9]+/g," ").trim(); if(!t) return null;
+  const C=STATE._dimC; if(t in C) return C[t];
+  const ex=reglaCosto(txt); if(ex&&(ex.tipo||ex.centro)) return C[t]=ex;
+  const i=its.find(x=>!/^equipo\b/.test(_normTxt(x.prov))&&_cosCoincide(x,t));
+  return C[t]=i?{empresaResp:i.empresa||"",_emp:i._emp||"",tipo:i.tipoStd||"",centro:i.centro||""}:null; }
+function _dimEquipo(){ const i=_dimItems().find(x=>/^equipo\b/.test(_normTxt(x.prov))); return i?{empresaResp:i.empresa||"",_emp:i._emp||"",tipo:i.tipoStd||"",centro:i.centro||""}:null; }
+function _dimTally(){ _dimItems(); const nE=(STATE.egresos||[]).length;
+  if(STATE._dimTally&&STATE._dimTally.nE===nE) return STATE._dimTally;
+  const T={nE,ca:{},sg:{}}; STATE._dimTally=T;   // se marca antes para no repetir si algo falla
+  let U=[]; const sy=STATE.year; STATE.year="__all"; try{ U=egresosUnificados(); }catch(_){ U=[]; } finally{ STATE.year=sy; }
+  const add=(M,k,c)=>{ if(!k||!c) return; const o=M[k]||(M[k]={}); o[c]=(o[c]||0)+1; };
+  U.forEach(r=>{ const d=_dimPorTexto([r.keytext,r.con].filter(Boolean).join(" ")); if(d&&d.centro){ add(T.ca,r.ca,d.centro); add(T.sg,r.ksubgrupo,d.centro); } });
+  const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1])[0][0];
+  Object.keys(T.ca).forEach(k=>T.ca[k]=top(T.ca[k])); Object.keys(T.sg).forEach(k=>T.sg[k]=top(T.sg[k]));
+  return T; }
+function dimCosto(txt, ca, anc){ anc=anc||{}; if(!anc.grupoc&&ca){ try{ anc=ancGeneric({ca},anc); }catch(_){} }
+  const d=Object.assign({empresaResp:"",_emp:"",tipo:"",centro:""}, _dimPorTexto(txt)||{});
+  const tipoG=_dimTipoDeGrupo(anc.grupoc);
+  if(!tipoG && ca && !d.centro && !d.tipo) return d;   // traspasos, activos, ingresos: no son costos
+  if((!d.tipo||!d.centro) && /sueld|salari|remunera|bono|aguinaldo/i.test(String(ca||"")+" "+(anc.ksubgrupo||""))){ const e=_dimEquipo(); if(e){ ["empresaResp","_emp","tipo","centro"].forEach(k=>{ if(!d[k]) d[k]=e[k]; }); } }
+  if(!d.tipo) d.tipo=tipoG;
+  if(!d.centro){ const T=_dimTally(); d.centro=(ca&&T.ca[ca])||(anc.ksubgrupo&&T.sg[anc.ksubgrupo])||""; }
+  return d; }
+function dimEg(r){ const a=ancEgreso(r); const ex=r.ben&&reglaCosto(r.ben); return dimCosto((ex&&(ex.tipo||ex.centro))?r.ben:[r.ben,r.con].filter(Boolean).join(" "), a.ca, a); }
 
 function renderEgresos(){
   const enBanco=STATE.section==="bancos";   // V184: la "Lista" ahora vive en Bancos ▸ Tesabiz / Otras Cuentas
@@ -4842,9 +4903,9 @@ function renderEgresos(){
   if(STATE.egBenef!=="__all")   rows=rows.filter(r=>String(r.ben||"")===STATE.egBenef);
   if(STATE.egCAest==="sin")     rows=rows.filter(r=>!resolveEgreso(r).ca);
   else if(STATE.egCAest==="con") rows=rows.filter(r=>!!resolveEgreso(r).ca);
-  if(STATE.egEmpResp!=="__all") rows=rows.filter(r=>{const g=reglaCosto(r.ben);return String((g&&g.empresaResp)||"")===STATE.egEmpResp;});
-  if(STATE.egTipo!=="__all")    rows=rows.filter(r=>{const g=reglaCosto(r.ben);return String((g&&g.tipo)||"")===STATE.egTipo;});
-  if(STATE.egCentro!=="__all")  rows=rows.filter(r=>{const g=reglaCosto(r.ben);return String((g&&g.centro)||"")===STATE.egCentro;});
+  if(STATE.egEmpResp!=="__all") rows=rows.filter(r=>{const g=dimEg(r);return String((g&&g.empresaResp)||"")===STATE.egEmpResp;});
+  if(STATE.egTipo!=="__all")    rows=rows.filter(r=>{const g=dimEg(r);return String((g&&g.tipo)||"")===STATE.egTipo;});
+  if(STATE.egCentro!=="__all")  rows=rows.filter(r=>{const g=dimEg(r);return String((g&&g.centro)||"")===STATE.egCentro;});
   const q=STATE.egSearch.trim().toLowerCase();
   if(q) rows=rows.filter(r=>(String(r.con||"")+" "+(r.cc||"")+" "+(r.ben||"")+" "+catLabel(r.cp)+" "+(r.pais||"")).toLowerCase().includes(q));
   const total=rows.reduce((s,e)=>s+(+e.imp||0),0);
@@ -4865,9 +4926,9 @@ function renderEgresos(){
   const lCA=[...new Set(base.map(e=>String(resolveEgreso(e).ca||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const lCostos=[...new Set(base.map(e=>e._costo||egCostoDe(e.ben,e.con)).filter(Boolean))].sort();
   const lBenef=[...new Set(base.map(e=>String(e.ben||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  const lEmpResp=[...new Set(base.map(e=>{const g=reglaCosto(e.ben);return (g&&g.empresaResp)||"";}).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  const lTipo=[...new Set(base.map(e=>{const g=reglaCosto(e.ben);return (g&&g.tipo)||"";}).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  const lCentro=[...new Set(base.map(e=>{const g=reglaCosto(e.ben);return (g&&g.centro)||"";}).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const lEmpResp=[...new Set(base.map(e=>{const g=dimEg(e);return (g&&g.empresaResp)||"";}).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const lTipo=[...new Set(base.map(e=>{const g=dimEg(e);return (g&&g.tipo)||"";}).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const lCentro=[...new Set(base.map(e=>{const g=dimEg(e);return (g&&g.centro)||"";}).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
 
   const isGraf = !enBanco && STATE.egTab==="graficos";
   const kpisHTML=`<div class="grid kpis">
@@ -4944,9 +5005,9 @@ function renderEgresos(){
       {label:"Beneficiario",sortKey:"ben",render:r=>r.ben?esc(r.ben):'<span class="zero">–</span>'},
       {label:"Concepto",sortKey:"con",render:r=>esc(r.con||"–")},
       {label:"Empresa (paga)",render:r=>{const e=EMP_LABEL[r._emp]; return e?`<span class="tag">${esc(e)}</span>`:'<span class="zero">–</span>';}},
-      {label:"Empresa (resp.)",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
-      {label:"Tipo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.tipo||"");}},
-      {label:"Centro de Costo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.centro||"");}},
+      {label:"Empresa (resp.)",render:r=>{const g=dimEg(r); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
+      {label:"Tipo",render:r=>{const g=dimEg(r); return dimAuto(g&&g.tipo||"");}},
+      {label:"Centro de Costo",render:r=>{const g=dimEg(r); return dimAuto(g&&g.centro||"");}},
       {label:"País",sortKey:"pais",render:r=>r.pais?`<span class="tag">${esc(r.pais)}</span>`:'<span class="zero">–</span>'},
       {label:"Estado",sortKey:"e",render:r=>stBadge(r.e)},
       {label:"Tipo de Pago",sortKey:"tipo",render:r=>r.tipo?`<span class="tag">${esc(r.tipo)}</span>`:'<span class="zero">–</span>'},
@@ -4954,11 +5015,11 @@ function renderEgresos(){
       {label:"Importe",right:1,cls:"num",sortKey:"impOrig",render:r=>f2(r.impOrig)},
       {label:"USD",right:1,cls:"num",sortKey:"impUSD",render:r=>r.impUSD!=null?fmt(r.impUSD,2):'<span class="zero">–</span>'},
       {label:"BOB",right:1,cls:"num",sortKey:"impBOB",render:r=>r.impBOB!=null?("Bs "+f2(r.impBOB)):'<span class="zero">–</span>'},
-      {label:"TC",sortKey:"rate",render:r=>{ if(!(r.rate>0)) return '<span class="zero">–</span>'; const man=r.tcFuente==="Manual"; return '<span style="font-family:var(--mono)">'+fTC(r.rate)+'</span> <span class="tc-src '+(man?'tc-man':'tc-sys')+'">'+(man?'Manual':'Sistema')+'</span>'; }},
+      {label:"Tipo de cambio",sortKey:"rate",render:r=>{ if(!(r.rate>0)) return '<span class="zero">–</span>'; const man=r.tcFuente==="Manual"; return '<span style="font-family:var(--mono)">'+fTC(r.rate)+'</span> <span class="tc-src '+(man?'tc-man':'tc-sys')+'">'+(man?'Manual':'Sistema')+'</span>'; }},
       {label:"",noMenu:true,render:r=>(STATE.egFB&&r._id)?`<span class="ta-acts" style="flex-wrap:nowrap"><button class="btn ghost eg-ed" data-id="${esc(r._id)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button><button class="btn ghost eg-dup" data-id="${esc(r._id)}" title="Duplicar: abre un gasto nuevo con estos mismos datos" style="padding:4px 8px">⧉</button></span>`:""},
     ];
     // Fila de totales alineada por etiqueta (robusta ante cambios de columnas)
-    if(enBanco){ const bt=STATE.bancosTab, base=["Fecha de pago","Importe","Moneda","Concepto","Beneficiario","Cuenta Analítica"], fin=["Tipo","Centro de Costo","USD","BOB","TC","País"];
+    if(enBanco){ const bt=STATE.bancosTab, base=["Fecha de pago","Importe","Moneda","Concepto","Beneficiario","Cuenta Analítica"], fin=["Tipo","Centro de Costo","USD","BOB","Tipo de cambio","País"];
       cols=colsOrden(cols, bt==="otras"?[...base,"Tipo de Pago",...fin]:[...base,...fin], bt==="tesabiz"?null:{"Fecha de pago":"Fecha"}); }
     const egTotalRow=cols.map((c,i)=> i===1 ? "Total ("+rows.length+")" : (c.label==="USD"?fmt(totalUSD):(c.label==="BOB"?"Bs "+f2(totalBOB):"")));
     contentHTML=`<div class="card">
@@ -6426,9 +6487,9 @@ function renderCostos(){
       {label:"Concepto",sortKey:"con",render:r=>`${esc(r.con||"–")}${r.ben&&r.ben!==r.con?`<span class="sub2">${esc(r.ben)}</span>`:""}`},
       {label:"Proveedor (Cuenta Principal)",sortKey:"cp",render:r=>r.cp?`<b>${esc(r.cp)}</b>`:'<span class="zero">–</span>'},
       {label:"Cuenta Analítica",render:r=>{const x={ca:r.ca,src:r.casrc}; return x.ca?`<span class="ca-cell ${x.src==='manual'?'ca-man':((x.src==='auto'||x.src==='hist')?'ca-auto':'ca-sheet')}" style="pointer-events:none;cursor:default;max-width:180px">${esc(x.ca)}</span>`:'<span class="zero">–</span>';}},
-      {label:"Empresa (resp.)",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
-      {label:"Tipo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.tipo||"");}},
-      {label:"Centro de Costo",render:r=>{const g=reglaCosto(r.ben||r.con); return dimAuto(g&&g.centro||"");}},
+      {label:"Empresa (resp.)",render:r=>{const g=dimCosto([r.ben,r.con].filter(Boolean).join(" "),r.ca); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
+      {label:"Tipo",render:r=>{const g=dimCosto([r.ben,r.con].filter(Boolean).join(" "),r.ca); return dimAuto(g&&g.tipo||"");}},
+      {label:"Centro de Costo",render:r=>{const g=dimCosto([r.ben,r.con].filter(Boolean).join(" "),r.ca); return dimAuto(g&&g.centro||"");}},
       {label:"Mes",sortKey:"fecha",render:r=>`<span class="mini">${esc(mesES(r.m))} ${r.g||""}</span>`},
       {label:"Tipo de Pago",sortKey:"tipo",render:r=>r.tipo?`<span class="tag">${esc(r.tipo)}</span>`:'<span class="zero">–</span>'},
       {label:"Moneda",sortKey:"moneda",render:r=>`<span class="tag">${esc(r.moneda||"USD")}</span>`},
@@ -9195,19 +9256,19 @@ function renderMercury(){
       {label:"Cuenta Principal",sortKey:"cp",render:r=>esc(manc(r).cp||"–")},
       {label:"Cuenta Analítica",sortKey:"ca",render:r=>caCellHTMLg("Mercury", r._hu, mres(r))},
       {label:"Empresa (paga)",render:r=>{const e=EMP_LABEL[r._emp]||"LLC"; return `<span class="tag">${esc(e)}</span>`;}},
-      {label:"Empresa (resp.)",render:r=>{const g=reglaCosto(r.desc); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
-      {label:"Tipo",render:r=>{const g=reglaCosto(r.desc); return dimAuto(g&&g.tipo||"");}},
-      {label:"Centro de Costo",render:r=>{const g=reglaCosto(r.desc); return dimAuto(g&&g.centro||"");}},
+      {label:"Empresa (resp.)",render:r=>{const a=manc(r),g=dimCosto(r.desc,a.ca,a); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}},
+      {label:"Tipo",render:r=>{const a=manc(r),g=dimCosto(r.desc,a.ca,a); return dimAuto(g&&g.tipo||"");}},
+      {label:"Centro de Costo",render:r=>{const a=manc(r),g=dimCosto(r.desc,a.ca,a); return dimAuto(g&&g.centro||"");}},
       {label:"Estado",sortKey:"status",render:r=>r.status?`<span class="tag">${esc(r.status)}</span>`:'<span class="zero">–</span>'},
       {label:"Contabilizado?",sortKey:"contab",render:r=>contabBadge(r.contab)},
       {label:"Monto",right:1,cls:"num",sortKey:"monto",render:r=> r.monto>=0? `<span style="color:var(--emerald)">+${money(r.monto)}</span>` : `<span class="neg">${money(r.monto)}</span>`},
       {label:"Moneda",render:r=>`<span class="tag">USD</span>`},
       {label:"USD",right:1,cls:"num",sortKey:"monto",render:r=>fmt(+r.monto||0,2)},
       {label:"BOB",right:1,cls:"num",render:r=>{ const t=tcRateFor(r.fecha); return t?("Bs "+f2((+r.monto||0)*t)):'<span class="zero">–</span>'; }},
-      {label:"TC",render:r=>{ const t=tcRateFor(r.fecha); return t?'<span style="font-family:var(--mono)">'+fTC(t)+'</span>':'<span class="zero">–</span>'; }},
+      {label:"Tipo de cambio",render:r=>{ const t=tcRateFor(r.fecha); return t?'<span style="font-family:var(--mono)">'+fTC(t)+'</span>':'<span class="zero">–</span>'; }},
       {label:"País",render:r=>r.pais?`<span class="tag">${esc(r.pais)}</span>`:'<span class="zero">–</span>'},
     ];
-    cols=colsOrden(cols,["Fecha de pago","Monto","Moneda","Descripción","Cuenta de Débito","Cuenta Analítica","Tipo","Centro de Costo","USD","BOB","TC","País","Estado"],{"Fecha de pago":"Fecha"});   // V272
+    cols=colsOrden(cols,["Fecha de pago","Monto","Moneda","Descripción","Cuenta de Débito","Cuenta Analítica","Tipo","Centro de Costo","USD","BOB","Tipo de cambio","País","Estado"],{"Fecha de pago":"Fecha"});   // V272
     contentHTML=`<div class="card">
       <div class="head"><h3>Movimientos Mercury</h3><span class="mini">${rows.length} movimientos (${crows.length} clasif.) · neto clasif. ${money(neto)} · clic en un encabezado para ordenar</span></div>
       ${caLeyenda()}
@@ -9346,9 +9407,10 @@ function renderBitgo(){
   if(cpCol)       tcols.push({label:"Cuenta Principal",sortKey:cpCol,render:r=>{const a=bganc(r);return a.cp?esc(a.cp):'<span class="zero">–</span>';}});
   if(caCol)       tcols.push({label:"Cuenta Analítica",sortKey:caCol,render:r=>caCellHTMLg("BitGo", r._hu, bgres(r))});
   tcols.push({label:"Empresa (paga)",render:r=>`<span class="tag">${esc(EMP_LABEL["llc"]||"LLC")}</span>`});
-  tcols.push({label:"Empresa (resp.)",render:r=>{const g=reglaCosto(commentsCol&&r[commentsCol]); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}});
-  tcols.push({label:"Tipo",render:r=>{const g=reglaCosto(commentsCol&&r[commentsCol]); return dimAuto(g&&g.tipo||"");}});
-  tcols.push({label:"Centro de Costo",render:r=>{const g=reglaCosto(commentsCol&&r[commentsCol]); return dimAuto(g&&g.centro||"");}});
+  const bgdim=r=>{const a=bganc(r); return dimCosto(commentsCol&&r[commentsCol],a.ca,a);};
+  tcols.push({label:"Empresa (resp.)",render:r=>{const g=bgdim(r); return dimAuto(g&&g.empresaResp?(EMP_LABEL[g._emp]||g.empresaResp):"");}});
+  tcols.push({label:"Tipo",render:r=>{const g=bgdim(r); return dimAuto(g&&g.tipo||"");}});
+  tcols.push({label:"Centro de Costo",render:r=>{const g=bgdim(r); return dimAuto(g&&g.centro||"");}});
   const bgEdit=!!STATE.bitgoFB&&nmFbActivo()&&NMFB.esAdmin(); STATE._bgRows=[];   // V247: se clasifica aquí, ya no en la hoja
   if(false)       tcols.push({label:"Contabilizado?",sortKey:contCol,render:r=>{   // V276: columna quitada (todo lo que está en el sistema ya está contabilizado)
     // V274: solo se clasifica en Treasury; en las demás wallets se muestra en gris (sin poder cambiarlo)
@@ -9360,9 +9422,13 @@ function renderBitgo(){
   if(walletCol)   tcols.push({label:"Wallet",sortKey:walletCol,render:r=>r[walletCol]?`<span class="mini">${esc(r[walletCol])}</span>`:'<span class="zero">–</span>'});
   if(feeCol)      tcols.push({label:"Fee",right:1,cls:"num",sortKey:feeCol,render:r=>{const v=toNum(r[feeCol]); return v?money(v):'<span class="zero">–</span>';}});
   if(amountCol)   tcols.push({label:"Monto",right:1,cls:"num",sortKey:amountCol,render:r=>{const v=amt(r); return v<0?`<span class="neg">${money(v)}</span>`:(v>0?`<span style="color:var(--emerald)">+${money(v)}</span>`:'<span class="zero">–</span>');}});
+  if(amountCol&&dateCol){   // V288: equivalente en bolivianos y el tipo de cambio del día que usa el sistema
+    const bgTC=r=>tcRateFor(gdUS(r[dateCol]).iso||r[dateCol]);
+    tcols.push({label:"BOB",right:1,cls:"num",render:r=>{ const t=bgTC(r), v=amt(r); return (t&&v)?("Bs "+f2(v*t)):'<span class="zero">–</span>'; }});
+    tcols.push({label:"Tipo de cambio",render:r=>{ const t=bgTC(r); return t?'<span style="font-family:var(--mono)">'+fTC(t)+'</span>':'<span class="zero">–</span>'; }}); }
   const allSelBg=rows.length>0 && rows.every(r=>STATE.bgSel.has(r._hu));
   tcols.unshift(selCol("bg",STATE.bgSel,allSelBg));
-  tcols=colsOrden(tcols,["Fecha de pago","Monto","Fee","Wallet","Movimiento","Comentario","Cuenta Analítica","Tipo","Centro de Costo"],{"Fecha de pago":"Fecha"});   // V272 · V276 sin Contabilizado
+  tcols=colsOrden(tcols,["Fecha de pago","Monto","Fee","Wallet","Movimiento","Comentario","Cuenta Analítica","Tipo","Centro de Costo","BOB","Tipo de cambio"],{"Fecha de pago":"Fecha"});   // V272 · V276 sin Contabilizado
 
   const _subClas=nSinClasif?(nSinClasif+" sin clasificar"):"todos clasificados";
   const kpis = hasNeg ? `

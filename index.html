@@ -837,6 +837,15 @@ td.chk input,th.chk input{cursor:pointer;width:16px;height:16px;accent-color:var
 .gs-lbl{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .gstrip .seg{padding:2px}
 .gstrip .seg button{padding:4px 11px;font-size:12px}
+/* V291: Empresa, Año y Moneda en la misma línea del menú de la sección, más pequeños */
+.topbar-in .topsubs{flex:0 1 auto}
+.topbar-in .gstrip{flex:1 1 auto;flex-basis:auto;gap:4px 10px;padding:0 0 0 10px;margin:0;border-left:1px solid var(--border);min-width:0}
+.topbar-in .gstrip .gs-grp{gap:4px}
+.topbar-in .gstrip .gs-lbl{font-size:9px;letter-spacing:.03em}
+.topbar-in .gstrip .seg{padding:1px;border-radius:8px}
+.topbar-in .gstrip .seg button{padding:2px 7px;font-size:10.5px;border-radius:6px;min-height:0;line-height:1.5}
+.topbar-in .topsubs:empty + .gstrip{border-left:0;padding-left:0}
+@media(max-width:720px){.topbar-in .gstrip{flex-basis:100%;border-left:0;padding-left:0}}
 .gf-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .gf-lbl{font-size:12px;font-weight:650;color:var(--muted)}
 .gfilt-panel .select-wrap{min-width:130px}
@@ -1342,6 +1351,7 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
     </button>
     <div id="topSubtabs" class="topsubs"></div>
+    <div class="gstrip" id="gStrip" hidden></div>
     <div class="spacer"></div>
     <div class="topder"><div class="topder-fila">
     <div class="manbox" id="manBox" style="display:none">
@@ -1392,7 +1402,6 @@ html.tema-oscuro .nm-logo-claro{display:none} html.tema-oscuro .nm-logo-oscuro{d
     </div>
     <div class="reloj" id="reloj"><b id="relojHora">--:--</b><span id="relojFecha"></span></div>
     </div>
-    <div class="gstrip" id="gStrip" hidden></div>
   </div>
 </div>
   <div class="wrap">
@@ -1614,7 +1623,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V290";
+const APP_VERSION = "V291";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";

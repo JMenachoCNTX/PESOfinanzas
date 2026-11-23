@@ -1608,7 +1608,7 @@ const CONFIG = {
   }
 };
 /* ▲ VERSIÓN — súbela en cada actualización: V1 → V2 → V3 … */
-const APP_VERSION = "V285";
+const APP_VERSION = "V286";
 const NUMMEROS_FULL="marca/logos/nummeros-logotipo-apilado-principal.svg";
 const NUMMEROS_HORIZ="marca/logos/nummeros-logotipo-horizontal-principal.svg";
 const NUMMEROS_WHITE="marca/logos/nummeros-logotipo-firma-principal.svg";
@@ -4226,7 +4226,7 @@ function renderEgresosGeneral(){
   const totUSD=rows.reduce((s,r)=>s+(+r.usd||0),0), totBOB=rows.reduce((s,r)=>s+(r.bob!=null?+r.bob:0),0);
   const S=STATE.egGenSort||{key:"fecha",dir:"desc"};
   const sorted=[...rows].sort(mkCmp(S.key,S.dir,["usd","bob"],["fecha"]));
-  STATE._egCxpRows=[]; const cols=[
+  STATE._egCxpRows=[]; let cols=[
     {label:"Origen",sortKey:"origen",render:r=>`<span class="tag">${esc(r.origen)}</span>`},
     {label:"Fecha",sortKey:"fecha",render:r=>`<span class="mini">${esc(fmtDate(r.fecha)|| (mesES(r.m)+" "+(r.g||"")))}</span>`},
     {label:"Cuenta",sortKey:"kcuenta",render:r=>esc(r.kcuenta||"–")},
@@ -4244,6 +4244,8 @@ function renderEgresosGeneral(){
     {label:"BOB",right:1,cls:"num",sortKey:"bob",render:r=>r.bob!=null?("Bs "+f2(r.bob)):'<span class="zero">–</span>'},
     {label:"",render:r=>STATE.egFB?`<span class="ta-acts" style="flex-wrap:nowrap"><button class="btn ghost eg-cxp" data-i="${STATE._egCxpRows.push(r)-1}" title="Crear una cuenta por pagar a partir de este gasto (ej.: el mismo pago para este mes)" style="padding:4px 8px;white-space:nowrap">→ Por pagar</button>${r.egId?`<button class="btn ghost eg-ed" data-id="${esc(r.egId)}" title="Editar o borrar este gasto" style="padding:4px 8px">✎</button><button class="btn ghost eg-dup" data-id="${esc(r.egId)}" title="Duplicar: abre un gasto nuevo con estos mismos datos" style="padding:4px 8px">⧉</button>`:""}${(r.fuente==="BitGo"||r.fuente==="Mercury")?`<button class="btn ghost eg-div" data-i="${STATE._egCxpRows.push(r)-1}" title="Cambiar la cuenta o repartir este pago en varios meses" style="padding:4px 8px">÷</button>`:""}</span>`:""},
   ];
+  // V286: mismo orden que las listas de Bancos (Fecha, Monto, Moneda, Concepto, Cuenta Analítica…)
+  cols=colsOrden(cols,["Fecha","Monto original","Moneda original","Concepto","Cuenta Analítica","Origen","Tipo de Pago","Costo","Respaldo","USD","BOB"],{"Monto original":"Monto","Moneda original":"Moneda"});
   const totRow=cols.map((c,i)=> i===0?("Total ("+rows.length+")"):(c.label==="USD"?fmt(totUSD,2):(c.label==="BOB"?("Bs "+f2(totBOB)):"")));
   const fijoUSD=rows.filter(r=>r.costo==="fijo").reduce((s,r)=>s+(+r.usd||0),0);
   const varUSD=rows.filter(r=>r.costo==="variable").reduce((s,r)=>s+(+r.usd||0),0);
